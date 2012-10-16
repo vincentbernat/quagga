@@ -113,6 +113,7 @@ struct zapi_ipv4
 
   safi_t safi;
 
+  /* Warning: use either nexthop_num or ifindex_num, never both! */
   u_char nexthop_num;
   struct in_addr **nexthop;
 
@@ -172,6 +173,7 @@ struct zapi_ipv6
 
   safi_t safi;
 
+  /* Warning: always use as many nexthops as ifindexes! */
   u_char nexthop_num;
   struct in6_addr **nexthop;
 
