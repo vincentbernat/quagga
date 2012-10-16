@@ -531,6 +531,7 @@ zapi_ipv6_route (u_char cmd, struct zclient *zclient, struct prefix_ipv6 *p,
 {
   int i;
   int psize;
+  int min, max;
   struct stream *s;
 
   if (api->nexthop_num != api->ifindex_num)
@@ -558,17 +559,26 @@ zapi_ipv6_route (u_char cmd, struct zclient *zclient, struct prefix_ipv6 *p,
   /* Nexthop, ifindex, distance and metric information. */
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
-      stream_putc (s, api->nexthop_num + api->ifindex_num);
+      /* We asked to have as many gateways as interfaces. If it is not
+         the case, we try to be "smart". */
+      min = ( api->nexthop_num < api->ifindex_num ) ?
+        api->nexthop_num : api->ifindex_num;
+      max = ( api->nexthop_num > api->ifindex_num ) ?
+        api->nexthop_num : api->ifindex_num;
+      stream_putc (s, max);
 
-      for (i = 0; i < api->nexthop_num; i++)
+      for (i = 0; i < max; i++)
 	{
-	  stream_putc (s, ZEBRA_NEXTHOP_IPV6);
-	  stream_write (s, (u_char *)api->nexthop[i], 16);
-	}
-      for (i = 0; i < api->ifindex_num; i++)
-	{
-	  stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
-	  stream_putl (s, api->ifindex[i]);
+          if (i < min)
+            stream_putc(s, ZEBRA_NEXTHOP_IPV6_IFINDEX);
+          else if (i < api->ifindex_num)
+            stream_putc(s, ZEBRA_NEXTHOP_IFINDEX);
+          else
+            stream_putc(s, ZEBRA_NEXTHOP_IPV6);
+          if (i < api->nexthop_num)
+            stream_write (s, (u_char *)api->nexthop[i], 16);
+          if (i < api->ifindex_num)
+            stream_putl (s, api->ifindex[i]);
 	}
     }
 
