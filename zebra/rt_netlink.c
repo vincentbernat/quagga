@@ -788,7 +788,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
           if (rib->nexthop_num == 0)
             XFREE (MTYPE_RIB, rib);
           else
-            rib_add_ipv4_multipath (&p, rib, SAFI_UNICAST);
+            rib_add_ipvX_multipath (&p, rib, SAFI_UNICAST);
         }
     }
 #ifdef HAVE_IPV6
@@ -990,7 +990,7 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
               if (rib->nexthop_num == 0)
                 XFREE (MTYPE_RIB, rib);
               else
-                rib_add_ipv4_multipath (&p, rib, SAFI_UNICAST);
+                rib_add_ipvX_multipath (&p, rib, SAFI_UNICAST);
             }
         }
       else

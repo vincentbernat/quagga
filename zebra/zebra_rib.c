@@ -281,7 +281,7 @@ nexthop_ipv6_ifname_add (struct rib *rib, struct in6_addr *ipv6,
   return nexthop;
 }
 
-static struct nexthop *
+struct nexthop *
 nexthop_ipv6_ifindex_add (struct rib *rib, struct in6_addr *ipv6,
 			  unsigned int ifindex)
 {
@@ -1793,7 +1793,7 @@ void rib_lookup_and_pushup (struct prefix_ipv4 * p)
 }
 
 int
-rib_add_ipv4_multipath (struct prefix_ipv4 *p, struct rib *rib, safi_t safi)
+rib_add_ipvX_multipath (struct prefix *p, struct rib *rib, safi_t safi)
 {
   struct route_table *table;
   struct route_node *rn;
@@ -1801,12 +1801,13 @@ rib_add_ipv4_multipath (struct prefix_ipv4 *p, struct rib *rib, safi_t safi)
   struct nexthop *nexthop;
   
   /* Lookup table.  */
-  table = vrf_table (AFI_IP, safi, 0);
+  table = vrf_table ((p->family == AF_INET) ? AFI_IP : AFI_IP6,
+                     safi, 0);
   if (! table)
     return 0;
 
   /* Make it sure prefixlen is applied to the prefix. */
-  apply_mask_ipv4 (p);
+  apply_mask (p);
 
   /* Set default distance by route type. */
   if (rib->distance == 0)
@@ -1820,7 +1821,7 @@ rib_add_ipv4_multipath (struct prefix_ipv4 *p, struct rib *rib, safi_t safi)
     }
 
   /* Lookup route node.*/
-  rn = route_node_get (table, (struct prefix *) p);
+  rn = route_node_get (table, p);
 
   /* If same type of route are installed, treat it as a implicit
      withdraw. */
