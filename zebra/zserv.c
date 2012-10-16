@@ -714,17 +714,18 @@ zread_interface_delete (struct zserv *client, u_short length)
 
 /* This function support multiple nexthop. */
 /* 
- * Parse the ZEBRA_IPV4_ROUTE_ADD sent from client. Update rib and
- * add kernel route. 
+ * Parse the ZEBRA_IPV4_ROUTE_ADD/ZEBRA_IPV6_ROUTE_ADD sent from
+ * client. Update rib and add kernel route.
  */
 static int
-zread_ipv4_add (struct zserv *client, u_short length)
+zread_ipvX_add (struct zserv *client, u_short length, int family)
 {
   int i;
   struct rib *rib;
   struct prefix_ipv4 p;
   u_char message;
   struct in_addr nexthop;
+  struct in6_addr nexthop6;
   u_char nexthop_num;
   u_char nexthop_type;
   struct stream *s;
@@ -748,7 +749,7 @@ zread_ipv4_add (struct zserv *client, u_short length)
 
   /* IPv4 prefix. */
   memset (&p, 0, sizeof (struct prefix_ipv4));
-  p.family = AF_INET;
+  p.family = family;
   p.prefixlen = stream_getc (s);
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
@@ -772,17 +773,61 @@ zread_ipv4_add (struct zserv *client, u_short length)
 	      stream_forward_getp (s, ifname_len);
 	      break;
 	    case ZEBRA_NEXTHOP_IPV4:
-	      nexthop.s_addr = stream_get_ipv4 (s);
-	      nexthop_ipv4_add (rib, &nexthop, NULL);
+              switch (family)
+                {
+                case AF_INET:
+                  nexthop.s_addr = stream_get_ipv4 (s);
+                  nexthop_ipv4_add (rib, &nexthop, NULL);
+                  break;
+                default:
+                  stream_forward_getp (s, IPV4_MAX_BYTELEN);
+                  break;
+                }
 	      break;
 	    case ZEBRA_NEXTHOP_IPV4_IFINDEX:
-	      nexthop.s_addr = stream_get_ipv4 (s);
-	      ifindex = stream_getl (s);
-	      nexthop_ipv4_ifindex_add (rib, &nexthop, NULL, ifindex);
-	      break;
+              switch (family)
+                {
+                case AF_INET:
+                  nexthop.s_addr = stream_get_ipv4 (s);
+                  ifindex = stream_getl (s);
+                  nexthop_ipv4_ifindex_add (rib, &nexthop, NULL, ifindex);
+                  break;
+                default:
+                  stream_forward_getp (s, IPV4_MAX_BYTELEN);
+                  stream_forward_getp (s, sizeof (u_int32_t));
+                  break;
+                }
+              break;
 	    case ZEBRA_NEXTHOP_IPV6:
-	      stream_forward_getp (s, IPV6_MAX_BYTELEN);
+              switch (family)
+                {
+#ifdef HAVE_IPV6
+                case AF_INET6:
+                  stream_get (&nexthop6, s, 16);
+                  nexthop_ipv6_add (rib, &nexthop6);
+                  break;
+#endif
+                default:
+                  stream_forward_getp (s, IPV6_MAX_BYTELEN);
+                  break;
+                }
 	      break;
+            case ZEBRA_NEXTHOP_IPV6_IFINDEX:
+              switch (family)
+                {
+#ifdef HAVE_IPV6
+                case AF_INET6:
+                  stream_get (&nexthop6, s, 16);
+                  ifindex = stream_getl (s);
+                  nexthop_ipv6_ifindex_add (rib, &nexthop6, ifindex);
+                  break;
+#endif
+                default:
+                  stream_forward_getp (s, IPV6_MAX_BYTELEN);
+                  stream_forward_getp (s, sizeof (u_int32_t));
+                  break;
+                }
+              break;
             case ZEBRA_NEXTHOP_BLACKHOLE:
               nexthop_blackhole_add (rib);
               break;
@@ -800,9 +845,23 @@ zread_ipv4_add (struct zserv *client, u_short length)
     
   /* Table */
   rib->table=zebrad.rtm_table_default;
-  rib_add_ipv4_multipath (&p, rib, safi);
+  rib_add_ipvX_multipath (&p, rib, safi);
   return 0;
 }
+
+static int
+zread_ipv4_add (struct zserv *client, u_short length)
+{
+  return zread_ipvX_add(client, length, AF_INET);
+}
+
+#ifdef HAVE_IPV6
+static int
+zread_ipv6_add (struct zserv *client, u_short length)
+{
+  return zread_ipvX_add(client, length, AF_INET6);
+}
+#endif
 
 /* Zebra server IPv4 prefix delete function. */
 static int
@@ -909,78 +968,6 @@ zread_ipv4_import_lookup (struct zserv *client, u_short length)
 }
 
 #ifdef HAVE_IPV6
-/* Zebra server IPv6 prefix add function. */
-static int
-zread_ipv6_add (struct zserv *client, u_short length)
-{
-  int i;
-  struct stream *s;
-  struct zapi_ipv6 api;
-  struct in6_addr nexthop;
-  unsigned long ifindex;
-  struct prefix_ipv6 p;
-  
-  s = client->ibuf;
-  ifindex = 0;
-  memset (&nexthop, 0, sizeof (struct in6_addr));
-
-  /* Type, flags, message. */
-  api.type = stream_getc (s);
-  api.flags = stream_getc (s);
-  api.message = stream_getc (s);
-  api.safi = stream_getw (s);
-
-  /* IPv4 prefix. */
-  memset (&p, 0, sizeof (struct prefix_ipv6));
-  p.family = AF_INET6;
-  p.prefixlen = stream_getc (s);
-  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
-
-  /* Nexthop, ifindex, distance, metric. */
-  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
-    {
-      u_char nexthop_type;
-
-      api.nexthop_num = stream_getc (s);
-      for (i = 0; i < api.nexthop_num; i++)
-	{
-	  nexthop_type = stream_getc (s);
-
-	  switch (nexthop_type)
-	    {
-	    case ZEBRA_NEXTHOP_IPV6:
-	      stream_get (&nexthop, s, 16);
-	      break;
-            case ZEBRA_NEXTHOP_IPV6_IFINDEX:
-	      stream_get (&nexthop, s, 16);
-              ifindex = stream_getl (s);
-              break;
-	    case ZEBRA_NEXTHOP_IFINDEX:
-	      ifindex = stream_getl (s);
-	      break;
-	    }
-	}
-    }
-
-  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
-    api.distance = stream_getc (s);
-  else
-    api.distance = 0;
-
-  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
-    api.metric = stream_getl (s);
-  else
-    api.metric = 0;
-    
-  if (IN6_IS_ADDR_UNSPECIFIED (&nexthop))
-    rib_add_ipv6 (api.type, api.flags, &p, NULL, ifindex, zebrad.rtm_table_default, api.metric,
-		  api.distance, api.safi);
-  else
-    rib_add_ipv6 (api.type, api.flags, &p, &nexthop, ifindex, zebrad.rtm_table_default, api.metric,
-		  api.distance, api.safi);
-  return 0;
-}
-
 /* Zebra server IPv6 prefix delete function. */
 static int
 zread_ipv6_delete (struct zserv *client, u_short length)

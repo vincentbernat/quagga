@@ -241,6 +241,8 @@ extern int rib_lookup_ipv4_route (struct prefix_ipv4 *, union sockunion *);
 
 #ifdef HAVE_IPV6
 extern struct nexthop *nexthop_ipv6_add (struct rib *, struct in6_addr *);
+extern struct nexthop *nexthop_ipv6_ifindex_add (struct rib *, struct in6_addr *,
+                                                 unsigned int);
 #endif /* HAVE_IPV6 */
 
 extern struct vrf *vrf_lookup (u_int32_t);
