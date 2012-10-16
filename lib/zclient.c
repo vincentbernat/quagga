@@ -466,6 +466,11 @@ zapi_ipv4_route (u_char cmd, struct zclient *zclient, struct prefix_ipv4 *p,
   int psize;
   struct stream *s;
 
+  if (api->nexthop_num > 0 && api->ifindex_num > 0)
+    zlog_warn ("%s: Mismatch between number of gateways "
+               "and number of interfaces: %d/%s",
+               __func__, api->nexthop_num, api->ifindex_num);
+
   /* Reset stream. */
   s = zclient->obuf;
   stream_reset (s);
@@ -527,6 +532,11 @@ zapi_ipv6_route (u_char cmd, struct zclient *zclient, struct prefix_ipv6 *p,
   int i;
   int psize;
   struct stream *s;
+
+  if (api->nexthop_num != api->ifindex_num)
+    zlog_warn ("%s: Mismatch between number of gateways "
+               "and number of interfaces: %d/%s",
+               __func__, api->nexthop_num, api->ifindex_num);
 
   /* Reset stream. */
   s = zclient->obuf;
