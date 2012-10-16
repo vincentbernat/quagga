@@ -951,6 +951,10 @@ zread_ipv6_add (struct zserv *client, u_short length)
 	    case ZEBRA_NEXTHOP_IPV6:
 	      stream_get (&nexthop, s, 16);
 	      break;
+            case ZEBRA_NEXTHOP_IPV6_IFINDEX:
+	      stream_get (&nexthop, s, 16);
+              ifindex = stream_getl (s);
+              break;
 	    case ZEBRA_NEXTHOP_IFINDEX:
 	      ifindex = stream_getl (s);
 	      break;
@@ -1019,6 +1023,10 @@ zread_ipv6_delete (struct zserv *client, u_short length)
 	    case ZEBRA_NEXTHOP_IPV6:
 	      stream_get (&nexthop, s, 16);
 	      break;
+            case ZEBRA_NEXTHOP_IPV6_IFINDEX:
+	      stream_get (&nexthop, s, 16);
+              ifindex = stream_getl (s);
+              break;
 	    case ZEBRA_NEXTHOP_IFINDEX:
 	      ifindex = stream_getl (s);
 	      break;
