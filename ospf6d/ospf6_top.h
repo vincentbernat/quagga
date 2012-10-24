@@ -60,6 +60,8 @@ struct ospf6
   u_char flag;
 
   struct thread *maxage_remover;
+
+  u_int32_t ref_bandwidth;
 };
 
 #define OSPF6_DISABLED    0x01
