@@ -752,6 +752,18 @@ ospf6_route_match_next (struct prefix *prefix,
   return next;
 }
 
+int
+ospf6_route_is_best(struct ospf6_route *route)
+{
+  do {
+    if (CHECK_FLAG (route->flag, OSPF6_ROUTE_BEST))
+      return 1;
+  } while (route->prev &&
+           ospf6_route_cmp(route->prev, route) == 0 &&
+           (route = route->prev));
+  return 0;
+}
+
 void
 ospf6_route_remove_all (struct ospf6_route_table *table)
 {

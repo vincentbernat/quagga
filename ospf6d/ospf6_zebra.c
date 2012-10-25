@@ -355,8 +355,9 @@ ospf6_zebra_route_update (int type, struct ospf6_route *request)
   int nhcount;
   struct in6_addr **nexthops;
   unsigned int *ifindexes;
-  int i, ret = 0;
+  int i, j, ret = 0;
   struct prefix_ipv6 *dest;
+  struct ospf6_route *treq;
 
   if (IS_OSPF6_DEBUG_ZEBRA (SEND))
     {
@@ -382,14 +383,29 @@ ospf6_zebra_route_update (int type, struct ospf6_route *request)
     }
 
   /* If removing is the best path and if there's another path,
-     treat this request as add the secondary path */
-  if (type == REM && ospf6_route_is_best (request) &&
-      request->next && ospf6_route_is_same (request, request->next))
+     treat this request as add the new path */
+  if (type == REM && ospf6_route_is_best (request))
     {
-      if (IS_OSPF6_DEBUG_ZEBRA (SEND))
-        zlog_debug ("  Best-path removal resulted Sencondary addition");
-      type = ADD;
-      request = request->next;
+      /* Is this request inside a multipath? If yes, we add the previous path instead. */
+      if (request->prev &&
+          ospf6_route_is_same(request, request->prev) &&
+          ospf6_route_is_best(request->prev))
+        {
+          if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+            zlog_debug ("  Best-path partial remove, fix it");
+          type = ADD;
+          request = request->prev;
+        }
+      if (type == REM &&
+          request->next &&
+          ospf6_route_is_same (request, request->next))
+        {
+          /* Maybe it's a multipath, maybe not, don't care now. */
+          if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+            zlog_debug ("  Best-path removal resulted Sencondary addition");
+          type = ADD;
+          request = request->next;
+        }
     }
 
   /* Only the best path will be sent to zebra. */
@@ -401,10 +417,24 @@ ospf6_zebra_route_update (int type, struct ospf6_route *request)
       return;
     }
 
-  nhcount = 0;
-  for (i = 0; i < OSPF6_MULTI_PATH_LIMIT; i++)
-    if (ospf6_nexthop_is_set (&request->nexthop[i]))
-      nhcount++;
+  /* Maybe we are adding a multipath route. Find the first path. */
+  while (request->prev &&
+         ospf6_route_is_same (request, request->prev) &&
+         ospf6_route_is_best)
+    request = request->prev;
+
+  nhcount = 0; treq = request;
+  do
+    {
+      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT; i++)
+        if (ospf6_nexthop_is_set (&treq->nexthop[i]))
+          nhcount++;
+    }
+  while (treq->next &&
+         ospf6_route_is_same (treq, treq->next) &&
+         ospf6_route_is_best (treq->next) &&
+         (treq = treq->next));
+
 
   if (nhcount == 0)
     {
@@ -432,21 +462,31 @@ ospf6_zebra_route_update (int type, struct ospf6_route *request)
       return;
     }
 
-  for (i = 0; i < nhcount; i++)
+  j = 0; treq = request;
+  do
     {
-      if (IS_OSPF6_DEBUG_ZEBRA (SEND))
-	{
-	  char ifname[IFNAMSIZ];
-	  inet_ntop (AF_INET6, &request->nexthop[i].address,
-		     buf, sizeof (buf));
-	  if (!if_indextoname(request->nexthop[i].ifindex, ifname))
-	    strlcpy(ifname, "unknown", sizeof(ifname));
-	  zlog_debug ("  nexthop: %s%%%.*s(%d)", buf, IFNAMSIZ, ifname,
-		      request->nexthop[i].ifindex);
-	}
-      nexthops[i] = &request->nexthop[i].address;
-      ifindexes[i] = request->nexthop[i].ifindex;
+      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT; i++)
+        {
+          if (! ospf6_nexthop_is_set (&treq->nexthop[i])) break;
+          if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+            {
+              char ifname[IFNAMSIZ];
+              inet_ntop (AF_INET6, &treq->nexthop[i].address,
+                         buf, sizeof (buf));
+              if (!if_indextoname(treq->nexthop[i].ifindex, ifname))
+                strlcpy(ifname, "unknown", sizeof(ifname));
+              zlog_debug ("  nexthop: %s%%%.*s(%d)", buf, IFNAMSIZ, ifname,
+                          treq->nexthop[i].ifindex);
+            }
+          nexthops[j] = &treq->nexthop[i].address;
+          ifindexes[j] = treq->nexthop[i].ifindex;
+          j++;
+        }
     }
+  while (treq->next &&
+         ospf6_route_is_same (treq, treq->next) &&
+         ospf6_route_is_best (treq->next) &&
+         (treq = treq->next));
 
   api.type = ZEBRA_ROUTE_OSPF6;
   api.flags = 0;

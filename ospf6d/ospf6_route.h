@@ -233,7 +233,6 @@ extern const char *ospf6_path_type_substr[OSPF6_PATH_TYPE_MAX];
    memcmp (&(ra)->path, &(rb)->path, sizeof (struct ospf6_path)) == 0 && \
    memcmp (&(ra)->nexthop, &(rb)->nexthop,                               \
            sizeof (struct ospf6_nexthop) * OSPF6_MULTI_PATH_LIMIT) == 0)
-#define ospf6_route_is_best(r) (CHECK_FLAG ((r)->flag, OSPF6_ROUTE_BEST))
 
 #define ospf6_linkstate_prefix_adv_router(x) \
   (*(u_int32_t *)(&(x)->u.prefix6.s6_addr[0]))
@@ -278,6 +277,7 @@ extern struct ospf6_route *ospf6_route_match_head (struct prefix *prefix,
                                             struct ospf6_route_table *table);
 extern struct ospf6_route *ospf6_route_match_next (struct prefix *prefix,
                                             struct ospf6_route *route);
+extern int ospf6_route_is_best(struct ospf6_route *route);
 
 extern void ospf6_route_remove_all (struct ospf6_route_table *);
 extern struct ospf6_route_table *ospf6_route_table_create (int s, int t);
