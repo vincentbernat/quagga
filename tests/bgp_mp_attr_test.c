@@ -311,7 +311,7 @@ static struct test_segment {
   { "IPv4-MLVPN",
     "IPv4/MPLS-labeled VPN MP Reach, RD, Nexthop, 3 NLRIs", 
     {
-      /* AFI / SAFI */		0x0, AFI_IP, SAFI_MPLS_LABELED_VPN,
+      /* AFI / SAFI */		0x0, AFI_IP, IANA_SAFI_MPLS_VPN,
       /* nexthop bytes */	12,
       /* RD */			0, 0, 1, 2,
                                 0, 0xff, 3, 4,
@@ -434,7 +434,7 @@ static struct test_segment mp_unreach_segments [] =
   { "IPv4-unreach-MLVPN",
     "IPv4/MPLS-labeled VPN MP Unreach, RD, 3 NLRIs", 
     {
-      /* AFI / SAFI */		0x0, AFI_IP, SAFI_MPLS_LABELED_VPN,
+      /* AFI / SAFI */		0x0, AFI_IP, IANA_SAFI_MPLS_VPN,
       /* nexthop bytes */	12,
       /* RD */			0, 0, 1, 2,
                                 0, 0xff, 3, 4,
@@ -487,15 +487,17 @@ parse_test (struct peer *peer, struct test_segment *t, int type)
 
   if (!ret)
     {
-      safi_t safi = t->safi;
+      afi_t afi;
+      safi_t safi;
       
-      if (bgp_afi_safi_valid_indices (t->afi, &safi) != t->afi_valid)
+      /* Convert AFI, SAFI to internal values, check. */
+      if (bgp_map_afi_safi_iana2int (t->afi, t->safi, &afi, &safi))
         failed++;
       
       printf ("MP: %u/%u (%u): recv %u, nego %u\n",
               t->afi, t->safi, safi,
-              peer->afc_recv[t->afi][safi],
-              peer->afc_nego[t->afi][safi]);
+              peer->afc_recv[afi][safi],
+              peer->afc_nego[afi][safi]);
     }
   
   printf ("parsed?: %s\n", ret ? "no" : "yes");

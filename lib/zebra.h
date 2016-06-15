@@ -519,8 +519,27 @@ typedef enum {
 #define SAFI_MULTICAST            2
 #define SAFI_RESERVED_3           3
 #define SAFI_MPLS_VPN             4
-#define SAFI_ENCAP		  7 /* per IANA */
-#define SAFI_MAX                  8
+#define SAFI_ENCAP		  5
+#define SAFI_MAX                  6
+
+/*
+ * The above AFI and SAFI definitions are for internal use. The protocol
+ * definitions (IANA values) as for example used in BGP protocol packets
+ * are defined below and these will get mapped to/from the internal values
+ * in the appropriate places.
+ * The rationale is that the protocol (IANA) values may be sparse and are
+ * not optimal for use in data-structure sizing.
+ * Note: Only useful (i.e., supported) values are defined below.
+ */
+#define IANA_AFI_RESERVED             0
+#define IANA_AFI_IPV4                 1
+#define IANA_AFI_IPV6                 2
+
+#define IANA_SAFI_RESERVED            0
+#define IANA_SAFI_UNICAST             1
+#define IANA_SAFI_MULTICAST           2
+#define IANA_SAFI_ENCAP               7
+#define IANA_SAFI_MPLS_VPN            128
 
 /* Filter direction.  */
 #define FILTER_IN                 0
@@ -593,5 +612,49 @@ struct fifo
 
 #define FIFO_TOP(F)                                   \
   (FIFO_EMPTY(F) ? NULL : ((struct fifo *)(F))->next)
+
+static inline afi_t afi_iana2int (afi_t afi)
+{
+  if (afi == IANA_AFI_IPV4)
+    return AFI_IP;
+  if (afi == IANA_AFI_IPV6)
+    return AFI_IP6;
+  return AFI_MAX;
+}
+
+static inline afi_t afi_int2iana (afi_t afi)
+{
+  if (afi == AFI_IP)
+    return IANA_AFI_IPV4;
+  if (afi == AFI_IP6)
+    return IANA_AFI_IPV6;
+  return IANA_AFI_RESERVED;
+}
+
+static inline safi_t safi_iana2int (safi_t safi)
+{
+  if (safi == IANA_SAFI_UNICAST)
+    return SAFI_UNICAST;
+  if (safi == IANA_SAFI_MULTICAST)
+    return SAFI_MULTICAST;
+  if (safi == IANA_SAFI_MPLS_VPN)
+    return SAFI_MPLS_VPN;
+  if (safi == IANA_SAFI_ENCAP)
+    return SAFI_ENCAP;
+  return SAFI_MAX;
+}
+
+static inline safi_t safi_int2iana (safi_t safi)
+{
+  if (safi == SAFI_UNICAST)
+    return IANA_SAFI_UNICAST;
+  if (safi == SAFI_MULTICAST)
+    return IANA_SAFI_MULTICAST;
+  if (safi == SAFI_MPLS_VPN)
+    return IANA_SAFI_MPLS_VPN;
+  if (safi == SAFI_ENCAP)
+    return IANA_SAFI_ENCAP;
+  return IANA_SAFI_RESERVED;
+}
 
 #endif /* _ZEBRA_H */
