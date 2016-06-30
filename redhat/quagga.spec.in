@@ -221,7 +221,8 @@ developing OSPF-API and quagga applications.
 %endif
 	--enable-gcc-rdynamic \
 	--enable-systemd=yes \
-	--enable-poll=yes
+	--enable-poll=yes \
+	--enable-evpn=yes
 
 make %{?_smp_mflags} MAKEINFO="makeinfo --no-split"
 

@@ -50,6 +50,7 @@ override_dh_auto_configure:
 		--with-libpam \
 		--enable-systemd=yes \
 		--enable-poll=yes \
+		--enable-evpn=yes \
 		--enable-cumulus=yes \
 		--enable-dependency-tracking; \
 	fi
