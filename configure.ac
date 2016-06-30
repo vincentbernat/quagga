@@ -316,6 +316,8 @@ AC_ARG_ENABLE(systemd,
   AS_HELP_STRING([--enable-systemd], [enable Systemd support]))
 AC_ARG_ENABLE(poll,
   AS_HELP_STRING([--enable-poll], [enable usage of Poll instead of select]))
+AC_ARG_ENABLE(evpn,
+  AS_HELP_STRING([--enable-evpn], [enable EVPN support]))
 AC_ARG_ENABLE(werror,
   AS_HELP_STRING([--enable-werror], [enable -Werror (recommended for developers only)]))
 AC_ARG_ENABLE(cumulus,
@@ -356,6 +358,10 @@ esac
 
 if test "${enable_poll}" = "yes" ; then
   AC_DEFINE(HAVE_POLL,,Compile systemd support in)
+fi
+
+if test "${enable_evpn}" = "yes" ; then
+  AC_DEFINE(HAVE_EVPN,,Compile EVPN support in)
 fi
 
 if test "${enable_cumulus}" = "yes" ; then
