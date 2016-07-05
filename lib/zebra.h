@@ -511,7 +511,8 @@ extern const char *zserv_command_string (unsigned int command);
 typedef enum {
   AFI_IP  = 1,
   AFI_IP6 = 2,
-#define AFI_MAX 3
+  AFI_L2VPN = 3,
+#define AFI_MAX 4
 } afi_t;
 
 /* Subsequent Address Family Identifier. */
@@ -519,8 +520,9 @@ typedef enum {
 #define SAFI_MULTICAST            2
 #define SAFI_RESERVED_3           3
 #define SAFI_MPLS_VPN             4
-#define SAFI_ENCAP		  5
-#define SAFI_MAX                  6
+#define SAFI_ENCAP                5
+#define SAFI_EVPN                 6
+#define SAFI_MAX                  7
 
 /*
  * The above AFI and SAFI definitions are for internal use. The protocol
@@ -534,12 +536,14 @@ typedef enum {
 #define IANA_AFI_RESERVED             0
 #define IANA_AFI_IPV4                 1
 #define IANA_AFI_IPV6                 2
+#define IANA_AFI_L2VPN                25
 
 #define IANA_SAFI_RESERVED            0
 #define IANA_SAFI_UNICAST             1
 #define IANA_SAFI_MULTICAST           2
 #define IANA_SAFI_ENCAP               7
 #define IANA_SAFI_MPLS_VPN            128
+#define IANA_SAFI_EVPN                70
 
 /* Filter direction.  */
 #define FILTER_IN                 0
@@ -624,6 +628,8 @@ static inline afi_t afi_iana2int (afi_t afi)
     return AFI_IP;
   if (afi == IANA_AFI_IPV6)
     return AFI_IP6;
+  if (afi == IANA_AFI_L2VPN)
+    return AFI_L2VPN;
   return AFI_MAX;
 }
 
@@ -633,6 +639,8 @@ static inline afi_t afi_int2iana (afi_t afi)
     return IANA_AFI_IPV4;
   if (afi == AFI_IP6)
     return IANA_AFI_IPV6;
+  if (afi == AFI_L2VPN)
+    return IANA_AFI_L2VPN;
   return IANA_AFI_RESERVED;
 }
 
@@ -646,6 +654,8 @@ static inline safi_t safi_iana2int (safi_t safi)
     return SAFI_MPLS_VPN;
   if (safi == IANA_SAFI_ENCAP)
     return SAFI_ENCAP;
+  if (safi == IANA_SAFI_EVPN)
+    return SAFI_EVPN;
   return SAFI_MAX;
 }
 
@@ -659,6 +669,8 @@ static inline safi_t safi_int2iana (safi_t safi)
     return IANA_SAFI_MPLS_VPN;
   if (safi == SAFI_ENCAP)
     return IANA_SAFI_ENCAP;
+  if (safi == SAFI_EVPN)
+    return IANA_SAFI_EVPN;
   return IANA_SAFI_RESERVED;
 }
 

@@ -958,6 +958,8 @@ vty_prefix_list_install (struct vty *vty, afi_t afi, const char *name,
 	  return CMD_WARNING;
 	}
       break;
+    case AFI_L2VPN:
+      break;
     }
 
   /* ge and le check. */

@@ -235,6 +235,8 @@ safi2str(safi_t safi)
 	return "encap";
     case SAFI_MPLS_VPN:
 	return "vpn";
+    case SAFI_EVPN:
+	return "evpn";
   }
   return NULL;
 }
