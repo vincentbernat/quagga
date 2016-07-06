@@ -101,6 +101,10 @@ bgp_parse_afi(const char *str, afi_t *afi)
 	return 0;
     }
 #endif /* HAVE_IPV6 */
+    if (!strcmp(str, "l2vpn")) {
+    *afi =  AFI_L2VPN;
+    return 0;
+    }
     return -1;
 }
 
@@ -10787,6 +10791,8 @@ afi_safi_print (afi_t afi, safi_t safi)
     return "VPN-IPv6 Unicast";
   else if (afi == AFI_IP6 && safi == SAFI_ENCAP)
     return "ENCAP-IPv6 Unicast";
+  else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
+    return "L2VPN EVPN";
   else
     return "Unknown";
 }
@@ -14539,6 +14545,7 @@ bgp_vty_init (void)
   install_element (BGP_VPNV6_NODE, &neighbor_activate_cmd);
   install_element (BGP_ENCAP_NODE, &neighbor_activate_cmd);
   install_element (BGP_ENCAPV6_NODE, &neighbor_activate_cmd);
+  install_element (BGP_EVPN_NODE, &neighbor_activate_cmd);
 
   /* "no neighbor activate" commands. */
   install_element (BGP_NODE, &no_neighbor_activate_cmd);
@@ -14550,6 +14557,7 @@ bgp_vty_init (void)
   install_element (BGP_VPNV6_NODE, &no_neighbor_activate_cmd);
   install_element (BGP_ENCAP_NODE, &no_neighbor_activate_cmd);
   install_element (BGP_ENCAPV6_NODE, &no_neighbor_activate_cmd);
+  install_element (BGP_EVPN_NODE, &no_neighbor_activate_cmd);
 
   /* "neighbor peer-group" set commands.
    * Long term we should only accept this command under BGP_NODE and not all of
