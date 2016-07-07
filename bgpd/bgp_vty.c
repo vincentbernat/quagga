@@ -5973,6 +5973,71 @@ DEFUN (address_family_evpn,
   return CMD_SUCCESS;
 }
 
+DEFUN (bgp_evpn_vni,
+       bgp_evpn_vni_cmd,
+       "vni " CMD_VNI_RANGE,
+       "VXLAN Network Identifier\n"
+       "VNI number\n")
+{
+  vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_evpn_vni,
+       no_bgp_evpn_vni_cmd,
+       "no vni " CMD_VNI_RANGE,
+       NO_STR
+       "VXLAN Network Identifier\n"
+       "VNI number\n")
+{
+  vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_evpn_vni_rd,
+       bgp_evpn_vni_rd_cmd,
+       "rd ASN:nn_or_IP-address:nn",
+       "Route Distinguisher\n"
+       "ASN:XX or A.B.C.D:XX\n")
+{
+  vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_evpn_vni_rd,
+       no_bgp_evpn_vni_rd_cmd,
+       "no rd ASN:nn_or_IP-address:nn",
+       NO_STR
+       "Route Distinguisher\n"
+       "ASN:XX or A.B.C.D:XX\n")
+{
+  vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_evpn_vni_rt,
+       bgp_evpn_vni_rt_cmd,
+       "route-target WORD ASN:nn_or_IP-address:nn",
+       "Route Target\n"
+       "import/export/both\n"
+       "ASN:XX or A.B.C.D:XX\n")
+{
+  vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_evpn_vni_rt,
+       no_bgp_evpn_vni_rt_cmd,
+       "no rt WORD ASN:nn_or_IP-address:nn",
+       NO_STR
+       "Route Target\n"
+       "import/export/both\n"
+       "ASN:XX or A.B.C.D:XX\n")
+{
+  vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
 DEFUN (exit_address_family,
        exit_address_family_cmd,
        "exit-address-family",
@@ -5986,7 +6051,8 @@ DEFUN (exit_address_family,
       || vty->node == BGP_VPNV6_NODE
       || vty->node == BGP_ENCAP_NODE
       || vty->node == BGP_ENCAPV6_NODE
-      || vty->node == BGP_EVPN_NODE)
+      || vty->node == BGP_EVPN_NODE
+      || vty->node == BGP_EVPN_VNI_NODE)
     vty->node = BGP_NODE;
   return CMD_SUCCESS;
 }
@@ -14241,6 +14307,13 @@ static struct cmd_node bgp_evpn_node =
   1
 };
 
+static struct cmd_node bgp_evpn_vni_node =
+{
+  BGP_EVPN_VNI_NODE,
+  "%s(config-router-af-vni)# ",
+  1
+};
+
 static struct cmd_node bgp_vpnv4_node =
 {
   BGP_VPNV4_NODE,
@@ -14285,6 +14358,7 @@ bgp_vty_init (void)
   install_node (&bgp_encap_node, NULL);
   install_node (&bgp_encapv6_node, NULL);
   install_node (&bgp_evpn_node, NULL);
+  install_node (&bgp_evpn_vni_node, NULL);
 
   /* Install default VTY commands to new nodes.  */
   install_default (BGP_NODE);
@@ -14297,6 +14371,7 @@ bgp_vty_init (void)
   install_default (BGP_ENCAP_NODE);
   install_default (BGP_ENCAPV6_NODE);
   install_default (BGP_EVPN_NODE);
+  install_default (BGP_EVPN_VNI_NODE);
   
   /* "bgp multiple-instance" commands. */
   install_element (CONFIG_NODE, &bgp_multiple_instance_cmd);
@@ -15438,6 +15513,17 @@ bgp_vty_init (void)
   install_element (BGP_ENCAP_NODE, &exit_address_family_cmd);
   install_element (BGP_ENCAPV6_NODE, &exit_address_family_cmd);
   install_element (BGP_EVPN_NODE, &exit_address_family_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &exit_address_family_cmd);
+
+  /* EVPN commands */
+  install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
+
+  /* "no" EVPN commands */
+  install_element (BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);
 
   /* "clear ip bgp commands" */
   install_element (ENABLE_NODE, &clear_ip_bgp_all_cmd);

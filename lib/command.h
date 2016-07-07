@@ -90,6 +90,7 @@ enum node_type
   BGP_ENCAP_NODE,		/* BGP ENCAP SAFI */
   BGP_ENCAPV6_NODE,		/* BGP ENCAP SAFI */
   BGP_EVPN_NODE,		/* BGP EVPN SAFI */
+  BGP_EVPN_VNI_NODE,	/* BGP EVPN VNI */
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
   ISIS_NODE,			/* ISIS protocol mode */
@@ -206,6 +207,9 @@ struct cmd_token
 
 /* Argc max counts. */
 #define CMD_ARGC_MAX   25
+
+/* VNI range as per RFC 7432 */
+#define CMD_VNI_RANGE "<1-16777215>"
 
 /* Turn off these macros when uisng cpp with extract.pl */
 #ifndef VTYSH_EXTRACT_PL  

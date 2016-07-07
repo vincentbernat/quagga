@@ -69,6 +69,9 @@ $ignore{'"who"'} = "ignore";
 $ignore{'"terminal monitor"'} = "ignore";
 $ignore{'"terminal no monitor"'} = "ignore";
 $ignore{'"show history"'} = "ignore";
+$ignore{'"vni " "<1-16777215>"'} = "ignore";
+$ignore{'"rd ASN:nn_or_IP-address:nn"'} = "ignore";
+$ignore{'"route-target WORD ASN:nn_or_IP-address:nn"'} = "ignore";
 
 my $cli_stomp = 0;
 

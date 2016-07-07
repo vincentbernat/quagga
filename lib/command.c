@@ -2603,6 +2603,9 @@ node_parent ( enum node_type node )
     case BGP_IPV6M_NODE:
       ret = BGP_NODE;
       break;
+    case BGP_EVPN_VNI_NODE:
+      ret = BGP_EVPN_NODE;
+      break;
     case KEYCHAIN_KEY_NODE:
       ret = KEYCHAIN_NODE;
       break;
@@ -2993,6 +2996,9 @@ DEFUN (config_exit,
     case BGP_IPV6M_NODE:
       vty->node = BGP_NODE;
       break;
+    case BGP_EVPN_VNI_NODE:
+      vty->node = BGP_EVPN_NODE;
+      break;
     case KEYCHAIN_KEY_NODE:
       vty->node = KEYCHAIN_NODE;
       break;
@@ -3029,6 +3035,7 @@ DEFUN (config_end,
     case RIPNG_NODE:
     case BGP_NODE:
     case BGP_EVPN_NODE:
+    case BGP_EVPN_VNI_NODE:
     case BGP_ENCAP_NODE:
     case BGP_ENCAPV6_NODE:
     case BGP_VPNV4_NODE:
