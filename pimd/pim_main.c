@@ -134,10 +134,12 @@ int main(int argc, char** argv, char** envp) {
   umask(0027);
  
   progname = ((p = strrchr(argv[0], '/')) ? ++p : argv[0]);
- 
+
   zlog_default = openzlog(progname, ZLOG_PIM, 0,
 			  LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
-     
+  zprivs_init (&pimd_privs);
+  zlog_set_file (NULL,  LOG_DEFAULT_FILENAME, zlog_default->default_lvl);
+
   /* this while just reads the options */                       
   while (1) {
     int opt;
@@ -195,7 +197,6 @@ int main(int argc, char** argv, char** envp) {
   /* 
    * Initializations
    */
-  zprivs_init (&pimd_privs);
   pim_signals_init();
   cmd_init(1);
   vty_init(master);

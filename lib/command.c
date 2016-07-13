@@ -41,12 +41,19 @@ vector cmdvec = NULL;
 struct cmd_token token_cr;
 char *command_cr = NULL;
 
+/**
+ * Filter types. These tell the parser whether to allow
+ * partial matching on tokens.
+ */
 enum filter_type
 {
   FILTER_RELAXED,
   FILTER_STRICT
 };
 
+/**
+ * Command matcher result value.
+ */
 enum matcher_rv
 {
   MATCHER_OK,
@@ -57,6 +64,11 @@ enum matcher_rv
   MATCHER_EXCEED_ARGC_MAX
 };
 
+/**
+ * Defines which matcher_rv values constitute
+ * an error. Should be used against matcher_rv
+ * return values to do basic error checking.
+ */
 #define MATCHER_ERROR(matcher_rv) \
   (   (matcher_rv) == MATCHER_INCOMPLETE \
    || (matcher_rv) == MATCHER_NO_MATCH \
@@ -292,24 +304,29 @@ cmd_free_strvec (vector v)
   vector_free (v);
 }
 
+/**
+ * State structure for command format parser. Tracks
+ * parse tree position and miscellaneous state variables.
+ * Used when building a command vector from format strings.
+ */
 struct format_parser_state
 {
-  vector topvect; /* Top level vector */
-  vector intvect; /* Intermediate level vector, used when there's
-                   * a multiple in a keyword. */
-  vector curvect; /* current vector where read tokens should be
-                     appended. */
+  vector topvect;       /* Top level vector */
+  vector intvect;       /* Intermediate level vector, used when there's
+                           a multiple in a keyword. */
+  vector curvect;       /* current vector where read tokens should be
+                           appended. */
 
-  const char *string; /* pointer to command string, not modified */
-  const char *cp; /* pointer in command string, moved along while
-                     parsing */
-  const char *dp;  /* pointer in description string, moved along while
-                     parsing */
+  const char *string;   /* pointer to command string, not modified */
+  const char *cp;       /* pointer in command string, moved along while
+                           parsing */
+  const char *dp;       /* pointer in description string, moved along while
+                           parsing */
 
-  int in_keyword; /* flag to remember if we are in a keyword group */
-  int in_multiple; /* flag to remember if we are in a multiple group */
-  int just_read_word; /* flag to remember if the last thing we red was a
-                       * real word and not some abstract token */
+  int in_keyword;       /* flag to remember if we are in a keyword group */
+  int in_multiple;      /* flag to remember if we are in a multiple group */
+  int just_read_word;   /* flag to remember if the last thing we read was a
+                           real word and not some abstract token */
 };
 
 static void
@@ -324,6 +341,14 @@ format_parser_error(struct format_parser_state *state, const char *message)
   exit(1);
 }
 
+/**
+ * Reads out one section of a help string from state->dp.
+ * Leading whitespace is trimmed and the string is read until
+ * a newline is reached.
+ *
+ * @param[out] state format parser state
+ * @return the help string token read
+ */
 static char *
 format_parser_desc_str(struct format_parser_state *state)
 {
@@ -359,6 +384,21 @@ format_parser_desc_str(struct format_parser_state *state)
   return token;
 }
 
+/**
+ * Transitions format parser state into keyword parsing mode.
+ * A cmd_token struct, `token`, representing this keyword token is initialized
+ * and appended to state->curvect. token->keyword is initialized as a vector of
+ * vector, a new vector is initialized and added to token->keyword, and
+ * state->curvect is set to point at this vector. When control returns to the
+ * caller newly parsed tokens will be added to this vector.
+ *
+ * In short:
+ *   state->curvect[HEAD]               = new cmd_token
+ *   state->curvect[HEAD]->keyword[0]   = new vector
+ *   state->curvect                     = state->curvect[HEAD]->keyword[0]
+ *
+ * @param[out] state state struct to transition
+ */
 static void
 format_parser_begin_keyword(struct format_parser_state *state)
 {
@@ -383,6 +423,23 @@ format_parser_begin_keyword(struct format_parser_state *state)
   state->curvect = keyword_vect;
 }
 
+/**
+ * Transitions format parser state into multiple parsing mode.
+ * A cmd_token struct, `token`, representing this multiple token is initialized
+ * and appended to state->curvect. token->multiple is initialized as a vector
+ * of cmd_token and state->curvect is set to point at token->multiple. If
+ * state->curvect != state->topvect (i.e. this multiple token is nested inside
+ * another composite token) then a pointer to state->curvect is saved in
+ * state->intvect.
+ *
+ * In short:
+ *   state->curvect[HEAD]               = new cmd_token
+ *   state->curvect[HEAD]->multiple     = new vector
+ *   state->intvect                     = state->curvect IFF nested token
+ *   state->curvect                     = state->curvect[HEAD]->multiple
+ *
+ * @param[out] state state struct to transition
+ */
 static void
 format_parser_begin_multiple(struct format_parser_state *state)
 {
@@ -408,6 +465,14 @@ format_parser_begin_multiple(struct format_parser_state *state)
   state->curvect = token->multiple;
 }
 
+/**
+ * Transition format parser state out of keyword parsing mode.
+ * This function is called upon encountering '}'.
+ * state->curvect is reassigned to the top level vector (as
+ * keywords cannot be nested) and state flags are set appropriately.
+ *
+ * @param[out] state state struct to transition
+ */
 static void
 format_parser_end_keyword(struct format_parser_state *state)
 {
@@ -423,13 +488,22 @@ format_parser_end_keyword(struct format_parser_state *state)
   state->curvect = state->topvect;
 }
 
+/**
+ * Transition format parser state out of multiple parsing mode.
+ * This function is called upon encountering ')'.
+ * state->curvect is reassigned to its parent vector (state->intvect
+ * if the multiple token being exited was nested inside another token,
+ * state->topvect otherwise) and state flags are set appropriately.
+ *
+ * @param[out] state state struct to transition
+ */
 static void
 format_parser_end_multiple(struct format_parser_state *state)
 {
   char *dummy;
 
   if (!state->in_multiple)
-    format_parser_error(state, "Unepexted ')'");
+    format_parser_error(state, "Unexpected ')'");
 
   if (vector_active(state->curvect) == 0)
     format_parser_error(state, "Empty multiple section");
@@ -457,6 +531,21 @@ format_parser_end_multiple(struct format_parser_state *state)
     state->curvect = state->topvect;
 }
 
+/**
+ * Format parser handler for pipe '|' character.
+ * This character separates subtokens in multiple and keyword type tokens.
+ * If the current token is a multiple keyword, the position pointer is
+ * simply moved past the pipe and state flags are set appropriately.
+ * If the current token is a keyword token, the position pointer is moved
+ * past the pipe. Then the cmd_token struct for the keyword is fetched and
+ * a new vector of cmd_token is appended to its vector of vector. Finally
+ * state->curvect is set to point at this new vector.
+ *
+ * In short:
+ *   state->curvect = state->topvect[HEAD]->keyword[HEAD] = new vector
+ *
+ * @param[out] state state struct to transition
+ */
 static void
 format_parser_handle_pipe(struct format_parser_state *state)
 {
@@ -485,6 +574,13 @@ format_parser_handle_pipe(struct format_parser_state *state)
     }
 }
 
+/**
+ * Format parser handler for terminal tokens.
+ * Parses the token, appends it to state->curvect, and sets
+ * state flags appropriately.
+ *
+ * @param[out] state state struct for current format parser state
+ */
 static void
 format_parser_read_word(struct format_parser_state *state)
 {
@@ -754,54 +850,6 @@ cmd_node_vector (vector v, enum node_type ntype)
   return cnode->cmd_vector;
 }
 
-#if 0
-/* Filter command vector by symbol.  This function is not actually used;
- * should it be deleted? */
-static int
-cmd_filter_by_symbol (char *command, char *symbol)
-{
-  int i, lim;
-
-  if (strcmp (symbol, "IPV4_ADDRESS") == 0)
-    {
-      i = 0;
-      lim = strlen (command);
-      while (i < lim)
-	{
-	  if (! (isdigit ((int) command[i]) || command[i] == '.' || command[i] == '/'))
-	    return 1;
-	  i++;
-	}
-      return 0;
-    }
-  if (strcmp (symbol, "STRING") == 0)
-    {
-      i = 0;
-      lim = strlen (command);
-      while (i < lim)
-	{
-	  if (! (isalpha ((int) command[i]) || command[i] == '_' || command[i] == '-'))
-	    return 1;
-	  i++;
-	}
-      return 0;
-    }
-  if (strcmp (symbol, "IFNAME") == 0)
-    {
-      i = 0;
-      lim = strlen (command);
-      while (i < lim)
-	{
-	  if (! isalnum ((int) command[i]))
-	    return 1;
-	  i++;
-	}
-      return 0;
-    }
-  return 0;
-}
-#endif
-
 /* Completion match types. */
 enum match_type 
 {
@@ -817,59 +865,29 @@ enum match_type
   exact_match 
 };
 
+#define IPV4_ADDR_STR       "0123456789."
+#define IPV4_PREFIX_STR     "0123456789./"
+
+/**
+ * Determines whether a string is a valid ipv4 token.
+ *
+ * @param[in] str the string to match
+ * @return exact_match if the string is an exact match, no_match/partly_match
+ *         otherwise
+ */
 static enum match_type
 cmd_ipv4_match (const char *str)
 {
-  const char *sp;
-  int dots = 0, nums = 0;
-  char buf[4];
+  struct sockaddr_in sin_dummy;
 
   if (str == NULL)
     return partly_match;
 
-  for (;;)
-    {
-      memset (buf, 0, sizeof (buf));
-      sp = str;
-      while (*str != '\0')
-	{
-	  if (*str == '.')
-	    {
-	      if (dots >= 3)
-		return no_match;
+  if (strspn (str, IPV4_ADDR_STR) != strlen (str))
+    return no_match;
 
-	      if (*(str + 1) == '.')
-		return no_match;
-
-	      if (*(str + 1) == '\0')
-		return partly_match;
-
-	      dots++;
-	      break;
-	    }
-	  if (!isdigit ((int) *str))
-	    return no_match;
-
-	  str++;
-	}
-
-      if (str - sp > 3)
-	return no_match;
-
-      strncpy (buf, sp, str - sp);
-      if (atoi (buf) > 255)
-	return no_match;
-
-      nums++;
-
-      if (*str == '\0')
-	break;
-
-      str++;
-    }
-
-  if (nums < 4)
-    return partly_match;
+  if (inet_pton(AF_INET, str, &sin_dummy.sin_addr) != 1)
+    return no_match;
 
   return exact_match;
 }
@@ -877,91 +895,42 @@ cmd_ipv4_match (const char *str)
 static enum match_type
 cmd_ipv4_prefix_match (const char *str)
 {
-  const char *sp;
-  int dots = 0;
-  char buf[4];
+  struct sockaddr_in sin_dummy;
+  const char *delim = "/\0";
+  char *dupe, *prefix, *mask, *context, *endptr;
+  int nmask = -1;
 
   if (str == NULL)
     return partly_match;
 
-  for (;;)
-    {
-      memset (buf, 0, sizeof (buf));
-      sp = str;
-      while (*str != '\0' && *str != '/')
-	{
-	  if (*str == '.')
-	    {
-	      if (dots == 3)
-		return no_match;
-
-	      if (*(str + 1) == '.' || *(str + 1) == '/')
-		return no_match;
-
-	      if (*(str + 1) == '\0')
-		return partly_match;
-
-	      dots++;
-	      break;
-	    }
-
-	  if (!isdigit ((int) *str))
-	    return no_match;
-
-	  str++;
-	}
-
-      if (str - sp > 3)
-	return no_match;
-
-      strncpy (buf, sp, str - sp);
-      if (atoi (buf) > 255)
-	return no_match;
-
-      if (dots == 3)
-	{
-	  if (*str == '/')
-	    {
-	      if (*(str + 1) == '\0')
-		return partly_match;
-
-	      str++;
-	      break;
-	    }
-	  else if (*str == '\0')
-	    return partly_match;
-	}
-
-      if (*str == '\0')
-	return partly_match;
-
-      str++;
-    }
-
-  sp = str;
-  while (*str != '\0')
-    {
-      if (!isdigit ((int) *str))
-	return no_match;
-
-      str++;
-    }
-
-  if (atoi (sp) > 32)
+  if (strspn (str, IPV4_PREFIX_STR) != strlen (str))
     return no_match;
+
+  /* tokenize to address + mask */
+  dupe = XMALLOC(MTYPE_TMP, strlen(str)+1);
+  strncpy(dupe, str, strlen(str)+1);
+  prefix = strtok_r(dupe, delim, &context);
+  mask   = strtok_r(NULL, delim, &context);
+
+  if (!mask)
+    return partly_match;
+
+  /* validate prefix */
+  if (inet_pton(AF_INET, prefix, &sin_dummy.sin_addr) != 1)
+    return no_match;
+
+  /* validate mask */
+  nmask = strtol (mask, &endptr, 10);
+  if (*endptr != '\0' || nmask < 0 || nmask > 32)
+    return no_match;
+
+  XFREE(MTYPE_TMP, dupe);
 
   return exact_match;
 }
 
-#define IPV6_ADDR_STR		"0123456789abcdefABCDEF:.%"
-#define IPV6_PREFIX_STR		"0123456789abcdefABCDEF:.%/"
-#define STATE_START		1
-#define STATE_COLON		2
-#define STATE_DOUBLE		3
-#define STATE_ADDR		4
-#define STATE_DOT               5
-#define STATE_SLASH		6
-#define STATE_MASK		7
+#define IPV6_ADDR_STR       "0123456789abcdefABCDEF:."
+#define IPV6_PREFIX_STR     "0123456789abcdefABCDEF:./"
 
 #ifdef HAVE_IPV6
 
@@ -992,11 +961,10 @@ cmd_ipv6_match (const char *str)
 static enum match_type
 cmd_ipv6_prefix_match (const char *str)
 {
-  int state = STATE_START;
-  int colons = 0, nums = 0, double_colon = 0;
-  int mask;
-  const char *sp = NULL;
-  char *endptr = NULL;
+  struct sockaddr_in6 sin6_dummy;
+  const char *delim = "/\0";
+  char *dupe, *prefix, *mask, *context, *endptr;
+  int nmask = -1;
 
   if (str == NULL)
     return partly_match;
@@ -1004,123 +972,25 @@ cmd_ipv6_prefix_match (const char *str)
   if (strspn (str, IPV6_PREFIX_STR) != strlen (str))
     return no_match;
 
-  while (*str != '\0' && state != STATE_MASK)
-    {
-      switch (state)
-	{
-	case STATE_START:
-	  if (*str == ':')
-	    {
-	      if (*(str + 1) != ':' && *(str + 1) != '\0')
-		return no_match;
-	      colons--;
-	      state = STATE_COLON;
-	    }
-	  else
-	    {
-	      sp = str;
-	      state = STATE_ADDR;
-	    }
+  /* tokenize to address + mask */
+  dupe = XMALLOC(MTYPE_TMP, strlen(str)+1);
+  strncpy(dupe, str, strlen(str)+1);
+  prefix = strtok_r(dupe, delim, &context);
+  mask   = strtok_r(NULL, delim, &context);
 
-	  continue;
-	case STATE_COLON:
-	  colons++;
-	  if (*(str + 1) == '/')
-	    return no_match;
-	  else if (*(str + 1) == ':')
-	    state = STATE_DOUBLE;
-	  else
-	    {
-	      sp = str + 1;
-	      state = STATE_ADDR;
-	    }
-	  break;
-	case STATE_DOUBLE:
-	  if (double_colon)
-	    return no_match;
-
-	  if (*(str + 1) == ':')
-	    return no_match;
-	  else
-	    {
-	      if (*(str + 1) != '\0' && *(str + 1) != '/')
-		colons++;
-	      sp = str + 1;
-
-	      if (*(str + 1) == '/')
-		state = STATE_SLASH;
-	      else
-		state = STATE_ADDR;
-	    }
-
-	  double_colon++;
-	  nums += 1;
-	  break;
-	case STATE_ADDR:
-	  if (*(str + 1) == ':' || *(str + 1) == '.'
-	      || *(str + 1) == '\0' || *(str + 1) == '/')
-	    {
-	      if (str - sp > 3)
-		return no_match;
-
-	      for (; sp <= str; sp++)
-		if (*sp == '/')
-		  return no_match;
-
-	      nums++;
-
-	      if (*(str + 1) == ':')
-		state = STATE_COLON;
-	      else if (*(str + 1) == '.')
-		{
-		  if (colons || double_colon)
-		    state = STATE_DOT;
-		  else
-		    return no_match;
-		}
-	      else if (*(str + 1) == '/')
-		state = STATE_SLASH;
-	    }
-	  break;
-	case STATE_DOT:
-	  state = STATE_ADDR;
-	  break;
-	case STATE_SLASH:
-	  if (*(str + 1) == '\0')
-	    return partly_match;
-
-	  state = STATE_MASK;
-	  break;
-	default:
-	  break;
-	}
-
-      if (nums > 11)
-	return no_match;
-
-      if (colons > 7)
-	return no_match;
-
-      str++;
-    }
-
-  if (state < STATE_MASK)
+  if (!mask)
     return partly_match;
 
-  mask = strtol (str, &endptr, 10);
-  if (*endptr != '\0')
+  /* validate prefix */
+  if (inet_pton(AF_INET6, prefix, &sin6_dummy.sin6_addr) != 1)
     return no_match;
 
-  if (mask < 0 || mask > 128)
+  /* validate mask */
+  nmask = strtol (mask, &endptr, 10);
+  if (*endptr != '\0' || nmask < 0 || nmask > 128)
     return no_match;
-  
-/* I don't know why mask < 13 makes command match partly.
-   Forgive me to make this comments. I Want to set static default route
-   because of lack of function to originate default in ospf6d; sorry
-       yasu
-  if (mask < 13)
-    return partly_match;
-*/
+
+  XFREE(MTYPE_TMP, dupe);
 
   return exact_match;
 }
@@ -2428,15 +2298,6 @@ cmd_complete_command_real (vector vline, struct vty *vty, int *status, int islib
 	  *status = CMD_ERR_AMBIGUOUS;
 	  return NULL;
 	}
-      /*
-	   else if (ret == 2)
-	   {
-	   vector_free (cmd_vector);
-	   cmd_matches_free(&matches);
-	   *status = CMD_ERR_NO_MATCH;
-	   return NULL;
-	   }
-	 */
     }
   
   /* Prepare match vector. */
@@ -2508,8 +2369,6 @@ cmd_complete_command_real (vector vline, struct vty *vty, int *status, int islib
                         malloc(lcd + 1));
 	      memcpy (lcdstr, matchvec->index[0], lcd);
 	      lcdstr[lcd] = '\0';
-
-	      /* match_str = (char **) &lcdstr; */
 
 	      /* Free matchvec. */
 	      for (i = 0; i < vector_active (matchvec); i++)

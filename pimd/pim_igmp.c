@@ -23,6 +23,8 @@
 #include <zebra.h>
 
 #include "memory.h"
+#include "prefix.h"
+#include "if.h"
 
 #include "pimd.h"
 #include "pim_igmp.h"
@@ -44,16 +46,13 @@
 
 static void group_timer_off(struct igmp_group *group);
 
-static struct igmp_group *find_group_by_addr(struct igmp_sock *igmp,
-					     struct in_addr group_addr);
-
 static int igmp_sock_open(struct in_addr ifaddr, int ifindex, uint32_t pim_options)
 {
   int fd;
   int join = 0;
   struct in_addr group;
 
-  fd = pim_socket_mcast(IPPROTO_IGMP, ifaddr, 1 /* loop=true */);
+  fd = pim_socket_mcast(IPPROTO_IGMP, ifaddr, ifindex, 1 /* loop=true */);
   if (fd < 0)
     return -1;
 
@@ -470,6 +469,7 @@ static int igmp_v3_report(struct igmp_sock *igmp,
   uint8_t          *report_pastend = (uint8_t *) igmp_msg + igmp_msg_len;
   struct interface *ifp = igmp->interface;
   int               i;
+  int               local_ncb = 0;
 
   if (igmp_msg_len < IGMP_V3_MSG_MIN_SIZE) {
     zlog_warn("Recv IGMP report v3 from %s on %s: size=%d shorter than minimum=%d",
@@ -512,6 +512,8 @@ static int igmp_v3_report(struct igmp_sock *igmp,
     int             rec_auxdatalen;
     int             rec_num_sources;
     int             j;
+    struct prefix   lncb;
+    struct prefix   g;
 
     if ((group_record + IGMP_V3_GROUP_RECORD_MIN_SIZE) > report_pastend) {
       zlog_warn("Recv IGMP report v3 from %s on %s: group record beyond report end",
@@ -554,31 +556,48 @@ static int igmp_v3_report(struct igmp_sock *igmp,
       }
     } /* for (sources) */
 
-    switch (rec_type) {
-    case IGMP_GRP_REC_TYPE_MODE_IS_INCLUDE:
-      igmpv3_report_isin(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
-      break;
-    case IGMP_GRP_REC_TYPE_MODE_IS_EXCLUDE:
-      igmpv3_report_isex(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
-      break;
-    case IGMP_GRP_REC_TYPE_CHANGE_TO_INCLUDE_MODE:
-      igmpv3_report_toin(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
-      break;
-    case IGMP_GRP_REC_TYPE_CHANGE_TO_EXCLUDE_MODE:
-      igmpv3_report_toex(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
-      break;
-    case IGMP_GRP_REC_TYPE_ALLOW_NEW_SOURCES:
-      igmpv3_report_allow(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
-      break;
-    case IGMP_GRP_REC_TYPE_BLOCK_OLD_SOURCES:
-      igmpv3_report_block(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
-      break;
-    default:
-      zlog_warn("Recv IGMP report v3 from %s on %s: unknown record type: type=%d",
-		from_str, ifp->name, rec_type);
-    }
+
+    lncb.family = AF_INET;
+    lncb.u.prefix4.s_addr = 0x000000E0;
+    lncb.prefixlen = 24;
+
+    g.family = AF_INET;
+    g.u.prefix4 = rec_group;
+    g.prefixlen = 32;
+    /*
+     * If we receive a igmp report with the group in 224.0.0.0/24
+     * then we should ignore it
+     */
+    if (prefix_match(&lncb, &g))
+      local_ncb = 1;
+
+    if (!local_ncb)
+      switch (rec_type) {
+      case IGMP_GRP_REC_TYPE_MODE_IS_INCLUDE:
+	igmpv3_report_isin(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
+	break;
+      case IGMP_GRP_REC_TYPE_MODE_IS_EXCLUDE:
+	igmpv3_report_isex(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
+	break;
+      case IGMP_GRP_REC_TYPE_CHANGE_TO_INCLUDE_MODE:
+	igmpv3_report_toin(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
+	break;
+      case IGMP_GRP_REC_TYPE_CHANGE_TO_EXCLUDE_MODE:
+	igmpv3_report_toex(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
+	break;
+      case IGMP_GRP_REC_TYPE_ALLOW_NEW_SOURCES:
+	igmpv3_report_allow(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
+	break;
+      case IGMP_GRP_REC_TYPE_BLOCK_OLD_SOURCES:
+	igmpv3_report_block(igmp, from, rec_group, rec_num_sources, (struct in_addr *) sources);
+	break;
+      default:
+	zlog_warn("Recv IGMP report v3 from %s on %s: unknown record type: type=%d",
+		  from_str, ifp->name, rec_type);
+      }
 
     group_record += 8 + (rec_num_sources << 2) + (rec_auxdatalen << 2);
+    local_ncb = 0;
 
   } /* for (group records) */
 
@@ -933,7 +952,7 @@ static void igmp_read_on(struct igmp_sock *igmp)
 {
   zassert(igmp);
 
-  if (PIM_DEBUG_IGMP_TRACE) {
+  if (PIM_DEBUG_IGMP_TRACE_DETAIL) {
     zlog_debug("Scheduling READ event on IGMP socket fd=%d",
 	       igmp->fd);
   }
@@ -1032,7 +1051,7 @@ static void sock_close(struct igmp_sock *igmp)
   pim_igmp_other_querier_timer_off(igmp);
   pim_igmp_general_query_off(igmp);
 
-  if (PIM_DEBUG_IGMP_TRACE) {
+  if (PIM_DEBUG_IGMP_TRACE_DETAIL) {
     if (igmp->t_igmp_read) {
       zlog_debug("Cancelling READ event on IGMP socket %s fd=%d on interface %s",
 		 inet_ntoa(igmp->ifaddr), igmp->fd,
@@ -1048,7 +1067,7 @@ static void sock_close(struct igmp_sock *igmp)
 	     errno, safe_strerror(errno));
   }
   
-  if (PIM_DEBUG_IGMP_TRACE) {
+  if (PIM_DEBUG_IGMP_TRACE_DETAIL) {
     zlog_debug("Deleted IGMP socket %s fd=%d on interface %s",
 	       inet_ntoa(igmp->ifaddr), igmp->fd, igmp->interface->name);
   }
@@ -1077,11 +1096,6 @@ void igmp_startup_mode_on(struct igmp_sock *igmp)
 
 static void igmp_group_free(struct igmp_group *group)
 {
-  zassert(!group->t_group_query_retransmit_timer);
-  zassert(!group->t_group_timer);
-  zassert(group->group_source_list);
-  zassert(!listcount(group->group_source_list));
-
   list_free(group->group_source_list);
 
   XFREE(MTYPE_PIM_IGMP_GROUP, group);
@@ -1108,7 +1122,6 @@ static void igmp_group_delete(struct igmp_group *group)
 
   if (group->t_group_query_retransmit_timer) {
     THREAD_OFF(group->t_group_query_retransmit_timer);
-    zassert(!group->t_group_query_retransmit_timer);
   }
 
   group_timer_off(group);
@@ -1274,7 +1287,7 @@ static int igmp_group_timer(struct thread *t)
 
   zassert(group->group_filtermode_isexcl);
 
-  group->t_group_timer = 0;
+  group->t_group_timer = NULL;
   group->group_filtermode_isexcl = 0;
 
   /* Any source (*,G) is forwarded only if mode is EXCLUDE {empty} */
@@ -1342,8 +1355,9 @@ void igmp_group_timer_on(struct igmp_group *group,
 		       group, interval_msec);
 }
 
-static struct igmp_group *find_group_by_addr(struct igmp_sock *igmp,
-					     struct in_addr group_addr)
+struct igmp_group *
+find_group_by_addr (struct igmp_sock *igmp,
+		   struct in_addr group_addr)
 {
   struct igmp_group *group;
   struct listnode   *node;

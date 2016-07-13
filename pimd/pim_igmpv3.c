@@ -23,6 +23,7 @@
 #include <zebra.h>
 #include "log.h"
 #include "memory.h"
+#include "if.h"
 
 #include "pimd.h"
 #include "pim_iface.h"
@@ -310,33 +311,33 @@ void igmp_source_reset_gmi(struct igmp_sock *igmp,
 		       group_membership_interval_msec);
 }
 
-static void source_mark_delete_flag(struct list *source_list)
+static void source_mark_delete_flag(struct igmp_group *group)
 {
   struct listnode    *src_node;
   struct igmp_source *src;
 
-  for (ALL_LIST_ELEMENTS_RO(source_list, src_node, src)) {
+  for (ALL_LIST_ELEMENTS_RO (group->group_source_list, src_node, src)) {
     IGMP_SOURCE_DO_DELETE(src->source_flags);
   }
 }
 
-static void source_mark_send_flag(struct list *source_list)
+static void source_mark_send_flag (struct igmp_group *group)
 {
   struct listnode    *src_node;
   struct igmp_source *src;
 
-  for (ALL_LIST_ELEMENTS_RO(source_list, src_node, src)) {
+  for (ALL_LIST_ELEMENTS_RO (group->group_source_list, src_node, src)) {
     IGMP_SOURCE_DO_SEND(src->source_flags);
   }
 }
 
-static int source_mark_send_flag_by_timer(struct list *source_list)
+static int source_mark_send_flag_by_timer (struct igmp_group *group)
 {
   struct listnode    *src_node;
   struct igmp_source *src;
   int                 num_marked_sources = 0;
 
-  for (ALL_LIST_ELEMENTS_RO(source_list, src_node, src)) {
+  for (ALL_LIST_ELEMENTS_RO(group->group_source_list, src_node, src)) {
     /* Is source timer running? */
     if (src->t_source_timer) {
       IGMP_SOURCE_DO_SEND(src->source_flags);
@@ -542,6 +543,7 @@ static void allow(struct igmp_sock *igmp, struct in_addr from,
 		  struct in_addr group_addr,
 		  int num_sources, struct in_addr *sources)
 {
+  struct igmp_source *source;
   struct igmp_group *group;
   int    i;
 
@@ -553,7 +555,6 @@ static void allow(struct igmp_sock *igmp, struct in_addr from,
 
   /* scan received sources */
   for (i = 0; i < num_sources; ++i) {
-    struct igmp_source *source;
     struct in_addr     *src_addr;
 
     src_addr = sources + i;
@@ -576,6 +577,17 @@ static void allow(struct igmp_sock *igmp, struct in_addr from,
     igmp_source_reset_gmi(igmp, group, source);
 
   } /* scan received sources */
+
+  if ((num_sources == 0) &&
+      (group->group_filtermode_isexcl) &&
+      (listcount (group->group_source_list) == 1))
+    {
+      struct in_addr star = { .s_addr = INADDR_ANY };
+
+      source = igmp_find_source_by_addr (group, star);
+      if (source)
+	igmp_source_reset_gmi (igmp, group, source);
+    }
 }
 
 void igmpv3_report_isin(struct igmp_sock *igmp, struct in_addr from,
@@ -591,17 +603,17 @@ void igmpv3_report_isin(struct igmp_sock *igmp, struct in_addr from,
 static void isex_excl(struct igmp_group *group,
 		      int num_sources, struct in_addr *sources)
 {
+  struct igmp_source *source;
   int     i;
 
   /* EXCLUDE mode */
   zassert(group->group_filtermode_isexcl);
   
   /* E.1: set deletion flag for known sources (X,Y) */
-  source_mark_delete_flag(group->group_source_list);
+  source_mark_delete_flag (group);
 
   /* scan received sources (A) */
   for (i = 0; i < num_sources; ++i) {
-    struct igmp_source *source;
     struct in_addr     *src_addr;
 
     src_addr = sources + i;
@@ -626,6 +638,20 @@ static void isex_excl(struct igmp_group *group,
 
   } /* scan received sources */
 
+  /*
+   * If we are in isexcl mode and num_sources == 0
+   * than that means we have a *,g entry that
+   * needs to be handled
+   */
+  if (group->group_filtermode_isexcl && num_sources == 0)
+    {
+       struct in_addr star = { .s_addr = INADDR_ANY };
+       source = igmp_find_source_by_addr (group, star);
+       if (source)
+         IGMP_SOURCE_DONT_DELETE(source->source_flags);
+       igmp_source_reset_gmi (group->group_igmp_sock, group, source);
+    }
+
   /* E.5: delete all sources marked with deletion flag: (X-A) and (Y-A) */
   source_delete_by_flag(group->group_source_list);
 }
@@ -639,7 +665,7 @@ static void isex_incl(struct igmp_group *group,
   zassert(!group->group_filtermode_isexcl);
   
   /* I.1: set deletion flag for known sources (A) */
-  source_mark_delete_flag(group->group_source_list);
+  source_mark_delete_flag (group);
 
   /* scan received sources (B) */
   for (i = 0; i < num_sources; ++i) {
@@ -715,7 +741,7 @@ static void toin_incl(struct igmp_group *group,
   int i;
 
   /* Set SEND flag for all known sources (A) */
-  source_mark_send_flag(group->group_source_list);
+  source_mark_send_flag (group);
 
   /* Scan received sources (B) */
   for (i = 0; i < num_sources; ++i) {
@@ -758,7 +784,7 @@ static void toin_excl(struct igmp_group *group,
   int i;
 
   /* Set SEND flag for X (sources with timer > 0) */
-  num_sources_tosend = source_mark_send_flag_by_timer(group->group_source_list);
+  num_sources_tosend = source_mark_send_flag_by_timer (group);
 
   /* Scan received sources (A) */
   for (i = 0; i < num_sources; ++i) {
@@ -808,11 +834,26 @@ void igmpv3_report_toin(struct igmp_sock *igmp, struct in_addr from,
   on_trace(__PRETTY_FUNCTION__,
 	   ifp, from, group_addr, num_sources, sources);
 
-  /* non-existant group is created as INCLUDE {empty} */
-  group = igmp_add_group_by_addr(igmp, group_addr);
-  if (!group) {
-    return;
-  }
+  /*
+   * If the requested filter mode is INCLUDE *and* the requested source
+   * list is empty, then the entry corresponding to the requested
+   * interface and multicast address is deleted if present.  If no such
+   * entry is present, the request is ignored.
+   */
+  if (num_sources)
+    {
+      /* non-existant group is created as INCLUDE {empty} */
+      group = igmp_add_group_by_addr(igmp, group_addr);
+      if (!group) {
+	return;
+      }
+    }
+  else
+    {
+      group = find_group_by_addr (igmp, group_addr);
+      if (!group)
+	return;
+    }
 
   if (group->group_filtermode_isexcl) {
     /* EXCLUDE mode */
@@ -833,7 +874,7 @@ static void toex_incl(struct igmp_group *group,
   zassert(!group->group_filtermode_isexcl);
 
   /* Set DELETE flag for all known sources (A) */
-  source_mark_delete_flag(group->group_source_list);
+  source_mark_delete_flag (group);
 
   /* Clear off SEND flag from all known sources (A) */
   source_clear_send_flag(group->group_source_list);
@@ -888,7 +929,7 @@ static void toex_excl(struct igmp_group *group,
   int i;
 
   /* set DELETE flag for all known sources (X,Y) */
-  source_mark_delete_flag(group->group_source_list);
+  source_mark_delete_flag (group);
 
   /* clear off SEND flag from all known sources (X,Y) */
   source_clear_send_flag(group->group_source_list);

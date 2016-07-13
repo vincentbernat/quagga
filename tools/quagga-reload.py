@@ -567,7 +567,11 @@ def compare_context_objects(newconf, running):
         if running_ctx_keys not in newconf.contexts:
 
             # Check if bgp's local ASN has changed. If yes, just restart it
-            if "router bgp" in running_ctx_keys[0]:
+            # We check that the len is 1 here so that we only look at ('router bgp 10')
+            # and not ('router bgp 10', 'address-family ipv4 unicast'). The
+            # latter could cause a false restart_bgpd positive if ipv4 unicast is in
+            # running but not in newconf.
+            if "router bgp" in running_ctx_keys[0] and len(running_ctx_keys) == 1:
                 restart_bgpd = True
                 continue
 
@@ -620,13 +624,14 @@ if __name__ == '__main__':
     group.add_argument('--reload', action='store_true', help='Apply the deltas', default=False)
     group.add_argument('--test', action='store_true', help='Show the deltas', default=False)
     parser.add_argument('--debug', action='store_true', help='Enable debugs', default=False)
+    parser.add_argument('--stdout', action='store_true', help='Log to STDOUT', default=False)
     parser.add_argument('filename', help='Location of new quagga config file')
     args = parser.parse_args()
 
     # Logging
     # For --test log to stdout
     # For --reload log to /var/log/quagga/quagga-reload.log
-    if args.test:
+    if args.test or args.stdout:
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s %(levelname)5s: %(message)s')
     elif args.reload:

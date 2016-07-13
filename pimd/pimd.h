@@ -25,7 +25,6 @@
 
 #include <stdint.h>
 
-#include "pim_mroute.h"
 #include "pim_assert.h"
 
 #define PIMD_PROGNAME       "pimd"
@@ -54,19 +53,22 @@
 #define PIM_INADDR_ISNOT_ANY(addr) ((addr).s_addr != PIM_NET_INADDR_ANY) /* struct in_addr addr */
 
 #define PIM_MASK_PIM_EVENTS          (1 << 0)
-#define PIM_MASK_PIM_PACKETS         (1 << 1)
-#define PIM_MASK_PIM_PACKETDUMP_SEND (1 << 2)
-#define PIM_MASK_PIM_PACKETDUMP_RECV (1 << 3)
-#define PIM_MASK_PIM_TRACE           (1 << 4)
-#define PIM_MASK_IGMP_EVENTS         (1 << 5)
-#define PIM_MASK_IGMP_PACKETS        (1 << 6)
-#define PIM_MASK_IGMP_TRACE          (1 << 7)
-#define PIM_MASK_ZEBRA               (1 << 8)
-#define PIM_MASK_SSMPINGD            (1 << 9)
-#define PIM_MASK_MROUTE              (1 << 10)
-#define PIM_MASK_PIM_HELLO           (1 << 11)
-#define PIM_MASK_PIM_J_P             (1 << 12)
-#define PIM_MASK_STATIC              (1 << 13)
+#define PIM_MASK_PIM_EVENTS_DETAIL   (1 << 1)
+#define PIM_MASK_PIM_PACKETS         (1 << 2)
+#define PIM_MASK_PIM_PACKETDUMP_SEND (1 << 3)
+#define PIM_MASK_PIM_PACKETDUMP_RECV (1 << 4)
+#define PIM_MASK_PIM_TRACE           (1 << 5)
+#define PIM_MASK_PIM_TRACE_DETAIL    (1 << 6)
+#define PIM_MASK_IGMP_EVENTS         (1 << 7)
+#define PIM_MASK_IGMP_PACKETS        (1 << 8)
+#define PIM_MASK_IGMP_TRACE          (1 << 9)
+#define PIM_MASK_IGMP_TRACE_DETAIL   (1 << 10)
+#define PIM_MASK_ZEBRA               (1 << 11)
+#define PIM_MASK_SSMPINGD            (1 << 12)
+#define PIM_MASK_MROUTE              (1 << 13)
+#define PIM_MASK_PIM_HELLO           (1 << 14)
+#define PIM_MASK_PIM_J_P             (1 << 15)
+#define PIM_MASK_STATIC              (1 << 16)
 
 const char *const PIM_ALL_SYSTEMS;
 const char *const PIM_ALL_ROUTERS;
@@ -118,13 +120,16 @@ extern int32_t qpim_register_probe_time;
 #define PIM_REGISTER_PROBE_TIME_DEFAULT            (5)
 
 #define PIM_DEBUG_PIM_EVENTS          (qpim_debugs & PIM_MASK_PIM_EVENTS)
+#define PIM_DEBUG_PIM_EVENTS_DETAIL   (qpim_debugs & PIM_MASK_PIM_EVENTS_DETAIL)
 #define PIM_DEBUG_PIM_PACKETS         (qpim_debugs & PIM_MASK_PIM_PACKETS)
 #define PIM_DEBUG_PIM_PACKETDUMP_SEND (qpim_debugs & PIM_MASK_PIM_PACKETDUMP_SEND)
 #define PIM_DEBUG_PIM_PACKETDUMP_RECV (qpim_debugs & PIM_MASK_PIM_PACKETDUMP_RECV)
 #define PIM_DEBUG_PIM_TRACE           (qpim_debugs & PIM_MASK_PIM_TRACE)
+#define PIM_DEBUG_PIM_TRACE_DETAIL    (qpim_debugs & PIM_MASK_PIM_TRACE_DETAIL)
 #define PIM_DEBUG_IGMP_EVENTS         (qpim_debugs & PIM_MASK_IGMP_EVENTS)
 #define PIM_DEBUG_IGMP_PACKETS        (qpim_debugs & PIM_MASK_IGMP_PACKETS)
 #define PIM_DEBUG_IGMP_TRACE          (qpim_debugs & PIM_MASK_IGMP_TRACE)
+#define PIM_DEBUG_IGMP_TRACE_DETAIL   (qpim_debugs & PIM_MASK_IGMP_TRACE_DETAIL)
 #define PIM_DEBUG_ZEBRA               (qpim_debugs & PIM_MASK_ZEBRA)
 #define PIM_DEBUG_SSMPINGD            (qpim_debugs & PIM_MASK_SSMPINGD)
 #define PIM_DEBUG_MROUTE              (qpim_debugs & PIM_MASK_MROUTE)
@@ -144,6 +149,7 @@ extern int32_t qpim_register_probe_time;
 #define PIM_DO_DEBUG_IGMP_EVENTS         (qpim_debugs |= PIM_MASK_IGMP_EVENTS)
 #define PIM_DO_DEBUG_IGMP_PACKETS        (qpim_debugs |= PIM_MASK_IGMP_PACKETS)
 #define PIM_DO_DEBUG_IGMP_TRACE          (qpim_debugs |= PIM_MASK_IGMP_TRACE)
+#define PIM_DO_DEBUG_IGMP_TRACE_DETAIL   (qpim_debugs |= PIM_MASK_IGMP_TRACE_DETAIL)
 #define PIM_DO_DEBUG_ZEBRA               (qpim_debugs |= PIM_MASK_ZEBRA)
 #define PIM_DO_DEBUG_SSMPINGD            (qpim_debugs |= PIM_MASK_SSMPINGD)
 #define PIM_DO_DEBUG_MROUTE              (qpim_debugs |= PIM_MASK_MROUTE)
@@ -159,6 +165,7 @@ extern int32_t qpim_register_probe_time;
 #define PIM_DONT_DEBUG_IGMP_EVENTS         (qpim_debugs &= ~PIM_MASK_IGMP_EVENTS)
 #define PIM_DONT_DEBUG_IGMP_PACKETS        (qpim_debugs &= ~PIM_MASK_IGMP_PACKETS)
 #define PIM_DONT_DEBUG_IGMP_TRACE          (qpim_debugs &= ~PIM_MASK_IGMP_TRACE)
+#define PIM_DONT_DEBUG_IGMP_TRACE_DETAIL   (qpim_debugs &= ~PIM_MASK_IGMP_TRACE_DETAIL)
 #define PIM_DONT_DEBUG_ZEBRA               (qpim_debugs &= ~PIM_MASK_ZEBRA)
 #define PIM_DONT_DEBUG_SSMPINGD            (qpim_debugs &= ~PIM_MASK_SSMPINGD)
 #define PIM_DONT_DEBUG_MROUTE              (qpim_debugs &= ~PIM_MASK_MROUTE)

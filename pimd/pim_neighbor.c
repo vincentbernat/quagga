@@ -25,6 +25,7 @@
 #include "log.h"
 #include "prefix.h"
 #include "memory.h"
+#include "if.h"
 
 #include "pimd.h"
 #include "pim_neighbor.h"
@@ -240,7 +241,7 @@ static int on_neighbor_timer(struct thread *t)
 
 static void neighbor_timer_off(struct pim_neighbor *neigh)
 {
-  if (PIM_DEBUG_PIM_TRACE) {
+  if (PIM_DEBUG_PIM_TRACE_DETAIL) {
     if (neigh->t_expire_timer) {
       char src_str[100];
       pim_inet4_dump("<src?>", neigh->source_addr, src_str, sizeof(src_str));
@@ -266,7 +267,7 @@ void pim_neighbor_timer_reset(struct pim_neighbor *neigh, uint16_t holdtime)
     return;
   }
 
-  if (PIM_DEBUG_PIM_TRACE) {
+  if (PIM_DEBUG_PIM_TRACE_DETAIL) {
     char src_str[100];
     pim_inet4_dump("<src?>", neigh->source_addr, src_str, sizeof(src_str));
     zlog_debug("%s: starting %u sec timer for neighbor %s on %s",

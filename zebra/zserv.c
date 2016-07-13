@@ -1832,7 +1832,7 @@ static void
 zebra_client_close (struct zserv *client)
 {
   /* Send client de-registration to BFD */
-  zebra_ptm_bfd_client_deregister(client);
+  zebra_ptm_bfd_client_deregister(client->proto);
 
   /* Cleanup any registered nexthops - across all VRFs. */
   zebra_client_close_cleanup_rnh (client);
@@ -2670,11 +2670,11 @@ config_write_forwarding (struct vty *vty)
   /* FIXME: Find better place for that. */
   router_id_write (vty);
 
-  if (ipforward ())
-    vty_out (vty, "ip forwarding%s", VTY_NEWLINE);
+  if (!ipforward ())
+    vty_out (vty, "no ip forwarding%s", VTY_NEWLINE);
 #ifdef HAVE_IPV6
-  if (ipforward_ipv6 ())
-    vty_out (vty, "ipv6 forwarding%s", VTY_NEWLINE);
+  if (!ipforward_ipv6 ())
+    vty_out (vty, "no ipv6 forwarding%s", VTY_NEWLINE);
 #endif /* HAVE_IPV6 */
   vty_out (vty, "!%s", VTY_NEWLINE);
   return 0;

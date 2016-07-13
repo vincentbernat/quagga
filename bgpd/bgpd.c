@@ -1424,7 +1424,10 @@ bgp_recalculate_all_bestpaths (struct bgp *bgp)
         {
           for (rn = bgp_table_top (bgp->rib[afi][safi]); rn; rn = bgp_route_next (rn))
             {
-              bgp_process (bgp, rn, afi, safi);
+              if (rn->info != NULL)
+                {
+                  bgp_process (bgp, rn, afi, safi);
+                }
             }
         }
     }
@@ -6656,9 +6659,17 @@ bgp_config_write_peer_af (struct vty *vty, struct bgp *bgp,
     {
       if (peer->afc[afi][safi])
         {
-          afi_header_vty_out (vty, afi, safi, write,
-                              "  neighbor %s activate%s",
-                              addr, VTY_NEWLINE);
+          if ((afi == AFI_IP) && (safi == SAFI_UNICAST))
+            {
+              if (bgp_flag_check (bgp, BGP_FLAG_NO_DEFAULT_IPV4))
+                {
+                  vty_out (vty, "  neighbor %s activate%s", addr, VTY_NEWLINE);
+                }
+            }
+          else
+            afi_header_vty_out (vty, afi, safi, write,
+                                "  neighbor %s activate%s",
+                                addr, VTY_NEWLINE);
         }
     }
 

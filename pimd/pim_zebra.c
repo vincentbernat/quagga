@@ -43,6 +43,7 @@
 #include "pim_zlookup.h"
 #include "pim_ifchannel.h"
 #include "pim_rp.h"
+#include "pim_igmpv3.h"
 
 #undef PIM_DEBUG_IFADDR_DUMP
 #define PIM_DEBUG_IFADDR_DUMP
@@ -333,7 +334,7 @@ static void scan_upstream_rpf_cache()
     struct in_addr      old_rpf_addr;
     enum pim_rpf_result rpf_result;
 
-    rpf_result = pim_rpf_update(up, &old_rpf_addr);
+    rpf_result = pim_rpf_update(up, &old_rpf_addr, NULL);
     if (rpf_result == PIM_RPF_FAILURE)
       continue;
 
@@ -383,35 +384,41 @@ static void scan_upstream_rpf_cache()
   
 }
 
-void pim_scan_oil()
+void
+pim_scan_individual_oil (struct channel_oil *c_oil)
 {
-  struct listnode    *node;
-  struct listnode    *nextnode;
-  struct channel_oil *c_oil;
+  struct in_addr vif_source;
+  int input_iface_vif_index;
+  int old_vif_index;
 
-  qpim_scan_oil_last = pim_time_monotonic_sec();
-  ++qpim_scan_oil_events;
+  if (!pim_rp_set_upstream_addr (&vif_source, c_oil->oil.mfcc_origin))
+    return;
 
-  for (ALL_LIST_ELEMENTS(qpim_channel_oil_list, node, nextnode, c_oil)) {
-    int old_vif_index;
-    int input_iface_vif_index = fib_lookup_if_vif_index(c_oil->oil.mfcc_origin);
-    if (input_iface_vif_index < 1) {
-      char source_str[100];
-      char group_str[100];
-      pim_inet4_dump("<source?>", c_oil->oil.mfcc_origin, source_str, sizeof(source_str));
-      pim_inet4_dump("<group?>", c_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
-      zlog_warn("%s %s: could not find input interface for (S,G)=(%s,%s)",
-		__FILE__, __PRETTY_FUNCTION__,
-		source_str, group_str);
-      continue;
+  input_iface_vif_index = fib_lookup_if_vif_index (vif_source);
+  if (input_iface_vif_index < 1)
+    {
+      if (PIM_DEBUG_ZEBRA)
+        {
+          char source_str[100];
+          char group_str[100];
+          pim_inet4_dump("<source?>", c_oil->oil.mfcc_origin, source_str, sizeof(source_str));
+          pim_inet4_dump("<group?>", c_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
+          zlog_debug("%s %s: could not find input interface(%d) for (S,G)=(%s,%s)",
+		     __FILE__, __PRETTY_FUNCTION__, c_oil->oil.mfcc_parent,
+		     source_str, group_str);
+        }
+      pim_mroute_del (c_oil);
+      return;
     }
 
-    if (input_iface_vif_index == c_oil->oil.mfcc_parent) {
+  if (input_iface_vif_index == c_oil->oil.mfcc_parent)
+    {
       /* RPF unchanged */
-      continue;
+      return;
     }
 
-    if (PIM_DEBUG_ZEBRA) {
+  if (PIM_DEBUG_ZEBRA)
+    {
       struct interface *old_iif = pim_if_find_by_vif_index(c_oil->oil.mfcc_parent);
       struct interface *new_iif = pim_if_find_by_vif_index(input_iface_vif_index);
       char source_str[100];
@@ -425,8 +432,9 @@ void pim_scan_oil()
 		 new_iif ? new_iif->name : "<new_iif?>", input_iface_vif_index);
     }
 
-    /* new iif loops to existing oif ? */
-    if (c_oil->oil.mfcc_ttls[input_iface_vif_index]) {
+  /* new iif loops to existing oif ? */
+  if (c_oil->oil.mfcc_ttls[input_iface_vif_index])
+    {
       struct interface *new_iif = pim_if_find_by_vif_index(input_iface_vif_index);
 
       if (PIM_DEBUG_ZEBRA) {
@@ -447,8 +455,10 @@ void pim_scan_oil()
     old_vif_index = c_oil->oil.mfcc_parent;
     c_oil->oil.mfcc_parent = input_iface_vif_index;
 
+    zlog_debug ("FF");
     /* update kernel multicast forwarding cache (MFC) */
-    if (pim_mroute_add(&c_oil->oil)) {
+    if (pim_mroute_add(c_oil))
+      {
       /* just log warning */
       struct interface *old_iif = pim_if_find_by_vif_index(old_vif_index);
       struct interface *new_iif = pim_if_find_by_vif_index(input_iface_vif_index);
@@ -457,14 +467,24 @@ void pim_scan_oil()
       pim_inet4_dump("<source?>", c_oil->oil.mfcc_origin, source_str, sizeof(source_str));
       pim_inet4_dump("<group?>", c_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
       zlog_warn("%s %s: (S,G)=(%s,%s) failure updating input interface from %s vif_index=%d to %s vif_index=%d",
-		 __FILE__, __PRETTY_FUNCTION__,
-		 source_str, group_str,
-		 old_iif ? old_iif->name : "<old_iif?>", c_oil->oil.mfcc_parent,
-		 new_iif ? new_iif->name : "<new_iif?>", input_iface_vif_index);
-      continue;
+		__FILE__, __PRETTY_FUNCTION__,
+		source_str, group_str,
+		old_iif ? old_iif->name : "<old_iif?>", c_oil->oil.mfcc_parent,
+		new_iif ? new_iif->name : "<new_iif?>", input_iface_vif_index);
     }
+}
 
-  } /* for (qpim_channel_oil_list) */
+void pim_scan_oil()
+{
+  struct listnode    *node;
+  struct listnode    *nextnode;
+  struct channel_oil *c_oil;
+
+  qpim_scan_oil_last = pim_time_monotonic_sec();
+  ++qpim_scan_oil_events;
+
+  for (ALL_LIST_ELEMENTS(qpim_channel_oil_list, node, nextnode, c_oil))
+    pim_scan_individual_oil (c_oil);
 }
 
 static int on_rpf_cache_refresh(struct thread *t)
@@ -730,13 +750,12 @@ void igmp_anysource_forward_start(struct igmp_group *group)
 
 void igmp_anysource_forward_stop(struct igmp_group *group)
 {
-  /* Any source (*,G) is forwarded only if mode is EXCLUDE {empty} */
-  zassert((!group->group_filtermode_isexcl) || (listcount(group->group_source_list) > 0));
+  struct igmp_source *source;
+  struct in_addr star = { .s_addr = 0 };
 
-  if (PIM_DEBUG_IGMP_TRACE) {
-    zlog_debug("%s %s: UNIMPLEMENTED",
-	       __FILE__, __PRETTY_FUNCTION__);
-  }
+  source = igmp_find_source_by_addr (group, star);
+  if (source)
+    igmp_source_forward_stop (source);
 }
 
 static int fib_lookup_if_vif_index(struct in_addr addr)
@@ -779,7 +798,7 @@ static int fib_lookup_if_vif_index(struct in_addr addr)
 
   vif_index = pim_if_find_vifindex_by_ifindex(first_ifindex);
 
-  if (vif_index < 1) {
+  if (vif_index < 0) {
     char addr_str[100];
     pim_inet4_dump("<addr?>", addr, addr_str, sizeof(addr_str));
     zlog_warn("%s %s: low vif_index=%d < 1 nexthop for address %s",
@@ -890,7 +909,7 @@ static int del_oif(struct channel_oil *channel_oil,
 
   channel_oil->oil.mfcc_ttls[pim_ifp->mroute_vif_index] = 0;
 
-  if (pim_mroute_add(&channel_oil->oil)) {
+  if (pim_mroute_add(channel_oil)) {
     char group_str[100]; 
     char source_str[100];
     pim_inet4_dump("<group?>", channel_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
@@ -907,7 +926,7 @@ static int del_oif(struct channel_oil *channel_oil,
   --channel_oil->oil_size;
 
   if (channel_oil->oil_size < 1) {
-    if (pim_mroute_del(&channel_oil->oil)) {
+    if (pim_mroute_del(channel_oil)) {
       /* just log a warning in case of failure */
       char group_str[100]; 
       char source_str[100];

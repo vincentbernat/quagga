@@ -22,6 +22,7 @@
 
 #include "log.h"
 #include "network.h"
+#include "if.h"
 
 #include "pimd.h"
 #include "pim_str.h"
@@ -86,7 +87,7 @@ pim_rp_g (struct in_addr group)
   /*
    * For staticly configured RP, it is always the qpim_rp
    */
-  pim_nexthop_lookup(&qpim_rp.source_nexthop, qpim_rp.rpf_addr);
+  pim_nexthop_lookup(&qpim_rp.source_nexthop, qpim_rp.rpf_addr, NULL);
   return(&qpim_rp);
 }
 

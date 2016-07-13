@@ -59,7 +59,7 @@ static void upstream_channel_oil_detach(struct pim_upstream *up)
 {
   if (up->channel_oil) {
     pim_channel_oil_del(up->channel_oil);
-    up->channel_oil = 0;
+    up->channel_oil = NULL;
   }
 }
 
@@ -350,7 +350,8 @@ static void pim_upstream_switch(struct pim_upstream *up,
 
 
 static struct pim_upstream *pim_upstream_new(struct in_addr source_addr,
-					     struct in_addr group_addr)
+					     struct in_addr group_addr,
+					     struct interface *incoming)
 {
   struct pim_upstream *up;
   enum pim_rpf_result rpf_result;
@@ -388,7 +389,7 @@ static struct pim_upstream *pim_upstream_new(struct in_addr source_addr,
   up->rpf.source_nexthop.mrib_route_metric        = qpim_infinite_assert_metric.route_metric;
   up->rpf.rpf_addr.s_addr                         = PIM_NET_INADDR_ANY;
 
-  rpf_result = pim_rpf_update(up, 0);
+  rpf_result = pim_rpf_update(up, 0, incoming);
   if (rpf_result == PIM_RPF_FAILURE) {
     XFREE(MTYPE_PIM_UPSTREAM, up);
     return NULL;
@@ -418,7 +419,8 @@ struct pim_upstream *pim_upstream_find(struct in_addr source_addr,
 }
 
 struct pim_upstream *pim_upstream_add(struct in_addr source_addr,
-				      struct in_addr group_addr)
+				      struct in_addr group_addr,
+				      struct interface *incoming)
 {
   struct pim_upstream *up;
 
@@ -427,7 +429,7 @@ struct pim_upstream *pim_upstream_add(struct in_addr source_addr,
     ++up->ref_count;
   }
   else {
-    up = pim_upstream_new(source_addr, group_addr);
+    up = pim_upstream_new(source_addr, group_addr, incoming);
   }
 
   return up;
@@ -713,12 +715,29 @@ pim_upstream_keep_alive_timer (struct thread *t)
 
   up = THREAD_ARG(t);
 
-  pim_br_clear_pmbr (up->source_addr, up->group_addr);
-  /*
-   * We need to do more here :)
-   * But this is the start.
-   */
+  if (I_am_RP (up->group_addr))
+    {
+      pim_br_clear_pmbr (up->source_addr, up->group_addr);
+      /*
+       * We need to do more here :)
+       * But this is the start.
+       */
+    }
+  else
+    {
+      pim_mroute_update_counters (up->channel_oil);
 
+      if (up->channel_oil->cc.oldpktcnt >= up->channel_oil->cc.pktcnt)
+	{
+	  pim_mroute_del (up->channel_oil);
+	  pim_upstream_delete (up);
+	}
+      else
+	{
+	  up->t_ka_timer = NULL;
+	  pim_upstream_keep_alive_timer_start (up, PIM_KEEPALIVE_PERIOD);
+	}
+    }
   return 1;
 }
 

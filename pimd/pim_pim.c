@@ -25,6 +25,7 @@
 #include "log.h"
 #include "thread.h"
 #include "memory.h"
+#include "if.h"
 
 #include "pimd.h"
 #include "pim_pim.h"
@@ -348,8 +349,9 @@ static int pim_sock_read(struct thread *t)
 
   int fail = pim_pim_packet(ifp, buf, len);
   if (fail) {
-    zlog_warn("%s: pim_pim_packet() return=%d",
-              __PRETTY_FUNCTION__, fail);
+    if (PIM_DEBUG_PIM_PACKETS)
+      zlog_debug("%s: pim_pim_packet() return=%d",
+		 __PRETTY_FUNCTION__, fail);
     goto done;
   }
 
@@ -374,7 +376,7 @@ static void pim_sock_read_on(struct interface *ifp)
 
   pim_ifp = ifp->info;
 
-  if (PIM_DEBUG_PIM_TRACE) {
+  if (PIM_DEBUG_PIM_TRACE_DETAIL) {
     zlog_debug("Scheduling READ event on PIM socket fd=%d",
 	       pim_ifp->pim_sock_fd);
   }
@@ -388,7 +390,7 @@ static int pim_sock_open(struct in_addr ifaddr, int ifindex)
 {
   int fd;
 
-  fd = pim_socket_mcast(IPPROTO_PIM, ifaddr, 0 /* loop=false */);
+  fd = pim_socket_mcast(IPPROTO_PIM, ifaddr, ifindex, 0 /* loop=false */);
   if (fd < 0)
     return -1;
 
@@ -582,6 +584,9 @@ static int pim_hello_send(struct interface *ifp,
   zassert(ifp);
   pim_ifp = ifp->info;
   zassert(pim_ifp);
+
+  if (if_is_loopback (ifp))
+    return 0;
 
   if (hello_send(ifp, holdtime)) {
     ++pim_ifp->pim_ifstat_hello_sendfail;

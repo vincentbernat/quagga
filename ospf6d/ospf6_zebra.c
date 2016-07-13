@@ -28,6 +28,7 @@
 #include "stream.h"
 #include "zclient.h"
 #include "memory.h"
+#include "lib/bfd.h"
 
 #include "ospf6_proto.h"
 #include "ospf6_top.h"
@@ -201,6 +202,8 @@ ospf6_zebra_if_address_update_delete (int command, struct zclient *zclient,
       ospf6_interface_connected_route_update (c->ifp);
       ospf6_interface_state_update (c->ifp);
     }
+
+  connected_free (c);
 
   return 0;
 }
@@ -654,6 +657,9 @@ DEFUN (no_redistribute_ospf6,
 static void
 ospf6_zebra_connected (struct zclient *zclient)
 {
+  /* Send the client registration */
+  bfd_client_sendmsg(zclient, ZEBRA_BFD_CLIENT_REGISTER);
+
   zclient_send_reg_requests (zclient, VRF_DEFAULT);
 }
 

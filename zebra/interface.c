@@ -120,6 +120,13 @@ if_zebra_delete_hook (struct interface *ifp)
       /* Free installed address chains tree. */
       if (zebra_if->ipv4_subnets)
 	route_table_finish (zebra_if->ipv4_subnets);
+ #if defined (HAVE_RTADV)
+
+      struct rtadvconf *rtadv;
+
+      rtadv = &zebra_if->rtadv;
+      list_free (rtadv->AdvPrefixList);
+ #endif /* HAVE_RTADV */
 
       XFREE (MTYPE_TMP, zebra_if);
     }
@@ -933,6 +940,8 @@ nd_dump_vty (struct vty *vty, struct interface *ifp)
 	       rtadv->AdvReachableTime, VTY_NEWLINE);
       vty_out (vty, "  ND advertised retransmit interval is %d milliseconds%s",
 	       rtadv->AdvRetransTimer, VTY_NEWLINE);
+      vty_out (vty, "  ND router advertisements sent: %d rcvd: %d%s",
+	       zif->ra_sent, zif->ra_rcvd, VTY_NEWLINE);
       interval = rtadv->MaxRtrAdvInterval;
       if (interval % 1000)
         vty_out (vty, "  ND router advertisements are sent every "

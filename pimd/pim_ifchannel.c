@@ -25,6 +25,7 @@
 #include "linklist.h"
 #include "thread.h"
 #include "memory.h"
+#include "if.h"
 
 #include "pimd.h"
 #include "pim_str.h"
@@ -192,7 +193,7 @@ static struct pim_ifchannel *pim_ifchannel_new(struct interface *ifp,
   pim_ifp = ifp->info;
   zassert(pim_ifp);
 
-  up = pim_upstream_add(source_addr, group_addr);
+  up = pim_upstream_add(source_addr, group_addr, NULL);
   if (!up) {
     char src_str[100];
     char grp_str[100];

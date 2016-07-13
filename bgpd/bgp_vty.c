@@ -32,6 +32,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "memory.h"
 #include "hash.h"
 #include "queue.h"
+#include "if.h"
+#include "vrf.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_advertise.h"
@@ -313,6 +315,9 @@ bgp_vty_return (struct vty *vty, int ret)
       break;
     case BGP_ERR_INVALID_FOR_DYNAMIC_PEER:
       str = "Operation not allowed on a dynamic neighbor";
+      break;
+    case BGP_ERR_INVALID_FOR_DIRECT_PEER:
+      str = "Operation not allowed on a directly connected neighbor";
       break;
     }
   if (str)
@@ -821,6 +826,10 @@ DEFUN (no_bgp_router_id,
   int ret;
   struct in_addr id;
   struct bgp *bgp;
+  struct interface *ifp;
+  struct listnode *node;
+  struct connected *ifc;
+  struct prefix *p;
 
   bgp = vty->index;
 
@@ -828,16 +837,28 @@ DEFUN (no_bgp_router_id,
     {
       ret = inet_aton (argv[0], &id);
       if (! ret)
-	{
-	  vty_out (vty, "%% Malformed BGP router identifier%s", VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
+      {
+        ifp = if_lookup_by_name_vrf(argv[0], bgp->vrf_id);
+        if (!ifp) {
+          vty_out (vty, "%% Malformed BGP router identifier%s", VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+        for (ALL_LIST_ELEMENTS_RO(ifp->connected, node, ifc))
+        {
+          p = ifc->address;
+          if (p && (p->family == AF_INET))
+          {
+            id = p->u.prefix4;
+            break;
+          }
+        }
+      }
 
       if (! IPV4_ADDR_SAME (&bgp->router_id_static, &id))
-	{
-	  vty_out (vty, "%% BGP router-id doesn't match%s", VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
+      {
+        vty_out (vty, "%% BGP router-id doesn't match%s", VTY_NEWLINE);
+        return CMD_WARNING;
+      }
     }
 
   bgp->router_id_static.s_addr = 0;
@@ -853,6 +874,56 @@ ALIAS (no_bgp_router_id,
        BGP_STR
        "Override configured router identifier\n"
        "Manually configured router identifier\n")
+
+DEFUN (bgp_router_id_interface,
+       bgp_router_id_interface_cmd,
+       "bgp router-id IFNAME",
+       BGP_STR
+       "Override configured router identifier\n"
+       "Interface name\n")
+{
+  struct bgp *bgp;
+  struct interface *ifp;
+  struct connected *ifc;
+  struct listnode *node;
+  struct prefix *p;
+  struct vrf *vrf;
+
+  bgp = vty->index;
+  p = NULL;
+
+  ifp = if_lookup_by_name_vrf(argv[0], bgp->vrf_id);
+  if (!ifp)
+  {
+      vrf = vrf_lookup(bgp->vrf_id);
+      vty_out (vty, "%% Couldnt find interface %s in VRF %s%s", argv[0], vrf? vrf->name:"", VTY_NEWLINE);
+      return CMD_WARNING;
+  }
+
+  for (ALL_LIST_ELEMENTS_RO(ifp->connected, node, ifc))
+  {
+    p = ifc->address;
+
+    if (p && (p->family == AF_INET))
+    {
+      if (IPV4_ADDR_SAME (&bgp->router_id_static, &p->u.prefix4))
+        return CMD_SUCCESS;
+      bgp->router_id_static = p->u.prefix4;
+      bgp_router_id_set (bgp, &p->u.prefix4);
+      return CMD_SUCCESS;
+    }
+  }
+  vty_out (vty, "%% Couldnt assign the router-id%s", VTY_NEWLINE);
+  return CMD_WARNING;
+}
+
+ALIAS (no_bgp_router_id,
+       no_bgp_router_id_interface_cmd,
+       "no bgp router-id IFNAME",
+       NO_STR
+       BGP_STR
+       "Override configured router identifier\n"
+       "Interface name\n")
 
 /* BGP Cluster ID.  */
 
@@ -3416,6 +3487,16 @@ peer_flag_modify_vty (struct vty *vty, const char *ip_str,
   if (! peer)
     return CMD_WARNING;
 
+  /*
+   * If 'neighbor <interface>', then this is for directly connected peers,
+   * we should not accept disable-connected-check.
+   */
+  if (peer->conf_if && (flag == PEER_FLAG_DISABLE_CONNECTED_CHECK)) {
+    vty_out (vty, "%s is directly connected peer, cannot accept disable-"
+                  "connected-check%s", ip_str, VTY_NEWLINE);
+    return CMD_WARNING;
+  }
+
   if (set)
     ret = peer_flag_set (peer, flag);
   else
@@ -4367,6 +4448,9 @@ peer_ebgp_multihop_set_vty (struct vty *vty, const char *ip_str,
   peer = peer_and_group_lookup_vty (vty, ip_str);
   if (! peer)
     return CMD_WARNING;
+
+  if (peer->conf_if)
+    return bgp_vty_return (vty, BGP_ERR_INVALID_FOR_DIRECT_PEER);
 
   if (! ttl_str)
     ttl = MAXTTL;
@@ -5765,6 +5849,16 @@ DEFUN (neighbor_ttl_security,
     return CMD_WARNING;
     
   VTY_GET_INTEGER_RANGE ("", gtsm_hops, argv[1], 1, 254);
+
+  /*
+   * If 'neighbor swpX', then this is for directly connected peers,
+   * we should not accept a ttl-security hops value greater than 1.
+   */
+  if (peer->conf_if && (gtsm_hops > 1)) {
+    vty_out (vty, "%s is directly connected peer, hops cannot exceed 1%s",
+                  argv[0], VTY_NEWLINE);
+    return CMD_WARNING;
+  }
 
   return bgp_vty_return (vty, peer_ttl_security_hops_set (peer, gtsm_hops));
 }
@@ -14403,6 +14497,8 @@ bgp_vty_init (void)
   install_element (BGP_NODE, &bgp_router_id_cmd);
   install_element (BGP_NODE, &no_bgp_router_id_cmd);
   install_element (BGP_NODE, &no_bgp_router_id_val_cmd);
+  install_element (BGP_NODE, &bgp_router_id_interface_cmd);
+  install_element (BGP_NODE, &no_bgp_router_id_interface_cmd);
 
   /* "bgp cluster-id" commands. */
   install_element (BGP_NODE, &bgp_cluster_id_cmd);
