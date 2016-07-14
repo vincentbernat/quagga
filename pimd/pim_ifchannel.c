@@ -147,13 +147,9 @@ void pim_ifchannel_ifjoin_switch(const char *caller,
 const char *pim_ifchannel_ifjoin_name(enum pim_ifjoin_state ifjoin_state)
 {
   switch (ifjoin_state) {
-  case PIM_IFJOIN_NOINFO:          return "NOINFO";
-  case PIM_IFJOIN_JOIN:            return "JOIN";
-  case PIM_IFJOIN_JOIN_PENDING:    return "JOINP";
-  case PIM_IFJOIN_PRUNE:           return "PRUNE";
-  case PIM_IFJOIN_PRUNE_PENDING:   return "PRUNEP";
-  case PIM_IFJOIN_PRUNETMP:        return "PRUNET";
-  case PIM_IFJOIN_PRUNEPENDINGTMP: return "PRUNEPT";
+  case PIM_IFJOIN_NOINFO:        return "NOINFO";
+  case PIM_IFJOIN_JOIN:          return "JOIN";
+  case PIM_IFJOIN_PRUNE_PENDING: return "PRUNEP";
   }
 
   return "ifjoin_bad_state";
@@ -672,18 +668,6 @@ void pim_ifchannel_join_add(struct interface *ifp,
     THREAD_OFF(ch->t_ifjoin_prune_pending_timer);
     pim_ifchannel_ifjoin_switch(__PRETTY_FUNCTION__, ch, PIM_IFJOIN_JOIN);
     break;
-  default:
-    if (PIM_DEBUG_PIM_EVENTS)
-      {
-	char src_str[100];
-	char grp_str[100];
-	pim_inet4_dump("<src?>", ch->source_addr, src_str, sizeof(src_str));
-	pim_inet4_dump("<grp?>", ch->group_addr, grp_str, sizeof(grp_str));
-	zlog_debug ("%s: (S,G)=(%s,%s) invalid state: %s", __PRETTY_FUNCTION__,
-		    src_str, grp_str,
-		    pim_ifchannel_ifjoin_name (ch->ifjoin_state));
-      }
-    break;
   }
 
   zassert(!IFCHANNEL_NOINFO(ch));
@@ -749,18 +733,6 @@ void pim_ifchannel_prune(struct interface *ifp,
       zassert(!ch->t_ifjoin_expiry_timer);
       zassert(ch->t_ifjoin_prune_pending_timer);
     }
-    break;
-  default:
-    if (PIM_DEBUG_PIM_EVENTS)
-      {
-	char src_str[100];
-	char grp_str[100];
-	pim_inet4_dump("<src?>", ch->source_addr, src_str, sizeof(src_str));
-	pim_inet4_dump("<grp?>", ch->group_addr, grp_str, sizeof(grp_str));
-	zlog_debug ("%s: (S,G)=(%s,%s) invalid state: %s", __PRETTY_FUNCTION__,
-		    src_str, grp_str,
-		    pim_ifchannel_ifjoin_name (ch->ifjoin_state));
-      }
     break;
   }
 
