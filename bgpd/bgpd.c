@@ -2575,6 +2575,7 @@ peer_group_bind (struct bgp *bgp, union sockunion *su, struct peer *peer,
   int first_member = 0;
   afi_t afi;
   safi_t safi;
+  int cap_enhe_preset = 0;
 
   /* Lookup the peer.  */
   if (!peer)
@@ -2609,7 +2610,17 @@ peer_group_bind (struct bgp *bgp, union sockunion *su, struct peer *peer,
             first_member = 1;
         }
 
+      if (CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ENHE))
+        cap_enhe_preset = 1;
+
       peer_group2peer_config_copy(group, peer);
+
+      /*
+       * Capability extended-nexthop is enabled for an interface neighbor by
+       * default. So, fix that up here.
+       */
+      if (peer->ifp && cap_enhe_preset)
+        peer_flag_set (peer, PEER_FLAG_CAPABILITY_ENHE);
 
       for (afi = AFI_IP; afi < AFI_MAX; afi++)
         for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
@@ -6298,6 +6309,8 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
   struct peer *g_peer = NULL;
   char buf[SU_ADDRSTRLEN];
   char *addr;
+  int if_pg_printed = FALSE;
+  int if_ras_printed = FALSE;
 
   /* Skip dynamic neighbors. */
   if (peer_dynamic_neighbor (peer))
@@ -6319,7 +6332,25 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
         vty_out (vty, " neighbor %s interface", addr);
 
       if (peer_group_active (peer))
-         vty_out (vty, " peer-group %s", peer->group->name);
+        {
+          vty_out (vty, " peer-group %s", peer->group->name);
+          if_pg_printed = TRUE;
+        }
+      else if (peer->as_type == AS_SPECIFIED)
+        {
+          vty_out (vty, " remote-as %u", peer->as);
+          if_ras_printed = TRUE;
+        }
+      else if (peer->as_type == AS_INTERNAL)
+        {
+          vty_out (vty, " remote-as internal");
+          if_ras_printed = TRUE;
+        }
+      else if (peer->as_type == AS_EXTERNAL)
+        {
+          vty_out (vty, " remote-as external");
+          if_ras_printed = TRUE;
+        }
 
       vty_out (vty, "%s", VTY_NEWLINE);
     }
@@ -6330,7 +6361,7 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
     {
       g_peer = peer->group->conf;
 
-      if (g_peer->as_type == AS_UNSPECIFIED)
+      if (g_peer->as_type == AS_UNSPECIFIED && !if_ras_printed)
         {
           if (peer->as_type == AS_SPECIFIED)
             {
@@ -6349,7 +6380,7 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
 
       /* For swpX peers we displayed the peer-group
        * via 'neighbor swpX interface peer-group WORD' */
-      if (!peer->conf_if)
+      if (!if_pg_printed)
           vty_out (vty, " neighbor %s peer-group %s%s", addr,
                    peer->group->name, VTY_NEWLINE);
     }
@@ -6364,18 +6395,21 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
                    VTY_NEWLINE);
         }
 
-      if (peer->as_type == AS_SPECIFIED)
+      if (!if_ras_printed)
         {
-          vty_out (vty, " neighbor %s remote-as %u%s", addr, peer->as,
-                   VTY_NEWLINE);
-        }
-      else if (peer->as_type == AS_INTERNAL)
-        {
-          vty_out (vty, " neighbor %s remote-as internal%s", addr, VTY_NEWLINE);
-        }
-      else if (peer->as_type == AS_EXTERNAL)
-        {
-          vty_out (vty, " neighbor %s remote-as external%s", addr, VTY_NEWLINE);
+          if (peer->as_type == AS_SPECIFIED)
+            {
+              vty_out (vty, " neighbor %s remote-as %u%s", addr, peer->as,
+                       VTY_NEWLINE);
+            }
+          else if (peer->as_type == AS_INTERNAL)
+            {
+              vty_out (vty, " neighbor %s remote-as internal%s", addr, VTY_NEWLINE);
+            }
+          else if (peer->as_type == AS_EXTERNAL)
+            {
+              vty_out (vty, " neighbor %s remote-as external%s", addr, VTY_NEWLINE);
+            }
         }
     }
 
@@ -6570,7 +6604,17 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
     }
 
   /* capability extended-nexthop */
-  if (CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ENHE))
+  if (peer->ifp && !CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ENHE))
+    {
+      if (! peer_group_active (peer) ||
+          ! CHECK_FLAG (g_peer->flags, PEER_FLAG_CAPABILITY_ENHE))
+        {
+          vty_out (vty, " no neighbor %s capability extended-nexthop%s", addr,
+                   VTY_NEWLINE);
+        }
+    }
+
+  if (!peer->ifp && CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ENHE))
     {
       if (! peer_group_active (peer) ||
           ! CHECK_FLAG (g_peer->flags, PEER_FLAG_CAPABILITY_ENHE))
