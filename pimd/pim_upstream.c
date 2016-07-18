@@ -46,7 +46,7 @@
 #include "pim_macro.h"
 #include "pim_rp.h"
 #include "pim_br.h"
-#include "pim_register.c"
+#include "pim_register.h"
 
 static void join_timer_start(struct pim_upstream *up);
 static void pim_upstream_update_assert_tracking_desired(struct pim_upstream *up);
