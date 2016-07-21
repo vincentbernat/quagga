@@ -74,6 +74,17 @@ struct zebra_vrf
    * Back pointer to the owning namespace.
    */
   struct zebra_ns *zns;
+
+#if defined(HAVE_EVPN)
+  /*
+   * VNI hash table (for EVPN). Only in default instance.
+   */
+  struct hash *vni_table;
+  /*
+   * Whether EVPN is enabled or not.
+   */
+  int advertise_vni;
+#endif
 };
 
 extern struct list *zvrf_list;

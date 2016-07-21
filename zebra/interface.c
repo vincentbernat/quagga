@@ -47,6 +47,10 @@
 #include "zebra/rt_netlink.h"
 #include "zebra/interface.h"
 
+#if defined(HAVE_EVPN)
+#include "zebra/zebra_vxlan.h"
+#endif
+
 #define ZEBRA_PTM_SUPPORT
 
 #if defined (HAVE_RTADV)
@@ -1101,6 +1105,14 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 	  (connected->address->family == AF_INET6))
 	connected_dump_vty (vty, connected);
     }
+
+#if defined(HAVE_EVPN)
+  if (is_interface_vxlan (ifp))
+    {
+      vty_out(vty, "  VxLAN Id %u", vni_from_intf (ifp));
+      vty_out(vty, "%s", VTY_NEWLINE);
+    }
+#endif
 
 #if defined (HAVE_RTADV)
   nd_dump_vty (vty, ifp);

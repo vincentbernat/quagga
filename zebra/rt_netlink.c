@@ -49,6 +49,10 @@
 #include "zebra/rtadv.h"
 #include "zebra/zebra_ptm.h"
 
+#if defined(HAVE_EVPN)
+#include "zebra/zebra_vxlan.h"
+#endif
+
 #include "rt_netlink.h"
 
 static const struct message nlmsg_str[] = {
@@ -526,6 +530,30 @@ netlink_interface_update_hw_addr (struct rtattr **tb, struct interface *ifp)
 #define parse_rtattr_nested(tb, max, rta) \
           netlink_parse_rtattr((tb), (max), RTA_DATA(rta), RTA_PAYLOAD(rta))
 
+#if defined(HAVE_EVPN)
+static int
+zebra_extract_vni_from_netlink_msg (struct rtattr *link_data, vni_t *vni)
+{
+  struct rtattr *attr[IFLA_VXLAN_MAX+1];
+  vni_t vni_in_msg;
+
+  *vni = 0;
+  parse_rtattr_nested(attr, IFLA_VXLAN_MAX, link_data);
+  if (!attr[IFLA_VXLAN_ID])
+    {
+      if (IS_ZEBRA_DEBUG_KERNEL)
+        zlog_debug ("IFLA_VXLAN_ID missing from VXLAN IF message");
+    return -1;
+    }
+
+  vni_in_msg = *(vni_t *)RTA_DATA(attr[IFLA_VXLAN_ID]);
+  *vni = vni_in_msg;
+
+  return 0;
+
+}
+#endif
+
 static void
 netlink_vrf_change (struct nlmsghdr *h, struct rtattr *tb, const char *name)
 {
@@ -626,6 +654,10 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   char *kind = NULL;
   char *slave_kind = NULL;
   int vrf_device = 0;
+#if defined(HAVE_EVPN)
+  int vxlan_if = 0;
+  vni_t vni;
+#endif
 
   ifi = NLMSG_DATA (h);
 
@@ -676,6 +708,18 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
           netlink_vrf_change(h, tb[IFLA_LINKINFO], name);
           vrf_id = (vrf_id_t)ifi->ifi_index;
         }
+#if defined(HAVE_EVPN)
+      else if (kind && strcmp(kind, "vxlan") == 0)
+        {
+          if (linkinfo[IFLA_INFO_DATA]) // This should be true
+            {
+              if (zebra_extract_vni_from_netlink_msg (linkinfo[IFLA_INFO_DATA], &vni))
+                zlog_err ("Could not get VNI from msg 0x%x IF %u", h->nlmsg_type, ifi->ifi_index);
+              else
+                vxlan_if = 1;
+            }
+        }
+#endif
     }
 
   if (tb[IFLA_MASTER])
@@ -702,6 +746,14 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   netlink_interface_update_hw_addr (tb, ifp);
 
   if_add_update (ifp);
+
+#if defined(HAVE_EVPN)
+  if (vxlan_if)
+    {
+      /* Update VNI, create or update hash table, notify BGP, if needed. */
+      zebra_vxlan_if_add (ifp, vni);
+    }
+#endif
 
   return 0;
 }
@@ -1271,6 +1323,10 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   char *kind = NULL;
   char *slave_kind = NULL;
   int vrf_device = 0;
+#if defined(HAVE_EVPN)
+  int vxlan_if = 0;
+  vni_t vni;
+#endif
 
   vrf_id_t vrf_id = ns_id;
 
@@ -1329,6 +1385,18 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           netlink_vrf_change(h, tb[IFLA_LINKINFO], name);
           vrf_id = (vrf_id_t)ifi->ifi_index;
         }
+#if defined(HAVE_EVPN)
+      else if (kind && strcmp(kind, "vxlan") == 0)
+        {
+          if (linkinfo[IFLA_INFO_DATA]) // This should be true
+            {
+              if (zebra_extract_vni_from_netlink_msg (linkinfo[IFLA_INFO_DATA], &vni))
+                zlog_err ("Could not get VNI from msg 0x%x IF %u", h->nlmsg_type, ifi->ifi_index);
+              else
+                vxlan_if = 1;
+            }
+        }
+#endif
     }
 
   /* See if interface is present. */
@@ -1377,6 +1445,15 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
           /* Inform clients, install any configured addresses. */
           if_add_update (ifp);
+
+#if defined(HAVE_EVPN)
+          if (vxlan_if)
+            {
+              /* Update VNI, create or update hash table, notify BGP, if needed. */
+              zebra_vxlan_if_add (ifp, vni);
+            }
+#endif
+
         }
       else if (ifp->vrf_id != vrf_id)
         {
@@ -1431,6 +1508,15 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
       if (IS_ZEBRA_DEBUG_KERNEL)
         zlog_debug ("RTM_DELLINK for %s(%u)", name, ifp->ifindex);
+
+#if defined(HAVE_EVPN)
+      vxlan_if = is_interface_vxlan (ifp);
+      if (vxlan_if)
+        {
+          /* Clear VNI, delete from hash table, notify BGP, if needed. */
+          zebra_vxlan_if_del (ifp);
+        }
+#endif
 
       UNSET_FLAG(ifp->status, ZEBRA_INTERFACE_VRF_LOOPBACK);
 

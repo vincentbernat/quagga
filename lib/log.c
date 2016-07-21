@@ -929,6 +929,10 @@ static const struct zebra_desc_table command_types[] = {
   DESC_ENTRY    (ZEBRA_INTERFACE_ENABLE_RADV),
   DESC_ENTRY    (ZEBRA_INTERFACE_DISABLE_RADV),
   DESC_ENTRY    (ZEBRA_IPV4_NEXTHOP_LOOKUP_MRIB),
+#if defined(HAVE_EVPN)
+  DESC_ENTRY    (ZEBRA_VNI_ADD),
+  DESC_ENTRY    (ZEBRA_VNI_DEL),
+#endif
 };
 #undef DESC_ENTRY
 

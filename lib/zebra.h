@@ -445,7 +445,13 @@ struct in_pktinfo
 #define ZEBRA_INTERFACE_ENABLE_RADV       47
 #define ZEBRA_INTERFACE_DISABLE_RADV      48
 #define ZEBRA_IPV4_NEXTHOP_LOOKUP_MRIB    49
+#if defined(HAVE_EVPN)
+#define ZEBRA_VNI_ADD                     50
+#define ZEBRA_VNI_DEL                     51
+#define ZEBRA_MESSAGE_MAX                 52
+#else
 #define ZEBRA_MESSAGE_MAX                 50
+#endif
 
 /* Marker value used in new Zserv, in the byte location corresponding
  * the command value in the old zserv header. To allow old and new

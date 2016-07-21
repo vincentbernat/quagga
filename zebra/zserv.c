@@ -2410,6 +2410,12 @@ zebra_show_client_detail (struct vty *vty, struct zserv *client)
 	   VTY_NEWLINE);
   vty_out (vty, "Interface Down Notifications: %d%s", client->ifdown_cnt,
 	   VTY_NEWLINE);
+#if defined(HAVE_EVPN)
+  vty_out (vty, "VNI add notifications: %d%s", client->vniadd_cnt,
+           VTY_NEWLINE);
+  vty_out (vty, "VNI delete notifications: %d%s", client->vnidel_cnt,
+           VTY_NEWLINE);
+#endif
 
   vty_out (vty, "%s", VTY_NEWLINE);
   return;

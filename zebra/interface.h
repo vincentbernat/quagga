@@ -222,8 +222,12 @@ struct zebra_if
 
   /* ptm enable configuration */
   u_char ptm_enable;
-};
 
+#if defined(HAVE_EVPN)
+  /* Additional fields for EVPN for VxLAN. */
+  vni_t vni;
+#endif
+};
 
 extern struct interface *if_lookup_by_index_per_ns (struct zebra_ns *, u_int32_t);
 extern struct interface *if_link_per_ns (struct zebra_ns *, struct interface *);

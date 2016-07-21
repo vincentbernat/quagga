@@ -93,6 +93,9 @@ struct memory_list memory_list_zebra[] =
   { MTYPE_RIB_TABLE_INFO,	"RIB table info"		},
   { MTYPE_RNH,		        "Nexthop tracking object"	},
   { MTYPE_NETLINK_NAME,	        "Netlink name"			},
+#if defined(HAVE_EVPN)
+  { MTYPE_ZVNI,        	        "VNI hash"			},
+#endif
   { -1, NULL },
 };
 
