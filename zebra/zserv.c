@@ -51,6 +51,9 @@
 #include "zebra/interface.h"
 #include "zebra/zebra_ptm.h"
 #include "zebra/rtadv.h"
+#if defined(HAVE_EVPN)
+#include "zebra/zebra_vxlan.h"
+#endif
 
 /* Event list of zebra. */
 enum event { ZEBRA_SERV, ZEBRA_READ, ZEBRA_WRITE };
@@ -2113,6 +2116,14 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_INTERFACE_DISABLE_RADV:
       zebra_interface_radv_set (client, sock, length, zvrf, 0);
       break;
+#if defined(HAVE_EVPN)
+    case ZEBRA_REMOTE_VTEP_ADD:
+      zebra_vxlan_remote_vtep_add (client, sock, length, zvrf);
+      break;
+    case ZEBRA_REMOTE_VTEP_DEL:
+      zebra_vxlan_remote_vtep_del (client, sock, length, zvrf);
+      break;
+#endif
     default:
       zlog_info ("Zebra received unknown command %d", command);
       break;

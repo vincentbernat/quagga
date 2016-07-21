@@ -21,6 +21,18 @@ zebra_vxlan_if_del (struct interface *ifp)
   return 0;
 }
 
+int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  return 0;
+}
+
+int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  return 0;
+}
+
 void
 zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
 {

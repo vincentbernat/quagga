@@ -2414,6 +2414,44 @@ kernel_delete_ipv6 (struct prefix *p, struct rib *rib)
 }
 #endif /* HAVE_IPV6 */
 
+#if defined(HAVE_EVPN)
+/*
+ * Add remote VTEP to the flood list for this VxLAN interface (VNI). This
+ * is done by adding an FDB entry with a MAC of 00:00:00:00:00:00.
+ */
+int
+netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int cmd)
+{
+  struct zebra_ns *zns = zebra_ns_lookup (NS_DEFAULT);
+  struct
+    {
+      struct nlmsghdr         n;
+      struct ndmsg            ndm;
+      char                    buf[256];
+    } req;
+  u_char dst_mac[6] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+  int dst_alen;
+
+  memset(&req.n, 0, sizeof(req.n));
+  memset(&req.ndm, 0, sizeof(req.ndm));
+
+  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+  req.n.nlmsg_flags = NLM_F_REQUEST;
+  if (cmd == RTM_NEWNEIGH)
+    req.n.nlmsg_flags |= NLM_F_CREATE;
+  req.n.nlmsg_type = cmd;
+  req.ndm.ndm_family = AF_BRIDGE;
+  req.ndm.ndm_state = NUD_NOARP | NUD_PERMANENT;
+
+  addattr_l (&req.n, sizeof (req), NDA_LLADDR, &dst_mac, 6);
+  req.ndm.ndm_ifindex = ifp->ifindex;
+  dst_alen = (vtep->family == AF_INET ? 4 : 16);
+  addattr_l (&req.n, sizeof (req), NDA_DST, &vtep->u.prefix, dst_alen);
+
+  return netlink_talk (&req.n, &zns->netlink_cmd, NS_DEFAULT);
+}
+#endif /* HAVE_EVPN */
+
 /* Interface address modification. */
 static int
 netlink_address (int cmd, int family, struct interface *ifp,

@@ -46,6 +46,23 @@
 
 /* definitions */
 typedef struct zebra_vni_t_ zebra_vni_t;
+typedef struct zebra_vtep_t_ zebra_vtep_t;
+
+/*
+ * VTEP info
+ *
+ * Right now, this just has each remote VTEP's IP address.
+ */
+struct zebra_vtep_t_
+{
+  /* Remote IP. */
+  struct prefix vtep_ip;
+
+  /* Links. */
+  struct zebra_vtep_t_ *next;
+  struct zebra_vtep_t_ *prev;
+};
+
 
 /*
  * VNI hash table
@@ -60,6 +77,9 @@ struct zebra_vni_t_
 
   /* Corresponding VxLAN interface. */
   struct interface *vxlan_if;
+
+  /* List of remote VTEPs */
+  zebra_vtep_t *vteps;
 };
 
 
@@ -82,6 +102,24 @@ static int
 zvni_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni);
 static int
 zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni);
+static int
+zvni_vtep_match (struct prefix *vtep, zebra_vtep_t *zvtep);
+static zebra_vtep_t *
+zvni_vtep_find (zebra_vni_t *zvni, struct prefix *vtep);
+static zebra_vtep_t *
+zvni_vtep_add (zebra_vni_t *zvni, struct prefix *vtep);
+static int
+zvni_vtep_del (zebra_vni_t *zvni, zebra_vtep_t *zvtep);
+static int
+kernel_add_vni_flood_list (struct interface *ifp, struct prefix *vtep);
+static int
+kernel_del_vni_flood_list (struct interface *ifp, struct prefix *vtep);
+static int
+zvni_vtep_install (zebra_vni_t *zvni, struct prefix *vtep);
+static int
+zvni_vtep_uninstall (zebra_vni_t *zvni, struct prefix *vtep);
+
+
 
 /* Private functions */
 /*
@@ -237,6 +275,147 @@ zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni)
   return zebra_server_send_message(client);
 }
 
+/*
+ * See if remote VTEP matches with prefix.
+ */
+static int
+zvni_vtep_match (struct prefix *vtep, zebra_vtep_t *zvtep)
+{
+  return (prefix_same (vtep, &zvtep->vtep_ip));
+}
+
+/*
+ * Locate remote VTEP in VNI hash table.
+ */
+static zebra_vtep_t *
+zvni_vtep_find (zebra_vni_t *zvni, struct prefix *vtep)
+{
+  zebra_vtep_t *zvtep;
+
+  if (!zvni)
+    return NULL;
+
+  for (zvtep = zvni->vteps; zvtep; zvtep = zvtep->next)
+    {
+      if (!zvni_vtep_match (vtep, zvtep))
+        break;
+    }
+
+  return zvtep;
+}
+
+/*
+ * Add remote VTEP to VNI hash table.
+ */
+static zebra_vtep_t *
+zvni_vtep_add (zebra_vni_t *zvni, struct prefix *vtep)
+{
+  zebra_vtep_t *zvtep;
+
+  zvtep = XCALLOC (MTYPE_ZVNI_VTEP, sizeof(zebra_vtep_t));
+  if (!zvtep)
+    {
+      zlog_err ("Failed to alloc VTEP entry, VNI %u", zvni->vni);
+      return NULL;
+    }
+
+  memcpy (&zvtep->vtep_ip, vtep, sizeof (struct prefix));
+
+  if (zvni->vteps)
+    zvni->vteps->prev = zvtep;
+  zvtep->next = zvni->vteps;
+  zvni->vteps = zvtep;
+
+  return zvtep;
+}
+
+/*
+ * Remove remote VTEP from VNI hash table.
+ */
+static int
+zvni_vtep_del (zebra_vni_t *zvni, zebra_vtep_t *zvtep)
+{
+  if (zvtep->next)
+    zvtep->next->prev = zvtep->prev;
+  if (zvtep->prev)
+    zvtep->prev->next = zvtep->next;
+  else
+    zvni->vteps = zvtep->next;
+
+  zvtep->prev = zvtep->next = NULL;
+  XFREE (MTYPE_ZVNI_VTEP, zvtep);
+
+  return 0;
+}
+
+/*
+ * Add remote VTEP to the flood list for this VxLAN interface (VNI). This
+ * is currently implemented only for the netlink interface.
+ */
+static int
+kernel_add_vni_flood_list (struct interface *ifp, struct prefix *vtep)
+{
+  char pbuf[PREFIX2STR_BUFFER];
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("Install %s into flood list for intf %s(%u)",
+                prefix2str (vtep, pbuf, sizeof(pbuf)), ifp->name, ifp->ifindex);
+
+  return netlink_vxlan_flood_list_update (ifp, vtep, RTM_NEWNEIGH);
+}
+
+/*
+ * Remove remote VTEP from the flood list for this VxLAN interface (VNI). This
+ * is currently implemented only for the netlink interface.
+ */
+static int
+kernel_del_vni_flood_list (struct interface *ifp, struct prefix *vtep)
+{
+  char pbuf[PREFIX2STR_BUFFER];
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("Uninstall %s from flood list for intf %s(%u)",
+                prefix2str (vtep, pbuf, sizeof(pbuf)), ifp->name, ifp->ifindex);
+
+  return netlink_vxlan_flood_list_update (ifp, vtep, RTM_DELNEIGH);
+}
+
+/*
+ * Install remote VTEP into the kernel.
+ */
+static int
+zvni_vtep_install (zebra_vni_t *zvni, struct prefix *vtep)
+{
+  if (!zvni->vxlan_if)
+    {
+      zlog_err ("VNI %u hash %p couldn't be installed - no intf",
+                zvni->vni, zvni);
+      return -1;
+    }
+
+  kernel_add_vni_flood_list (zvni->vxlan_if, vtep);
+
+  return 0;
+}
+
+/*
+ * Uninstall remote VTEP from the kernel.
+ */
+static int
+zvni_vtep_uninstall (zebra_vni_t *zvni, struct prefix *vtep)
+{
+  if (!zvni->vxlan_if)
+    {
+      zlog_err ("VNI %u hash %p couldn't be uninstalled - no intf",
+                zvni->vni, zvni);
+      return -1;
+    }
+
+  kernel_del_vni_flood_list (zvni->vxlan_if, vtep);
+
+  return 0;
+}
+
 
 /* Public functions */
 
@@ -335,6 +514,146 @@ zebra_vxlan_if_del (struct interface *ifp)
 
   /* Clear VNI in interface. */
   zif->vni = 0;
+
+  return 0;
+}
+
+/*
+ * Handle message from client to add a remote VTEP for a VNI.
+ */
+int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  struct stream *s;
+  u_short l = 0;
+  vni_t vni;
+  struct prefix vtep;
+  zebra_vni_t *zvni;
+  char pbuf[PREFIX2STR_BUFFER];
+
+  s = client->ibuf;
+
+  while (l < length)
+    {
+      /* Obtain each remote VTEP and process. */
+      vni = (vni_t) stream_getl (s);
+      stream_getc (s); // flags, currently unused
+      vtep.family = stream_getw (s);
+      vtep.prefixlen = stream_getc (s);
+      l += 8;
+      if (vtep.family == AF_INET)
+	{
+	  vtep.u.prefix4.s_addr = stream_get_ipv4(s);
+	  l += IPV4_MAX_BYTELEN;
+	}
+      else if (vtep.family == AF_INET6)
+	{
+	  stream_get(&vtep.u.prefix6, s, IPV6_MAX_BYTELEN);
+	  l += IPV6_MAX_BYTELEN;
+	}
+      else
+	{
+	  zlog_err("remote-vtep-add: Received unknown family type %d\n",
+		   vtep.family);
+	  return -1;
+	}
+
+      if (IS_ZEBRA_DEBUG_VXLAN)
+        zlog_debug ("%u:Recv VTEP_ADD %s VNI %u",
+                    zvrf->vrf_id, prefix2str (&vtep, pbuf, sizeof(pbuf)), vni);
+
+      /* Locate VNI hash entry - expected to exist. */
+      zvni = zvni_lookup (zvrf, vni);
+      if (!zvni)
+        {
+          zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
+                    zvrf->vrf_id, vni);
+          continue;
+        }
+
+      /* If the remote VTEP already exists, there's nothing more to do.
+       * Otherwise, add and install the entry.
+       */
+      if (zvni_vtep_find (zvni, &vtep))
+        continue;
+
+      if (zvni_vtep_add (zvni, &vtep) == NULL)
+        {
+          zlog_err ("Failed to add remote VTEP, VRF %d VNI %u zvni %p",
+                    zvrf->vrf_id, vni, zvni);
+          continue;
+        }
+
+      zvni_vtep_install (zvni, &vtep);
+    }
+
+  return 0;
+}
+
+/*
+ * Handle message from client to delete a remote VTEP for a VNI.
+ */
+int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  struct stream *s;
+  u_short l = 0;
+  vni_t vni;
+  struct prefix vtep;
+  zebra_vni_t *zvni;
+  zebra_vtep_t *zvtep;
+  char pbuf[PREFIX2STR_BUFFER];
+
+  s = client->ibuf;
+
+  while (l < length)
+    {
+      /* Obtain each remote VTEP and process. */
+      vni = (vni_t) stream_getl (s);
+      stream_getc (s); // flags, currently unused
+      vtep.family = stream_getw (s);
+      vtep.prefixlen = stream_getc (s);
+      l += 8;
+      if (vtep.family == AF_INET)
+	{
+	  vtep.u.prefix4.s_addr = stream_get_ipv4(s);
+	  l += IPV4_MAX_BYTELEN;
+	}
+      else if (vtep.family == AF_INET6)
+	{
+	  stream_get(&vtep.u.prefix6, s, IPV6_MAX_BYTELEN);
+	  l += IPV6_MAX_BYTELEN;
+	}
+      else
+	{
+	  zlog_err("remote-vtep-del: Received unknown family type %d\n",
+		   vtep.family);
+	  return -1;
+	}
+
+      if (IS_ZEBRA_DEBUG_VXLAN)
+        zlog_debug ("%u:Recv VTEP_DEL %s VNI %u",
+                    zvrf->vrf_id, prefix2str (&vtep, pbuf, sizeof(pbuf)), vni);
+
+      /* Locate VNI hash entry - expected to exist. */
+      zvni = zvni_lookup (zvrf, vni);
+      if (!zvni)
+        {
+          zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
+                    zvrf->vrf_id, vni);
+          continue;
+        }
+
+      /* If the remote VTEP does not exist, there's nothing more to do.
+       * Otherwise, uninstall the entry and remove it.
+       */
+      zvtep = zvni_vtep_find (zvni, &vtep);
+      if (!zvtep)
+        continue;
+
+      zvni_vtep_uninstall (zvni, &vtep);
+      zvni_vtep_del (zvni, zvtep);
+    }
 
   return 0;
 }

@@ -448,7 +448,9 @@ struct in_pktinfo
 #if defined(HAVE_EVPN)
 #define ZEBRA_VNI_ADD                     50
 #define ZEBRA_VNI_DEL                     51
-#define ZEBRA_MESSAGE_MAX                 52
+#define ZEBRA_REMOTE_VTEP_ADD             52
+#define ZEBRA_REMOTE_VTEP_DEL             53
+#define ZEBRA_MESSAGE_MAX                 54
 #else
 #define ZEBRA_MESSAGE_MAX                 50
 #endif

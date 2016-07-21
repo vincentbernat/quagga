@@ -47,6 +47,12 @@ netlink_neigh_update (int cmd, int ifindex, __u32 addr, char *lla, int llalen);
 extern int interface_lookup_netlink (struct zebra_ns *zns);
 extern int netlink_route_read (struct zebra_ns *zns);
 
+
+#if defined(HAVE_EVPN)
+extern int netlink_vxlan_flood_list_update (struct interface *ifp,
+                                            struct prefix *vtep, int cmd);
+#endif
+
 #endif /* HAVE_NETLINK */
 
 #endif /* _ZEBRA_RT_NETLINK_H */

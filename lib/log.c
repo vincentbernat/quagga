@@ -932,6 +932,8 @@ static const struct zebra_desc_table command_types[] = {
 #if defined(HAVE_EVPN)
   DESC_ENTRY    (ZEBRA_VNI_ADD),
   DESC_ENTRY    (ZEBRA_VNI_DEL),
+  DESC_ENTRY    (ZEBRA_REMOTE_VTEP_ADD),
+  DESC_ENTRY    (ZEBRA_REMOTE_VTEP_DEL),
 #endif
 };
 #undef DESC_ENTRY

@@ -95,6 +95,7 @@ struct memory_list memory_list_zebra[] =
   { MTYPE_NETLINK_NAME,	        "Netlink name"			},
 #if defined(HAVE_EVPN)
   { MTYPE_ZVNI,        	        "VNI hash"			},
+  { MTYPE_ZVNI_VTEP,   	        "VNI remote VTEP"		},
 #endif
   { -1, NULL },
 };
