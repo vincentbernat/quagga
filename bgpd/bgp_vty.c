@@ -34,6 +34,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "queue.h"
 #include "if.h"
 #include "vrf.h"
+#include "vxlan.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_advertise.h"
@@ -56,6 +57,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_packet.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_bfd.h"
+#include "bgpd/bgp_evpn.h"
 
 static struct peer_group *
 listen_range_exists (struct bgp *bgp, struct prefix *range, int exact);
@@ -6173,7 +6175,15 @@ DEFUN (bgp_evpn_vni,
        "VXLAN Network Identifier\n"
        "VNI number\n")
 {
-  vty->node = BGP_EVPN_VNI_NODE;
+  vni_t vni;
+  struct bgp *bgp;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  bgp = vty->index;
+
+  if (!bgp)
+    return CMD_WARNING;
+  bgp_evpn_update_vni(bgp, vni, TRUE);
   return CMD_SUCCESS;
 }
 
@@ -6184,7 +6194,15 @@ DEFUN (no_bgp_evpn_vni,
        "VXLAN Network Identifier\n"
        "VNI number\n")
 {
-  vty->node = BGP_EVPN_VNI_NODE;
+  vni_t vni;
+  struct bgp *bgp;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  bgp = vty->index;
+
+  if (!bgp) 
+    return CMD_WARNING;
+  bgp_evpn_update_vni(bgp, vni, FALSE);
   return CMD_SUCCESS;
 }
 
@@ -13843,6 +13861,37 @@ DEFUN (show_ip_bgp_instance_peer_group,
   return bgp_show_peer_group_vty (vty, argv[1], show_peer_group, argv[2]);
 }
 
+static void
+bgp_evpn_show_all_vni_iterator (struct hash_backet *backet, struct vty *vty)
+{
+  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
+  vty_out (vty, "%d     %s%s", vpn->vni, "local", VTY_NEWLINE);
+}
+
+DEFUN (show_bgp_evpn_vni,
+       show_bgp_evpn_vni_cmd,
+       "show bgp evpn vni",
+       SHOW_STR
+       BGP_STR
+       "Address family modifier\n"
+       "Show VNI\n")
+{
+  struct bgp *bgp;
+  bgp = bgp_get_default ();
+
+  if (bgp)
+    {
+      vty_out (vty, "BGP EVPN VNIs%s", VTY_NEWLINE);
+      vty_out (vty, "VNI     Flag%s", VTY_NEWLINE);
+
+      hash_iterate (bgp->vnihash,
+                    (void (*) (struct hash_backet *, void *))
+                    bgp_evpn_show_all_vni_iterator,
+                    vty);
+    }
+  return CMD_SUCCESS;
+}
+
 /* Redistribute VTY commands.  */
 
 DEFUN (bgp_redistribute_ipv4,
@@ -16298,6 +16347,13 @@ bgp_vty_init (void)
   install_element (RESTRICTED_NODE, &show_bgp_vrfs_cmd);
   install_element (ENABLE_NODE, &show_bgp_vrfs_cmd);
   
+#ifdef HAVE_EVPN
+  /* "show bgp evpn" commands. */
+  install_element (VIEW_NODE, &show_bgp_evpn_vni_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_vni_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_vni_cmd);
+#endif /* HAVE_EVPN */
+
   /* Community-list. */
   community_list_vty ();
 }

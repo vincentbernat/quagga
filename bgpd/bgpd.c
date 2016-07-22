@@ -73,6 +73,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #endif /* HAVE_SNMP */
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_bfd.h"
+#include "bgpd/bgp_evpn.h"
 
 /* BGP process wide configuration.  */
 static struct bgp_master bgp_master;
@@ -2879,6 +2880,7 @@ bgp_create (as_t *as, const char *name, enum bgp_instance_type inst_type)
   bgp->coalesce_time = BGP_DEFAULT_SUBGROUP_COALESCE_TIME;
 
   update_bgp_group_init(bgp);
+  bgp_evpn_init(bgp);
   return bgp;
 }
 
@@ -3141,6 +3143,7 @@ bgp_delete (struct bgp *bgp)
   }
 
   update_bgp_group_free (bgp);
+  bgp_evpn_cleanup (bgp);
 
   /* TODO - Other memory may need to be freed - e.g., NHT */
 

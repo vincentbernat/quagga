@@ -361,13 +361,7 @@ vtysh_execute_func (const char *line, int pager)
    * to move into node in the vtysh where it succeeded. */
   if (ret == CMD_SUCCESS || ret == CMD_SUCCESS_DAEMON || ret == CMD_WARNING)
     {
-      if ((saved_node == BGP_VPNV4_NODE || saved_node == BGP_VPNV6_NODE
-	   || saved_node == BGP_ENCAP_NODE || saved_node == BGP_ENCAPV6_NODE
-           || saved_node == BGP_IPV4_NODE
-	   || saved_node == BGP_IPV6_NODE || saved_node == BGP_IPV4M_NODE
-	   || saved_node == BGP_IPV6M_NODE || saved_node == BGP_EVPN_NODE
-       || saved_node == BGP_EVPN_VNI_NODE)
-	  && (tried == 1))
+      if (bgp_saved_node(saved_node) && (tried == 1))
 	{
 	  vtysh_execute("exit-address-family");
 	}
@@ -1215,7 +1209,8 @@ DEFUNSH (VTYSH_BGPD,
   return CMD_SUCCESS;
 }
 
-DEFUN (bgp_evpn_vni,
+DEFUNSH (VTYSH_BGPD,
+       bgp_evpn_vni,
        bgp_evpn_vni_cmd,
        "vni " CMD_VNI_RANGE,
        "VXLAN Network Identifier\n"
@@ -1225,7 +1220,8 @@ DEFUN (bgp_evpn_vni,
   return CMD_SUCCESS;
 }
 
-DEFUN (bgp_evpn_vni_rd,
+DEFUNSH (VTYSH_BGPD,
+       bgp_evpn_vni_rd,
        bgp_evpn_vni_rd_cmd,
        "rd ASN:nn_or_IP-address:nn",
        "Route Distinguisher\n"
@@ -1235,7 +1231,8 @@ DEFUN (bgp_evpn_vni_rd,
   return CMD_SUCCESS;
 }
 
-DEFUN (bgp_evpn_vni_rt,
+DEFUNSH (VTYSH_BGPD,
+       bgp_evpn_vni_rt,
        bgp_evpn_vni_rt_cmd,
        "route-target WORD ASN:nn_or_IP-address:nn",
        "Route Target\n"

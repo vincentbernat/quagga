@@ -39,6 +39,13 @@
 /* vtysh local configuration file. */
 #define VTYSH_DEFAULT_CONFIG "vtysh.conf"
 #define QUAGGA_DEFAULT_CONFIG "Quagga.conf"
+#define bgp_saved_node(saved_node) \
+      (saved_node == BGP_VPNV4_NODE || saved_node == BGP_VPNV6_NODE \
+       || saved_node == BGP_ENCAP_NODE || saved_node == BGP_ENCAPV6_NODE \
+       || saved_node == BGP_IPV4_NODE \
+       || saved_node == BGP_IPV6_NODE || saved_node == BGP_IPV4M_NODE \
+       || saved_node == BGP_IPV6M_NODE || saved_node == BGP_EVPN_NODE \
+       || saved_node == BGP_EVPN_VNI_NODE)
 
 void vtysh_init_vty (void);
 void vtysh_init_cmd (void);

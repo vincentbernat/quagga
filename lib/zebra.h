@@ -586,11 +586,6 @@ typedef u_int16_t zebra_command_t;
 /* VRF ID type. */
 typedef u_int16_t vrf_id_t;
 
-#if defined(HAVE_EVPN)
-/* VxLAN Network Identifier - 24-bit (RFC 7348) */
-typedef u_int32_t vni_t;
-#endif
-
 /* FIFO -- first in first out structure and macros.  */
 struct fifo
 {

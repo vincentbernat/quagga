@@ -180,6 +180,7 @@ struct memory_list memory_list_bgp[] =
   { MTYPE_BGP_FILTER_NAME,      "BGP Filter Information"        },
   { MTYPE_BGP_DUMP_STR,         "BGP Dump String Information"   },
   { MTYPE_ENCAP_TLV,		"ENCAP TLV",			},
+  { MTYPE_BGP_EVPN,             "BGP EVPN Information"          },
   { -1, NULL }
 };
 

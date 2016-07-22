@@ -27,6 +27,7 @@
 
 #include "linklist.h"
 #include "if.h"
+#include "vxlan.h"
 
 #include "zebra/interface.h"
 #include "zebra/zebra_vrf.h"

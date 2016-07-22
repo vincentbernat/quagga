@@ -24,6 +24,7 @@
 
 #include "redistribute.h"
 #include "vrf.h"
+#include "vxlan.h"
 
 #ifdef HAVE_IRDP
 #include "zebra/irdp.h"
