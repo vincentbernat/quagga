@@ -51,6 +51,11 @@ struct prefix
       struct in_addr id;
       struct in_addr adv_router;
     } lp;
+    struct
+    {
+      struct in_addr src;
+      struct in_addr grp;
+    } sg;
     u_char val[8];
     uintptr_t ptr;
   } u __attribute__ ((aligned (8)));
