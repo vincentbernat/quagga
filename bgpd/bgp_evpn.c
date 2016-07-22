@@ -268,25 +268,25 @@ bgp_evpn_init (struct bgp *bgp)
 }
 
 void 
-bgp_evpn_update_vni (struct bgp*, vni_t, int)
+bgp_evpn_update_vni (struct bgp* bgp, vni_t vni, int add)
 {
   return;
 }
 
 void 
-bgp_evpn_print_rd (struct prefix_rd *)
+bgp_evpn_print_rd (struct prefix_rd *rd)
 {
   return;
 }
 
 void 
-bgp_evpn_update_rd_rt (struct bgp *, struct bgpevpn *)
+bgp_evpn_update_rd_rt (struct bgp *bgp, struct bgpevpn *vpn)
 {
   return;
 }
 
 struct bgpevpn *
-bgp_evpn_lookup_vpn (struct bgp *, vni_t)
+bgp_evpn_lookup_vpn (struct bgp *bgp, vni_t vni)
 {
   return(NULL);
 }

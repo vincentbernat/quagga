@@ -22,10 +22,8 @@
 #ifndef _VXLAN_H
 #define _VXLAN_H
 
-#if defined(HAVE_EVPN)
 /* VxLAN Network Identifier - 24-bit (RFC 7348) */
 typedef u_int32_t vni_t;
 #define VNI_MAX 16777215
-#endif
 
 #endif /* _VXLAN_H */
