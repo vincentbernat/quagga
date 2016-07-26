@@ -7300,8 +7300,6 @@ bgp_config_write (struct vty *vty)
       /* ENCAPv6 configuration.  */
       write += bgp_config_write_family (vty, bgp, AFI_IP6, SAFI_ENCAP);
 
-      vty_out (vty, " exit%s", VTY_NEWLINE);
-
       write++;
     }
   return write;
