@@ -23,7 +23,50 @@
 #ifndef _ZEBRA_PREFIX_H
 #define _ZEBRA_PREFIX_H
 
+#ifdef GNU_LINUX
+#include <net/ethernet.h>
+#else
+#include <netinet/if_ether.h>
+#endif
+
 #include "sockunion.h"
+
+#ifndef ETHER_ADDR_LEN
+#define ETHER_ADDR_LEN  ETHERADDRL
+#endif
+
+#if defined(HAVE_EVPN)
+/* MAC address. */
+struct eth_addr
+{
+  u_char octet[ETHER_ADDR_LEN];
+} __attribute__ ((packed));
+
+/* EVPN address (RFC 7432) */
+struct evpn_addr
+{
+  u_char route_type;
+  u_char flags;
+#define IP_ADDR_NONE      0x0
+#define IP_ADDR_V4        0x1
+#define IP_ADDR_V6        0x2
+  struct eth_addr mac;
+  union
+  {
+    struct in_addr v4_addr;
+    struct in6_addr v6_addr;
+  } ip;
+};
+
+/* EVPN prefix structure. */
+struct prefix_evpn
+{
+  u_char family;
+  u_char prefixlen;
+  struct evpn_addr prefix __attribute__ ((aligned (8)));
+};
+
+#endif
 
 /*
  * A struct prefix contains an address family, a prefix length, and an
@@ -58,6 +101,9 @@ struct prefix
     } sg;
     u_char val[8];
     uintptr_t ptr;
+#if defined(HAVE_EVPN)
+    struct evpn_addr prefix_evpn;
+#endif
   } u __attribute__ ((aligned (8)));
 };
 
