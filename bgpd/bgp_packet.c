@@ -1145,6 +1145,7 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       peer->afc_nego[AFI_IP][SAFI_MULTICAST] = peer->afc[AFI_IP][SAFI_MULTICAST];
       peer->afc_nego[AFI_IP6][SAFI_UNICAST] = peer->afc[AFI_IP6][SAFI_UNICAST];
       peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = peer->afc[AFI_IP6][SAFI_MULTICAST];
+      peer->afc_nego[AFI_L2VPN][SAFI_EVPN] = peer->afc[AFI_L2VPN][SAFI_EVPN];
     }
 
   /* When collision is detected and this peer is closed.  Retrun

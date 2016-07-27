@@ -1388,15 +1388,15 @@ afindex (afi_t afi, safi_t safi)
 	}
       break;
     case AFI_L2VPN:
-       switch (safi)
-    {
-    case SAFI_EVPN:
-      return BGP_AF_L2VPN_EVPN;
-      break;
-	default:
-	  return BGP_AF_MAX;
-	  break;
-	}
+      switch (safi)
+        {
+        case SAFI_EVPN:
+          return BGP_AF_L2VPN_EVPN;
+          break;
+        default:
+          return BGP_AF_MAX;
+          break;
+        }
     default:
       return BGP_AF_MAX;
       break;
