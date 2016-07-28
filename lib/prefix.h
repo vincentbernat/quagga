@@ -35,6 +35,15 @@
 #define ETHER_ADDR_LEN  ETHERADDRL
 #endif
 
+/* Common definition for AF_ETHERNET */
+#if defined(AF_PACKET)
+#define AF_ETHERNET AF_PACKET
+#else
+#if defined(AF_LINK)
+#define AF_ETHERNET AF_LINK
+#endif
+#endif
+
 #if defined(HAVE_EVPN)
 /* MAC address. */
 struct eth_addr
