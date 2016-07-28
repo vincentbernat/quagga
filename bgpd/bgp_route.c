@@ -96,6 +96,36 @@ bgp_afi_node_get (struct bgp_table *table, afi_t afi, safi_t safi, struct prefix
   return rn;
 }
 
+struct bgp_node *
+bgp_afi_node_lookup (struct bgp_table *table, afi_t afi, safi_t safi, struct prefix *p,
+		     struct prefix_rd *prd)
+{
+  struct bgp_node *rn;
+  struct bgp_node *prn = NULL;
+  
+  if (!table)
+    return NULL;
+  
+  if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP) || (safi == SAFI_EVPN))
+    {
+      prn = bgp_node_lookup (table, (struct prefix *) prd);
+      if (!prn)
+        return NULL;
+
+      if (prn->info == NULL)
+        {
+	  bgp_unlock_node (prn);
+          return NULL;
+        }
+
+      table = prn->info;
+    }
+
+  rn = bgp_node_lookup (table, p);
+
+  return rn;
+}
+
 /* Allocate bgp_info_extra */
 static struct bgp_info_extra *
 bgp_info_extra_new (void)
