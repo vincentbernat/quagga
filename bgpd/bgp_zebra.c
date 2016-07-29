@@ -89,6 +89,13 @@ do { \
   bgp_attr_deep_free(info->attr); \
 } while (0)
 
+/* Specify whether to (un)install route to/from RIB */
+const int bgp_zebra_route_install[AFI_MAX][SAFI_MAX] =
+{
+  { 0, 1, 1, 0, 0, 0, 0 }, /* AFI_IP */
+  { 0, 1, 1, 0, 0, 0, 0 }, /* AFI_IP6 */
+  { 0, 0, 0, 0, 0, 0, 0 }  /* AFI_L2VPN */
+};
 
 /* Can we install into zebra? */
 static inline int

@@ -1810,7 +1810,8 @@ bgp_process_main (struct work_queue *wq, void *data)
       for (afi = AFI_IP; afi < AFI_MAX; afi++)
         for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
           {
-            bgp_zebra_announce_table(bgp, afi, safi);
+            if (is_bgp_zebra_rib_route (bgp, afi, safi))
+              bgp_zebra_announce_table(bgp, afi, safi);
           }
       bgp->main_peers_update_hold = 0;
 
@@ -1831,7 +1832,10 @@ bgp_process_main (struct work_queue *wq, void *data)
     {
       if (CHECK_FLAG (old_select->flags, BGP_INFO_IGP_CHANGED) ||
           CHECK_FLAG (old_select->flags, BGP_INFO_MULTIPATH_CHG))
-        bgp_zebra_announce (p, old_select, bgp, afi, safi);
+        {
+          if (is_bgp_zebra_rib_route (bgp, afi, safi))
+            bgp_zebra_announce (p, old_select, bgp, afi, safi);
+        }
           
       UNSET_FLAG (old_select->flags, BGP_INFO_MULTIPATH_CHG);
       UNSET_FLAG (rn->flags, BGP_NODE_PROCESS_SCHEDULED);
@@ -1867,9 +1871,7 @@ bgp_process_main (struct work_queue *wq, void *data)
   group_announce_route(bgp, afi, safi, rn, new_select);
 
   /* FIB update. */
-  if ((safi == SAFI_UNICAST || safi == SAFI_MULTICAST) &&
-      (bgp->inst_type != BGP_INSTANCE_TYPE_VIEW) &&
-      !bgp_option_check (BGP_OPT_NO_FIB))
+  if (is_bgp_zebra_rib_route (bgp, afi, safi))
     {
       if (new_select 
 	  && new_select->type == ZEBRA_ROUTE_BGP 
@@ -3089,57 +3091,16 @@ bgp_cleanup_routes (void)
   struct bgp *bgp;
   struct listnode *node, *nnode;
   afi_t afi;
+  safi_t safi;
 
   for (ALL_LIST_ELEMENTS (bm->bgp, node, nnode, bgp))
     {
       for (afi = AFI_IP; afi < AFI_MAX; ++afi)
-	{
-	  struct bgp_node *rn;
-
-	  bgp_cleanup_table(bgp->rib[afi][SAFI_UNICAST], SAFI_UNICAST);
-
-	  /*
-	   * VPN and ENCAP tables are two-level (RD is top level)
-	   */
-	  for (rn = bgp_table_top(bgp->rib[afi][SAFI_MPLS_VPN]); rn;
-               rn = bgp_route_next (rn))
-	    {
-	      if (rn->info)
-                {
-		  bgp_cleanup_table((struct bgp_table *)(rn->info), SAFI_MPLS_VPN);
-		  bgp_table_finish ((struct bgp_table **)&(rn->info));
-		  rn->info = NULL;
-		  bgp_unlock_node(rn);
-                }
-	    }
-
-	  for (rn = bgp_table_top(bgp->rib[afi][SAFI_ENCAP]); rn;
-               rn = bgp_route_next (rn))
-	    {
-	      if (rn->info)
-		{
-		  bgp_cleanup_table((struct bgp_table *)(rn->info), SAFI_ENCAP);
-		  bgp_table_finish ((struct bgp_table **)&(rn->info));
-		  rn->info = NULL;
-		  bgp_unlock_node(rn);
-		}
-	    }
-
-          if (afi == AFI_L2VPN)
-            {
-	      for (rn = bgp_table_top(bgp->rib[afi][SAFI_EVPN]); rn;
-                   rn = bgp_route_next (rn))
-                {
-                  if (rn->info)
-                    {
-                      bgp_cleanup_table((struct bgp_table *)(rn->info), SAFI_EVPN);
-                      bgp_table_finish ((struct bgp_table **)&(rn->info));
-                      rn->info = NULL;
-                      bgp_unlock_node(rn);
-                    }
-                }
-            }
-	}
+        for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
+          {
+            if (is_bgp_zebra_rib_route (bgp, afi, safi))
+	      bgp_cleanup_table(bgp->rib[afi][safi], safi);
+          }
     }
 }
 
@@ -4197,7 +4158,8 @@ bgp_table_map_set (struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
       rmap->map = NULL;
     }
 
-  bgp_zebra_announce_table(bgp, afi, safi);
+  if (is_bgp_zebra_rib_route (bgp, afi, safi))
+    bgp_zebra_announce_table(bgp, afi, safi);
 
   return CMD_SUCCESS;
 }
@@ -4214,7 +4176,8 @@ bgp_table_map_unset (struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
   rmap->name = NULL;
   rmap->map = NULL;
 
-  bgp_zebra_announce_table(bgp, afi, safi);
+  if (is_bgp_zebra_rib_route (bgp, afi, safi))
+    bgp_zebra_announce_table(bgp, afi, safi);
 
   return CMD_SUCCESS;
 }

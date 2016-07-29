@@ -62,4 +62,16 @@ extern struct interface *if_lookup_by_ipv6 (struct in6_addr *, unsigned int, vrf
 extern struct interface *if_lookup_by_ipv6_exact (struct in6_addr *, unsigned int, vrf_id_t);
 #endif /* HAVE_IPV6 */
 
+extern const int bgp_zebra_route_install[AFI_MAX][SAFI_MAX];
+
+/* Should this route be announced to (or withdrawn from) the RIB? */
+static inline int
+is_bgp_zebra_rib_route (struct bgp *bgp, afi_t afi, safi_t safi)
+{
+  if ((bgp->inst_type == BGP_INSTANCE_TYPE_VIEW)
+      || bgp_option_check (BGP_OPT_NO_FIB))
+    return 0;
+
+  return bgp_zebra_route_install[afi][safi];
+}
 #endif /* _QUAGGA_BGP_ZEBRA_H */
