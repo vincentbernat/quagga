@@ -84,5 +84,7 @@ extern struct ecommunity *ecommunity_str2com (const char *, int, int);
 extern char *ecommunity_ecom2str (struct ecommunity *, int);
 extern int ecommunity_match (const struct ecommunity *, const struct ecommunity *);
 extern char *ecommunity_str (struct ecommunity *);
+extern int ecommunity_encode (u_char type, u_char sub_type, int trans, as_t as,
+                struct in_addr ip, u_int32_t val, struct ecommunity_val *eval);
 
 #endif /* _QUAGGA_BGP_ECOMMUNITY_H */
