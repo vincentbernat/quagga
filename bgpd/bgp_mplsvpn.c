@@ -32,17 +32,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_table.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
-
-static u_int16_t
-decode_rd_type (u_char *pnt)
-{
-  u_int16_t v;
-  
-  v = ((u_int16_t) *pnt++ << 8);
-  v |= (u_int16_t) *pnt;
-  return v;
-}
 
 u_int32_t
 decode_label (u_char *pnt)
@@ -53,43 +44,6 @@ decode_label (u_char *pnt)
   l |= (u_int32_t) *pnt++ << 4;
   l |= (u_int32_t) ((*pnt & 0xf0) >> 4);
   return l;
-}
-
-/* type == RD_TYPE_AS */
-static void
-decode_rd_as (u_char *pnt, struct rd_as *rd_as)
-{
-  rd_as->as = (u_int16_t) *pnt++ << 8;
-  rd_as->as |= (u_int16_t) *pnt++;
-  
-  rd_as->val = ((u_int32_t) *pnt++ << 24);
-  rd_as->val |= ((u_int32_t) *pnt++ << 16);
-  rd_as->val |= ((u_int32_t) *pnt++ << 8);
-  rd_as->val |= (u_int32_t) *pnt;
-}
-
-/* type == RD_TYPE_AS4 */
-static void
-decode_rd_as4 (u_char *pnt, struct rd_as *rd_as)
-{
-  rd_as->as  = (u_int32_t) *pnt++ << 24;
-  rd_as->as |= (u_int32_t) *pnt++ << 16;
-  rd_as->as |= (u_int32_t) *pnt++ << 8;
-  rd_as->as |= (u_int32_t) *pnt++;
-
-  rd_as->val  = ((u_int16_t) *pnt++ << 8);
-  rd_as->val |= (u_int16_t) *pnt;
-}
-
-/* type == RD_TYPE_IP */
-static void
-decode_rd_ip (u_char *pnt, struct rd_ip *rd_ip)
-{
-  memcpy (&rd_ip->ip, pnt, 4);
-  pnt += 4;
-  
-  rd_ip->val = ((u_int16_t) *pnt++ << 8);
-  rd_ip->val |= (u_int16_t) *pnt;
 }
 
 int
@@ -231,63 +185,6 @@ bgp_nlri_parse_vpn (struct peer *peer, struct attr *attr,
 }
 
 int
-str2prefix_rd (const char *str, struct prefix_rd *prd)
-{
-  int ret;
-  char *p;
-  char *p2;
-  struct stream *s;
-  char *half;
-  struct in_addr addr;
-
-  s = stream_new (8);
-
-  prd->family = AF_UNSPEC;
-  prd->prefixlen = 64;
-
-  p = strchr (str, ':');
-  if (! p)
-    return 0;
-
-  if (! all_digit (p + 1))
-    return 0;
-
-  half = XMALLOC (MTYPE_TMP, (p - str) + 1);
-  memcpy (half, str, (p - str));
-  half[p - str] = '\0';
-
-  p2 = strchr (str, '.');
-
-  if (! p2)
-    {
-      if (! all_digit (half))
-	{
-	  XFREE (MTYPE_TMP, half);
-	  return 0;
-	}
-      stream_putw (s, RD_TYPE_AS);
-      stream_putw (s, atoi (half));
-      stream_putl (s, atol (p + 1));
-    }
-  else
-    {
-      ret = inet_aton (half, &addr);
-      if (! ret)
-	{
-	  XFREE (MTYPE_TMP, half);
-	  return 0;
-	}
-      stream_putw (s, RD_TYPE_IP);
-      stream_put_in_addr (s, &addr);
-      stream_putw (s, atol (p + 1));
-    }
-  memcpy (prd->val, s->data, 8);
-
-  XFREE(MTYPE_TMP, half);
-  return 1;
-}
-
-int
 str2tag (const char *str, u_char *tag)
 {
   unsigned long l;
@@ -310,42 +207,6 @@ str2tag (const char *str, u_char *tag)
   tag[2] = (u_char)(t << 4);
 
   return 1;
-}
-
-char *
-prefix_rd2str (struct prefix_rd *prd, char *buf, size_t size)
-{
-  u_char *pnt;
-  u_int16_t type;
-  struct rd_as rd_as;
-  struct rd_ip rd_ip;
-
-  if (size < RD_ADDRSTRLEN)
-    return NULL;
-
-  pnt = prd->val;
-
-  type = decode_rd_type (pnt);
-
-  if (type == RD_TYPE_AS)
-    {
-      decode_rd_as (pnt + 2, &rd_as);
-      snprintf (buf, size, "%u:%d", rd_as.as, rd_as.val);
-      return buf;
-    }
-  else if (type == RD_TYPE_AS4)
-    {
-      decode_rd_as4 (pnt + 2, &rd_as);
-      snprintf (buf, size, "%u:%d", rd_as.as, rd_as.val);
-      return buf;
-    }
-  else if (type == RD_TYPE_IP)
-    {
-      decode_rd_ip (pnt + 2, &rd_ip);
-      snprintf (buf, size, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
-      return buf;
-    }
-  return NULL;
 }
 
 /* For testing purpose, static route of MPLS-VPN. */

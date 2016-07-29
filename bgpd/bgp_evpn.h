@@ -46,7 +46,6 @@ struct bgpevpn
 
 extern void bgp_evpn_init (struct bgp *);
 extern void bgp_evpn_update_vni (struct bgp*, vni_t, int);
-extern void bgp_evpn_print_rd (struct prefix_rd *);
 extern void bgp_evpn_update_rd_rt (struct bgp *, struct bgpevpn *);
 extern struct bgpevpn *bgp_evpn_lookup_vpn (struct bgp *, vni_t);
 extern void bgp_evpn_cleanup (struct bgp *bgp);

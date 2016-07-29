@@ -30,6 +30,7 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_evpn.h"
 #include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 
 #if defined(HAVE_EVPN)
@@ -65,42 +66,6 @@ vni_hash_cmp (const void *p1, const void *p2)
 }
 
 /*
- * decode_rd_as
- *
- * Function to decode rd with AS
- * type == RD_TYPE_AS
- */
-static void
-decode_rd_as (u_char *pnt, struct rd_as *rd_as)
-{
-  rd_as->as = (u_int16_t) *pnt++ << 8;
-  rd_as->as |= (u_int16_t) *pnt++;
-
-  rd_as->val = ((u_int32_t) *pnt++ << 24);
-  rd_as->val |= ((u_int32_t) *pnt++ << 16);
-  rd_as->val |= ((u_int32_t) *pnt++ << 8);
-  rd_as->val |= (u_int32_t) *pnt;
-}
-
-/*
- * bgp_evpn_print_rd
- *
- * Function to print prefix_rd.
- */
-void
-bgp_evpn_print_rd (struct prefix_rd *rd)
-{
-  struct rd_as rd_as;
-  u_char *pnt;
-
-  pnt = rd->val;
-
-  decode_rd_as (pnt + RD_TYPE, &rd_as);
-  zlog_debug("%u:%d", rd_as.as, rd_as.val);
-  return;
-}
-
-/*
  * bgp_evpn_update_rd_rt
  *
  * Function to set default asn:vni to rd and rt.
@@ -108,19 +73,14 @@ bgp_evpn_print_rd (struct prefix_rd *rd)
 void
 bgp_evpn_update_rd_rt (struct bgp *bgp, struct bgpevpn *vpn)
 {
-  struct stream *s;
-
-  s = stream_new (RD_VAL);
+  char buf[100];
 
   vpn->prd.family = AF_UNSPEC;
   vpn->prd.prefixlen = 64;
-
-  stream_putw (s, RD_TYPE_AS);
-  stream_putw (s, bgp->as);
-  stream_putw (s, vpn->vni);
-  memcpy(&vpn->prd.val, s->data, RD_VAL);
-  memcpy(&vpn->rt_prd.val, s->data, RD_VAL);
-  return;
+  sprintf (buf, "%s:%u", inet_ntoa (bgp->router_id), vpn->vni);
+  str2prefix_rd (buf, &vpn->prd);
+  sprintf (buf, "%u:%u", bgp->as, vpn->vni);
+  str2prefix_rd (buf, &vpn->rt_prd);
 }
 
 /*
@@ -269,12 +229,6 @@ bgp_evpn_init (struct bgp *bgp)
 
 void 
 bgp_evpn_update_vni (struct bgp* bgp, vni_t vni, int add)
-{
-  return;
-}
-
-void 
-bgp_evpn_print_rd (struct prefix_rd *rd)
 {
   return;
 }
