@@ -635,6 +635,7 @@ subgroup_update_packet (struct update_subgroup *subgrp)
   int num_pfx = 0;
   int addpath_encode = 0;
   u_int32_t addpath_tx_id = 0;
+  int enhe;
 
   if (!subgrp)
     return NULL;
@@ -732,8 +733,8 @@ subgroup_update_packet (struct update_subgroup *subgrp)
             }
 	}
 
-      if ((afi == AFI_IP && safi == SAFI_UNICAST) &&
-          !peer_cap_enhe(peer))
+      enhe = (afi == AFI_IP && safi == SAFI_UNICAST && peer_cap_enhe(peer));
+      if (afi == AFI_IP && safi == SAFI_UNICAST && !enhe)
 	stream_put_prefix_addpath (s, &rn->p, addpath_encode, addpath_tx_id);
       else
 	{
@@ -747,9 +748,8 @@ subgroup_update_packet (struct update_subgroup *subgrp)
 	    tag = binfo->extra->tag;
 
 	  if (stream_empty (snlri))
-	    mpattrlen_pos = bgp_packet_mpattr_start (snlri, afi, safi,
-                                         (peer_cap_enhe(peer) ? AFI_IP6 : afi),
-				          &vecarr, adv->baa->attr);
+	    mpattrlen_pos = bgp_packet_mpattr_start (snlri, afi, safi, enhe,
+				                     &vecarr, adv->baa->attr);
           bgp_packet_mpattr_prefix (snlri, afi, safi, &rn->p, prd, tag,
                                     addpath_encode, addpath_tx_id);
 	}

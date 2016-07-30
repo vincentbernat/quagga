@@ -2460,13 +2460,15 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size,
 }
 
 size_t
-bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi, afi_t nh_afi,
+bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi, int enhe,
 			 struct bpacket_attr_vec_arr *vecarr,
 			 struct attr *attr)
 {
   size_t sizep;
   afi_t pkt_afi;
   safi_t pkt_safi;
+
+  /* Note: Extended nexthop encoding is only applicable for IPv4-unicast. */
 
   /* Set extended bit always to encode the attribute length as 2 bytes */
   stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_EXTLEN);
@@ -2482,12 +2484,31 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi, afi_t nh_afi,
   stream_putc (s, pkt_safi);   /* SAFI */
 
   /* Nexthop */
-  switch (nh_afi)
+  switch (afi)
     {
     case AFI_IP:
       switch (safi)
 	{
 	case SAFI_UNICAST:
+          if (enhe)
+            {
+              struct attr_extra *attre = attr->extra;
+
+              assert (attr->extra);
+              bpacket_attr_vec_arr_set_vec (vecarr, BGP_ATTR_VEC_NH, s, attr);
+              stream_putc (s, attre->mp_nexthop_len);
+              stream_put (s, &attre->mp_nexthop_global, IPV6_MAX_BYTELEN);
+              if (attre->mp_nexthop_len == BGP_ATTR_NHLEN_IPV6_GLOBAL_AND_LL)
+                stream_put (s, &attre->mp_nexthop_local, IPV6_MAX_BYTELEN);
+            }
+          else
+            {
+              /* Encoding IPv4-unicast in MP_REACH would be unexpected. */
+              bpacket_attr_vec_arr_set_vec (vecarr, BGP_ATTR_VEC_NH, s, attr);
+              stream_putc (s, 4);
+              stream_put_ipv4 (s, attr->nexthop.s_addr);
+            }
+          break;
 	case SAFI_MULTICAST:
 	  bpacket_attr_vec_arr_set_vec (vecarr, BGP_ATTR_VEC_NH, s, attr);
 	  stream_putc (s, 4);
@@ -2508,7 +2529,6 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi, afi_t nh_afi,
 	  break;
 	}
       break;
-#ifdef HAVE_IPV6
     case AFI_IP6:
       switch (safi)
       {
@@ -2555,7 +2575,6 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi, afi_t nh_afi,
 	break;
       }
       break;
-#endif /*HAVE_IPV6*/
     default:
       break;
     }
@@ -2703,6 +2722,7 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
   int send_as4_path = 0;
   int send_as4_aggregator = 0;
   int use32bit = (CHECK_FLAG (peer->cap, PEER_CAP_AS4_RCV)) ? 1 : 0;
+  int enhe;
 
   if (! bgp)
     bgp = peer->bgp;
@@ -2710,14 +2730,16 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
   /* Remember current pointer. */
   cp = stream_get_endp (s);
 
-  if (p && !((afi == AFI_IP && safi == SAFI_UNICAST) &&
-              !peer_cap_enhe(peer)))
+  enhe = (afi == AFI_IP && safi == SAFI_UNICAST && peer_cap_enhe(peer));
+  /* Encode MP_REACH if advertising anything other than IPv4-unicast or 
+   * advertising IPv4-unicast with ENHE.
+   */
+  if (p && (!(afi == AFI_IP && safi == SAFI_UNICAST) || enhe))
     {
       size_t mpattrlen_pos = 0;
 
-      mpattrlen_pos = bgp_packet_mpattr_start(s, afi, safi,
-                                    (peer_cap_enhe(peer) ? AFI_IP6 : afi),
-                                    vecarr, attr);
+      mpattrlen_pos = bgp_packet_mpattr_start(s, afi, safi, enhe,
+                                              vecarr, attr);
       bgp_packet_mpattr_prefix(s, afi, safi, p, prd, tag,
                                addpath_encode, addpath_tx_id);
       bgp_packet_mpattr_end(s, mpattrlen_pos);
@@ -2793,7 +2815,7 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
       send_as4_path = 1; /* we'll do this later, at the correct place */
   
   /* Nexthop attribute. */
-  if (afi == AFI_IP && safi == SAFI_UNICAST && !peer_cap_enhe(peer))
+  if (afi == AFI_IP && safi == SAFI_UNICAST && !enhe)
     {
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP))
         {
@@ -2803,7 +2825,7 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
           stream_putc (s, 4);
           stream_put_ipv4 (s, attr->nexthop.s_addr);
         }
-      else if (safi == SAFI_UNICAST && peer_cap_enhe(from))
+      else if (peer_cap_enhe(from))
         {
           /*
            * Likely this is the case when an IPv4 prefix was received with

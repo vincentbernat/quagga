@@ -1177,6 +1177,7 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
   int reflect;
   afi_t afi;
   safi_t safi;
+  int enhe;
 
   if (DISABLE_BGP_ANNOUNCE)
     return 0;
@@ -1397,11 +1398,11 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
   if (reflect)
     SET_FLAG(attr->rmap_change_flags, BATTR_REFLECTED);
 
-#ifdef HAVE_IPV6
+  enhe = (afi == AFI_IP && safi == SAFI_UNICAST && peer_cap_enhe(peer));
+
 #define NEXTHOP_IS_V6 (\
-    (safi != SAFI_ENCAP && \
-     (p->family == AF_INET6 || peer_cap_enhe(peer))) || \
-    (safi == SAFI_ENCAP && attr->extra->mp_nexthop_len == 16))
+    ((safi != SAFI_ENCAP && (p->family == AF_INET6 || enhe)) || \
+     (safi == SAFI_ENCAP && attr->extra->mp_nexthop_len == 16)))
 
   /* IPv6/MP starts with 1 nexthop. The link-local address is passed only if
    * the peer (group) is configured to receive link-local nexthop unchanged
@@ -1428,7 +1429,6 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
             PEER_FLAG_NEXTHOP_LOCAL_UNCHANGED)))
         memset (&attr->extra->mp_nexthop_local, 0, IPV6_MAX_BYTELEN);
     }
-#endif /* HAVE_IPV6 */
 
   bgp_peer_remove_private_as(bgp, afi, safi, peer, attr);
   bgp_peer_as_override(bgp, afi, safi, peer, attr);
@@ -1495,6 +1495,8 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
       !transparent &&
       !CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_NEXTHOP_UNCHANGED))
     {
+      u_char family = (NEXTHOP_IS_V6) ? AF_INET6 : p->family;
+
       /* We can reset the nexthop, if setting (or forcing) it to 'self' */
       if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_NEXTHOP_SELF) ||
           CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_FORCE_NEXTHOP_SELF))
@@ -1502,8 +1504,7 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
           if (!reflect ||
               CHECK_FLAG (peer->af_flags[afi][safi],
                           PEER_FLAG_FORCE_NEXTHOP_SELF))
-            subgroup_announce_reset_nhop ((peer_cap_enhe(peer) ?
-                          AF_INET6 : p->family), attr);
+            subgroup_announce_reset_nhop (family, attr);
         }
       else if (peer->sort == BGP_PEER_EBGP)
         {
@@ -1517,14 +1518,14 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
                 break;
             }
           if (!paf)
-            subgroup_announce_reset_nhop ((peer_cap_enhe(peer) ? AF_INET6 : p->family), attr);
+            subgroup_announce_reset_nhop (family, attr);
         }
       /* If IPv6/MP and nexthop does not have any override and happens to
        * be a link-local address, reset it so that we don't pass along the
        * source's link-local IPv6 address to recipients who may not be on
        * the same interface.
        */
-      if (p->family == AF_INET6 || peer_cap_enhe(peer))
+      if (NEXTHOP_IS_V6)
         {
           if (IN6_IS_ADDR_LINKLOCAL (&attr->extra->mp_nexthop_global))
             subgroup_announce_reset_nhop (AF_INET6, attr);
