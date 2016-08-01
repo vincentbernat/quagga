@@ -176,10 +176,10 @@ void pim_if_delete(struct interface *ifp)
   pim_ifp = ifp->info;
   zassert(pim_ifp);
 
-  if (pim->pim_raw_fd == -1)
+  if (pim_ifp->pim_raw_fd == -1)
     {
-      close (pim->pim_raw_fd);
-      pim->pim_raw_fd == -1;
+      close (pim_ifp->pim_raw_fd);
+      pim_ifp->pim_raw_fd = -1;
     }
 
   if (pim_ifp->igmp_join_list) {
