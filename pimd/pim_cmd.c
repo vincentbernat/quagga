@@ -2464,9 +2464,9 @@ DEFUN (ip_pim_rp,
        ip_pim_rp_cmd,
        "ip pim rp A.B.C.D",
        IP_STR
-       "pim multicast routing"
-       "Rendevous Point"
-       "ip address of RP")
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "ip address of RP\n")
 {
   int result;
 
@@ -2490,9 +2490,9 @@ DEFUN (no_ip_pim_rp,
        "no ip pim rp {A.B.C.D}",
        NO_STR
        IP_STR
-       "pim multicast routing"
-       "Rendevous Point"
-       "ip address of RP")
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "ip address of RP\n")
 {
   qpim_rp.rpf_addr.s_addr = INADDR_NONE;
 
