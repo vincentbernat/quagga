@@ -354,6 +354,7 @@ struct bgp
 
   /* EVPN: vnihash for vni's */
   struct hash *vnihash;
+  int advertise_vni; /* Redistribute VNIs into BGP? */
 };
 
 #define BGP_ROUTE_ADV_HOLD(bgp) (bgp->main_peers_update_hold)

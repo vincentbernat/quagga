@@ -450,7 +450,8 @@ struct in_pktinfo
 #define ZEBRA_VNI_DEL                     51
 #define ZEBRA_REMOTE_VTEP_ADD             52
 #define ZEBRA_REMOTE_VTEP_DEL             53
-#define ZEBRA_MESSAGE_MAX                 54
+#define ZEBRA_ADVERTISE_VNI               54
+#define ZEBRA_MESSAGE_MAX                 55
 #else
 #define ZEBRA_MESSAGE_MAX                 50
 #endif

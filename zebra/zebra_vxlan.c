@@ -102,6 +102,10 @@ static int
 zvni_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni);
 static int
 zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni);
+static void
+zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt);
+static void
+zvni_propagate_vnis (struct zebra_vrf *zvrf);
 static int
 zvni_vtep_match (struct prefix *vtep, zebra_vtep_t *zvtep);
 static zebra_vtep_t *
@@ -273,6 +277,29 @@ zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni)
 
   client->vnidel_cnt++;
   return zebra_server_send_message(client);
+}
+
+/*
+ * Propagate a VNI to client.
+ */
+static void
+zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt)
+{
+  zebra_vni_t *zvni;
+  struct zebra_vrf *zvrf;
+
+  zvni = (zebra_vni_t *) backet->data;
+  zvrf = (struct zebra_vrf *)ctxt;
+  zvni_send_add_to_client (zvrf, zvni->vni);
+}
+
+/*
+ * Propagate all known VNIs to client.
+ */
+static void
+zvni_propagate_vnis (struct zebra_vrf *zvrf)
+{
+  hash_iterate(zvrf->vni_table, zvni_propagate_this_vni, (void *)zvrf);
 }
 
 /*
@@ -659,6 +686,37 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
 }
 
 /*
+ * Handle message from client to learn (or stop learning) about VNIs.
+ * Note: This setting is similar to 'redistribute <proto>' and only
+ * controls VNI propagation from zebra to client (bgpd). When enabled,
+ * any existing VNIs need to be informed to the client; when disabled,
+ * it is sufficient to note the state, the client is expected to do
+ * its own internal cleanup.
+ */
+int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
+                               u_short length, struct zebra_vrf *zvrf)
+{
+  struct stream *s;
+  int advertise;
+
+  s = client->ibuf;
+  advertise = stream_getc (s);
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Recv ADVERTISE_VNI %s",
+                zvrf->vrf_id, advertise ? "enable" : "disable");
+
+  if (zvrf->advertise_vni != advertise)
+    {
+      zvrf->advertise_vni = advertise;
+      if (zvrf->advertise_vni)
+        zvni_propagate_vnis (zvrf);
+    }
+
+  return 0;
+}
+
+/*
  * Allocate VNI hash table for this VRF and do other initialization.
  * NOTE: Currently supported only for default VRF.
  */
@@ -668,6 +726,5 @@ zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
   if (!zvrf)
     return;
   zvrf->vni_table = hash_create(vni_hash_keymake, vni_hash_cmp);
-  zvrf->advertise_vni = 1; // TMP
 }
 #endif /* HAVE_EVPN */

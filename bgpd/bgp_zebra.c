@@ -174,6 +174,33 @@ bgp_read_import_check_update(int command, struct zclient *zclient,
   return 0;
 }
 
+static int
+bgp_zebra_advertise_vni (struct bgp *bgp, int advertise_vni)
+{
+#if defined(HAVE_EVPN)
+  struct stream *s;
+
+  /* Check socket. */
+  if (!zclient || zclient->sock < 0)
+    return 0;
+
+  /* Don't try to register if Zebra doesn't know of this instance. */
+  if (!IS_BGP_INST_KNOWN_TO_ZEBRA(bgp))
+    return 0;
+
+  s = zclient->obuf;
+  stream_reset (s);
+
+  zclient_create_header (s, ZEBRA_ADVERTISE_VNI, bgp->vrf_id);
+  stream_putc(s, advertise_vni);
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return zclient_send_message(zclient);
+#else
+  return 0;
+#endif
+}
+
 /* Set or clear interface on which unnumbered neighbor is configured. This
  * would in turn cause BGP to initiate or turn off IPv6 RAs on this
  * interface.
@@ -2015,6 +2042,11 @@ bgp_zebra_instance_register (struct bgp *bgp)
 
   /* Register for router-id, interfaces, redistributed routes. */
   zclient_send_reg_requests (zclient, bgp->vrf_id);
+
+  /* For default instance, register to learn about VNIs, if appropriate. */
+  if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+      && bgp->advertise_vni)
+    bgp_zebra_advertise_vni (bgp, 1);
 }
 
 /* Deregister this instance with Zebra. Invoked upon the instance
@@ -2029,6 +2061,11 @@ bgp_zebra_instance_deregister (struct bgp *bgp)
 
   if (BGP_DEBUG (zebra, ZEBRA))
     zlog_debug("Deregistering VRF %u", bgp->vrf_id);
+
+  /* For default instance, unregister learning about VNIs, if appropriate. */
+  if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+      && bgp->advertise_vni)
+    bgp_zebra_advertise_vni (bgp, 0);
 
   /* Deregister for router-id, interfaces, redistributed routes. */
   zclient_send_dereg_requests (zclient, bgp->vrf_id);

@@ -33,6 +33,12 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
   return 0;
 }
 
+int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
+                               u_short length, struct zebra_vrf *zvrf)
+{
+  return 0;
+}
+
 void
 zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
 {

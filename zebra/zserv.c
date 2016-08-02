@@ -2123,6 +2123,9 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_REMOTE_VTEP_DEL:
       zebra_vxlan_remote_vtep_del (client, sock, length, zvrf);
       break;
+    case ZEBRA_ADVERTISE_VNI:
+      zebra_vxlan_advertise_vni (client, sock, length, zvrf);
+      break;
 #endif
     default:
       zlog_info ("Zebra received unknown command %d", command);

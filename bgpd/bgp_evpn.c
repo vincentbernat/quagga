@@ -183,6 +183,7 @@ bgp_evpn_init (struct bgp *bgp)
 {
 #ifdef HAVE_EVPN
   bgp->vnihash = hash_create(vni_hash_key_make, vni_hash_cmp);
+  bgp->advertise_vni = 1; // TODO: Temporary initialization
 #endif
 }
 
