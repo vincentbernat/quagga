@@ -51,6 +51,62 @@ static void join_timer_start(struct pim_upstream *up);
 static void pim_upstream_update_assert_tracking_desired(struct pim_upstream *up);
 
 /*
+ * A (*,G) or a (*,*) is going away
+ * remove the parent pointer from
+ * those pointing at us
+ */
+static void
+pim_upstream_remove_children (struct pim_upstream *up)
+{
+  struct listnode *ch_node;
+  struct pim_upstream *child;
+
+  // Basic sanity, (*,*) not currently supported
+  if ((up->sg.u.sg.src.s_addr == INADDR_ANY) &&
+      (up->sg.u.sg.grp.s_addr == INADDR_ANY))
+    return;
+
+  // Basic sanity (S,G) have no children
+  if ((up->sg.u.sg.src.s_addr != INADDR_ANY) &&
+      (up->sg.u.sg.grp.s_addr != INADDR_ANY))
+    return;
+
+  for (ALL_LIST_ELEMENTS_RO (qpim_upstream_list, ch_node, child))
+    {
+      if (child->parent == up)
+        child->parent = NULL;
+    }
+}
+
+/*
+ * A (*,G) or a (*,*) is being created
+ * Find the children that would point
+ * at us.
+ */
+static void
+pim_upstream_find_new_children (struct pim_upstream *up)
+{
+  struct pim_upstream *child;
+  struct listnode *ch_node;
+
+  if ((up->sg.u.sg.src.s_addr != INADDR_ANY) &&
+      (up->sg.u.sg.grp.s_addr != INADDR_ANY))
+    return;
+
+  if ((up->sg.u.sg.src.s_addr == INADDR_ANY) &&
+      (up->sg.u.sg.grp.s_addr == INADDR_ANY))
+    return;
+
+  for (ALL_LIST_ELEMENTS_RO (qpim_upstream_list, ch_node, child))
+    {
+      if ((up->sg.u.sg.grp.s_addr != INADDR_ANY) &&
+          (child->sg.u.sg.grp.s_addr == up->sg.u.sg.grp.s_addr) &&
+	  (child != up))
+        child->parent = up;
+    }
+}
+
+/*
  * If we have a (*,*) || (S,*) there is no parent
  * If we have a (S,G), find the (*,G)
  * If we have a (*,G), find the (*,*)
@@ -99,6 +155,7 @@ void pim_upstream_delete(struct pim_upstream *up)
   THREAD_OFF(up->t_ka_timer);
   THREAD_OFF(up->t_rs_timer);
 
+  pim_upstream_remove_children (up);
   upstream_channel_oil_detach(up);
 
   /*
@@ -378,6 +435,7 @@ static struct pim_upstream *pim_upstream_new(struct prefix *sg,
     }
 
   up->parent                     = pim_upstream_find_parent (sg);
+  pim_upstream_find_new_children (up);
   up->flags                      = 0;
   up->ref_count                  = 1;
   up->t_join_timer               = NULL;
@@ -932,6 +990,10 @@ pim_upstream_inherited_olist (struct pim_upstream *up)
   struct prefix anysrc;
   int output_intf = 0;
 
+  pim_ifp = up->rpf.source_nexthop.interface->info;
+  zlog_debug ("Channel Oil%s: %p", pim_str_sg_dump (&up->sg), up->channel_oil);
+  if (!up->channel_oil)
+    up->channel_oil = pim_channel_oil_add (&up->sg, pim_ifp->mroute_vif_index);
   anysrc = up->sg;
   anysrc.u.sg.src.s_addr = INADDR_ANY;
 
@@ -946,16 +1008,17 @@ pim_upstream_inherited_olist (struct pim_upstream *up)
 
 	  for (ALL_LIST_ELEMENTS (pim_ifp->pim_ifchannel_list, chnode, chnextnode, ch))
 	    {
-	      struct pim_ifchannel *nch;
+	      //struct pim_ifchannel *nch;
 
 	      if (ch->upstream != anysrc_up)
 		continue;
 
 	      if (ch->ifjoin_state == PIM_IFJOIN_JOIN)
 		{
-		  nch = pim_ifchannel_add (ifp, &up->sg);
-		  pim_ifchannel_ifjoin_switch (__PRETTY_FUNCTION__, nch, PIM_IFJOIN_JOIN);
-		  pim_forward_start (ch);
+		  pim_channel_add_oif (up->channel_oil, ifp, PIM_OIF_FLAG_PROTO_PIM);
+		  //nch = pim_ifchannel_add (ifp, &up->sg);
+		  //pim_ifchannel_ifjoin_switch (__PRETTY_FUNCTION__, nch, PIM_IFJOIN_JOIN);
+		  //pim_forward_start (ch);
 		  output_intf++;
 		}
 	    }

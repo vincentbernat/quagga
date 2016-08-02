@@ -93,7 +93,6 @@ pim_mroute_msg_nocache (int fd, struct interface *ifp, const struct igmpmsg *msg
 			const char *src_str, const char *grp_str)
 {
   struct pim_interface *pim_ifp = ifp->info;
-  struct pim_ifchannel *ch;
   struct pim_upstream *up;
   struct pim_rpf *rpg;
   struct prefix sg;
@@ -154,8 +153,7 @@ pim_mroute_msg_nocache (int fd, struct interface *ifp, const struct igmpmsg *msg
   }
   up->channel_oil->cc.pktcnt++;
   up->fhr = 1;
-  ch = pim_ifchannel_add (pim_regiface, &sg);
-  pim_ifchannel_ifjoin_switch (__PRETTY_FUNCTION__, ch, PIM_IFJOIN_JOIN_PIMREG);
+  pim_channel_add_oif (up->channel_oil, pim_regiface, PIM_OIF_FLAG_PROTO_PIM);
   up->join_state = PIM_UPSTREAM_JOINED;
 
   return 0;
@@ -561,6 +559,7 @@ int pim_mroute_add(struct channel_oil *c_oil)
 {
   int err;
   int orig = 0;
+  int orig_iif_vif = 0;
 
   qpim_mroute_add_last = pim_time_monotonic_sec();
   ++qpim_mroute_add_events;
@@ -581,8 +580,29 @@ int pim_mroute_add(struct channel_oil *c_oil)
       c_oil->oil.mfcc_ttls[c_oil->oil.mfcc_parent] = 1;
     }
 
+  /*
+   * If we have an unresolved cache entry for the S,G
+   * it is owned by the pimreg for the incoming IIF
+   * So set pimreg as the IIF temporarily to cause
+   * the packets to be forwarded.  Then set it
+   * to the correct IIF afterwords.
+   */
+  if (!c_oil->installed && c_oil->oil.mfcc_origin.s_addr != INADDR_ANY &&
+      c_oil->oil.mfcc_parent != 0)
+    {
+      orig_iif_vif = c_oil->oil.mfcc_parent;
+      c_oil->oil.mfcc_parent = 0;
+    }
   err = setsockopt(qpim_mroute_socket_fd, IPPROTO_IP, MRT_ADD_MFC,
 		   &c_oil->oil, sizeof(c_oil->oil));
+
+  if (!err && !c_oil->installed && c_oil->oil.mfcc_origin.s_addr != INADDR_ANY &&
+      orig_iif_vif != 0)
+    {
+      c_oil->oil.mfcc_parent = orig_iif_vif;
+      err = setsockopt (qpim_mroute_socket_fd, IPPROTO_IP, MRT_ADD_MFC,
+			&c_oil->oil, sizeof (c_oil->oil));
+    }
 
   if (c_oil->oil.mfcc_origin.s_addr == INADDR_ANY)
       c_oil->oil.mfcc_ttls[c_oil->oil.mfcc_parent] = orig;
