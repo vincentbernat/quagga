@@ -208,6 +208,8 @@ afi2family (afi_t afi)
   else if (afi == AFI_IP6)
     return AF_INET6;
 #endif /* HAVE_IPV6 */
+  else if (afi == AFI_L2VPN)
+    return AF_ETHERNET;
   return 0;
 }
 
@@ -220,6 +222,8 @@ family2afi (int family)
   else if (family == AF_INET6)
     return AFI_IP6;
 #endif /* HAVE_IPV6 */
+  else if (family == AF_ETHERNET)
+    return AFI_L2VPN;
   return 0;
 }
 
@@ -283,6 +287,10 @@ prefix_copy (struct prefix *dest, const struct prefix *src)
   else if (src->family == AF_INET6)
     dest->u.prefix6 = src->u.prefix6;
 #endif /* HAVE_IPV6 */
+  else if (src->family == AF_ETHERNET)
+    {
+      memcpy (&dest->u.prefix_evpn, &src->u.prefix_evpn, sizeof (struct evpn_addr));
+    }
   else if (src->family == AF_UNSPEC)
     {
       dest->u.lp.id = src->u.lp.id;
@@ -323,6 +331,9 @@ prefix_same (const struct prefix *p1, const struct prefix *p2)
 	if (IPV6_ADDR_SAME (&p1->u.prefix6.s6_addr, &p2->u.prefix6.s6_addr))
 	  return 1;
 #endif /* HAVE_IPV6 */
+      if (p1->family == AF_ETHERNET )
+        if (!memcmp (&p1->u.prefix_evpn, &p2->u.prefix_evpn, sizeof (struct evpn_addr)))
+          return 1;
     }
   return 0;
 }
@@ -387,6 +398,9 @@ prefix_common_bits (const struct prefix *p1, const struct prefix *p2)
   if (p1->family == AF_INET6)
     length = IPV6_MAX_BYTELEN;
 #endif
+  if (p1->family == AF_ETHERNET)
+    length = 8 * sizeof (struct evpn_addr);
+
   if (p1->family != p2->family || !length)
     return -1;
 
