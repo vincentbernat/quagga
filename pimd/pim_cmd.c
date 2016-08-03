@@ -982,26 +982,29 @@ static void pim_show_upstream(struct vty *vty)
 
   now = pim_time_monotonic_sec();
 
-  vty_out(vty, "Iif       Source          Group           State Uptime   JoinTimer RefCnt%s", VTY_NEWLINE);
+  vty_out(vty, "Iif       Source          Group           State Uptime   JoinTimer RSTimer   RefCnt%s", VTY_NEWLINE);
 
   for (ALL_LIST_ELEMENTS_RO(qpim_upstream_list, upnode, up)) {
       char src_str[100];
       char grp_str[100];
       char uptime[10];
       char join_timer[10];
+      char rs_timer[10];
 
       pim_inet4_dump("<src?>", up->sg.u.sg.src, src_str, sizeof(src_str));
       pim_inet4_dump("<grp?>", up->sg.u.sg.grp, grp_str, sizeof(grp_str));
       pim_time_uptime(uptime, sizeof(uptime), now - up->state_transition);
       pim_time_timer_to_hhmmss(join_timer, sizeof(join_timer), up->t_join_timer);
+      pim_time_timer_to_hhmmss (rs_timer, sizeof (rs_timer), up->t_rs_timer);
 
-      vty_out(vty, "%-10s%-15s %-15s %-5s %-8s %-9s %6d%s",
+      vty_out(vty, "%-10s%-15s %-15s %-5s %-8s %-9s %-9s %6d%s",
 	      up->rpf.source_nexthop.interface->name,
 	      src_str,
 	      grp_str,
 	      pim_upstream_state2str (up),
 	      uptime,
 	      join_timer,
+	      rs_timer,
 	      up->ref_count,
 	      VTY_NEWLINE);
   }
@@ -3853,22 +3856,28 @@ DEFUN (debug_pim_packets,
 
 DEFUN (debug_pim_packets_filter,
        debug_pim_packets_filter_cmd,
-       "debug pim packets (hello|joins)",
+       "debug pim packets (hello|joins|register)",
        DEBUG_STR
        DEBUG_PIM_STR
        DEBUG_PIM_PACKETS_STR
        DEBUG_PIM_HELLO_PACKETS_STR
-       DEBUG_PIM_J_P_PACKETS_STR)
+       DEBUG_PIM_J_P_PACKETS_STR
+       DEBUG_PIM_PIM_REG_PACKETS_STR)
 {
     if (strncmp(argv[0],"h",1) == 0) 
     {
       PIM_DO_DEBUG_PIM_HELLO;
-      vty_out (vty, "PIM Hello debugging is on %s", VTY_NEWLINE);
+      vty_out (vty, "PIM Hello debugging is on%s", VTY_NEWLINE);
     }
     else if (strncmp(argv[0],"j",1) == 0)
     {
       PIM_DO_DEBUG_PIM_J_P;
-      vty_out (vty, "PIM Join/Prune debugging is on %s", VTY_NEWLINE);
+      vty_out (vty, "PIM Join/Prune debugging is on%s", VTY_NEWLINE);
+    }
+    else if (strncmp(argv[0],"r",1) == 0)
+    {
+      PIM_DO_DEBUG_PIM_REG;
+      vty_out (vty, "PIM Register debugging is on%s", VTY_NEWLINE);
     }
   return CMD_SUCCESS;
 }
@@ -3890,7 +3899,7 @@ DEFUN (no_debug_pim_packets,
 
 DEFUN (no_debug_pim_packets_filter,
        no_debug_pim_packets_filter_cmd,
-       "no debug pim packets (hello|joins)",
+       "no debug pim packets (hello|joins|register)",
        NO_STR
        DEBUG_STR
        DEBUG_PIM_STR
@@ -3907,6 +3916,11 @@ DEFUN (no_debug_pim_packets_filter,
     {
       PIM_DONT_DEBUG_PIM_J_P;
       vty_out (vty, "PIM Join/Prune debugging is off %s", VTY_NEWLINE);
+    }
+    else if (strncmp (argv[0], "r", 1) == 0)
+    {
+      PIM_DONT_DEBUG_PIM_REG;
+      vty_out (vty, "PIM Register debugging is off%s", VTY_NEWLINE);
     }
     return CMD_SUCCESS;
 }
