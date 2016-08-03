@@ -3853,22 +3853,28 @@ DEFUN (debug_pim_packets,
 
 DEFUN (debug_pim_packets_filter,
        debug_pim_packets_filter_cmd,
-       "debug pim packets (hello|joins)",
+       "debug pim packets (hello|joins|register)",
        DEBUG_STR
        DEBUG_PIM_STR
        DEBUG_PIM_PACKETS_STR
        DEBUG_PIM_HELLO_PACKETS_STR
-       DEBUG_PIM_J_P_PACKETS_STR)
+       DEBUG_PIM_J_P_PACKETS_STR
+       DEBUG_PIM_PIM_REG_PACKETS_STR)
 {
     if (strncmp(argv[0],"h",1) == 0) 
     {
       PIM_DO_DEBUG_PIM_HELLO;
-      vty_out (vty, "PIM Hello debugging is on %s", VTY_NEWLINE);
+      vty_out (vty, "PIM Hello debugging is on%s", VTY_NEWLINE);
     }
     else if (strncmp(argv[0],"j",1) == 0)
     {
       PIM_DO_DEBUG_PIM_J_P;
-      vty_out (vty, "PIM Join/Prune debugging is on %s", VTY_NEWLINE);
+      vty_out (vty, "PIM Join/Prune debugging is on%s", VTY_NEWLINE);
+    }
+    else if (strncmp(argv[0],"r",1) == 0)
+    {
+      PIM_DO_DEBUG_PIM_REG;
+      vty_out (vty, "PIM Register debugging is on%s", VTY_NEWLINE);
     }
   return CMD_SUCCESS;
 }
@@ -3890,7 +3896,7 @@ DEFUN (no_debug_pim_packets,
 
 DEFUN (no_debug_pim_packets_filter,
        no_debug_pim_packets_filter_cmd,
-       "no debug pim packets (hello|joins)",
+       "no debug pim packets (hello|joins|register)",
        NO_STR
        DEBUG_STR
        DEBUG_PIM_STR
@@ -3907,6 +3913,11 @@ DEFUN (no_debug_pim_packets_filter,
     {
       PIM_DONT_DEBUG_PIM_J_P;
       vty_out (vty, "PIM Join/Prune debugging is off %s", VTY_NEWLINE);
+    }
+    else if (strncmp (argv[0], "r", 1) == 0)
+    {
+      PIM_DONT_DEBUG_PIM_REG;
+      vty_out (vty, "PIM Register debugging is off%s", VTY_NEWLINE);
     }
     return CMD_SUCCESS;
 }
