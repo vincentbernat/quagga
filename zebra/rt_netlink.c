@@ -1298,7 +1298,6 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
   int len;
   struct rtmsg *rtm;
   struct rtattr *tb[RTA_MAX + 1];
-  struct rtnexthop *rtnh;
 
   rtm = NLMSG_DATA (h);
 
