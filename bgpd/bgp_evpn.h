@@ -23,31 +23,33 @@
 #define _QUAGGA_BGP_EVPN_H
 
 #include "vxlan.h"
+#include "zebra.h"
+#include "hash.h"
+#include "vty.h"
 
+#include "bgpd/bgpd.h"
+
+/* EVPN route types. */
 typedef enum
 {
-    BGP_RT_IMPORT,
-    BGP_RT_EXPORT,
-    BGP_RT_BOTH
-} bgp_rt_type;
+  BGP_EVPN_AD_ROUTE = 1,          /* Ethernet Auto-Discovery (A-D) route */
+  BGP_EVPN_MAC_IP_ROUTE,          /* MAC/IP Advertisement route */
+  BGP_EVPN_IMET_ROUTE,            /* Inclusive Multicast Ethernet Tag route */
+  BGP_EVPN_ES_ROUTE,              /* Ethernet Segment route */
+  BGP_EVPN_IP_PREFIX_ROUTE,       /* IP Prefix route */
+} bgp_evpn_route_type;
 
-struct bgpevpn
-{
-    struct bgp *bgp;
-    vni_t vni;
-    int flag;
-    struct prefix_rd prd;
-    bgp_rt_type rt_type;
-    struct prefix_rd rt_prd;
-};
-
-#define RD_TYPE 2
-#define RD_VAL  8
-
-extern void bgp_evpn_init (struct bgp *);
 extern void bgp_evpn_update_vni (struct bgp*, vni_t, int);
-extern void bgp_evpn_update_rd_rt (struct bgp *, struct bgpevpn *);
-extern struct bgpevpn *bgp_evpn_lookup_vpn (struct bgp *, vni_t);
+extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni);
+extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
+extern void bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty);
+extern void bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
+           struct prefix_rd *prd, int addpath_encode, u_int32_t addpath_tx_id);
+extern int bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
+                                 u_char *pnt, bgp_size_t length, int *numpfx);
+extern int bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr,
+                                struct bgp_nlri *packet);
+extern void bgp_evpn_init (struct bgp *);
 extern void bgp_evpn_cleanup (struct bgp *bgp);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

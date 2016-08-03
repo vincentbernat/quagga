@@ -295,6 +295,10 @@ extern u_char bgp_distance_apply (struct prefix *, struct bgp_info *, struct bgp
 extern afi_t bgp_node_afi (struct vty *);
 extern safi_t bgp_node_safi (struct vty *);
 
+struct bgp_info *
+info_make (int type, int sub_type, u_short instance, struct peer *peer,
+           struct attr *attr, struct bgp_node *rn);
+
 extern void route_vty_out (struct vty *, struct prefix *, struct bgp_info *, int, safi_t, json_object *);
 extern void route_vty_out_tag (struct vty *, struct prefix *, struct bgp_info *, int, safi_t, json_object *);
 extern void route_vty_out_tmp (struct vty *, struct prefix *, struct attr *, safi_t, u_char, json_object *);

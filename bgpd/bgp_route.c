@@ -2120,7 +2120,7 @@ bgp_rib_withdraw (struct bgp_node *rn, struct bgp_info *ri, struct peer *peer,
   bgp_rib_remove (rn, ri, peer, afi, safi);
 }
 
-static struct bgp_info *
+struct bgp_info *
 info_make (int type, int sub_type, u_short instance, struct peer *peer, struct attr *attr,
 	   struct bgp_node *rn)
 {

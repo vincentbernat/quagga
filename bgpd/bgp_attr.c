@@ -42,6 +42,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_encap_types.h"
+#include "bgpd/bgp_evpn.h"
 
 /* Attribute strings for logging. */
 static const struct message attr_str [] = 
@@ -1804,16 +1805,20 @@ bgp_mp_reach_parse (struct bgp_attr_parser_args *args,
       return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
     }
  
-  if (safi != SAFI_MPLS_VPN)
+  if (safi == SAFI_EVPN)
+    ret = bgp_evpn_nlri_sanity_check (peer, afi, safi, stream_pnt (s),
+                                      nlri_len, &num_mp_pfx);
+  else if (safi == SAFI_MPLS_VPN)
+    ret = 0; // No checks implemented
+  else
+    ret = bgp_nlri_sanity_check (peer, afi, safi, stream_pnt (s),
+                                 nlri_len, &num_mp_pfx);
+
+  if (ret < 0)
     {
-      ret = bgp_nlri_sanity_check (peer, afi, safi, stream_pnt (s),
-                                   nlri_len, &num_mp_pfx);
-      if (ret < 0) 
-        {
-          zlog_info ("%s: (%s) NLRI doesn't pass sanity check",
-                     __func__, peer->host);
-	  return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
-	}
+      zlog_info ("%s: (%s) NLRI doesn't pass sanity check",
+                 __func__, peer->host);
+      return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
     }
 
   mp_update->afi = afi;
@@ -1866,13 +1871,16 @@ bgp_mp_unreach_parse (struct bgp_attr_parser_args *args,
 
   withdraw_len = length - BGP_MP_UNREACH_MIN_SIZE;
 
-  if (safi != SAFI_MPLS_VPN)
-    {
-      ret = bgp_nlri_sanity_check (peer, afi, safi, stream_pnt (s),
-				   withdraw_len, &num_mp_pfx);
-      if (ret < 0)
-	return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
-    }
+  if (safi == SAFI_EVPN)
+    ret = bgp_evpn_nlri_sanity_check (peer, afi, safi, stream_pnt (s),
+                                      withdraw_len, &num_mp_pfx);
+  else if (safi == SAFI_MPLS_VPN)
+    ret = 0; // No checks implemented
+  else
+    ret = bgp_nlri_sanity_check (peer, afi, safi, stream_pnt (s),
+                                 withdraw_len, &num_mp_pfx);
+  if (ret < 0)
+    return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
 
   mp_withdraw->afi = afi;
   mp_withdraw->safi = safi;
@@ -2575,6 +2583,18 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi, int enhe,
 	break;
       }
       break;
+    case AFI_L2VPN:
+      switch (safi)
+      {
+	case SAFI_EVPN:
+	  bpacket_attr_vec_arr_set_vec (vecarr, BGP_ATTR_VEC_NH, s, attr);
+	  stream_putc (s, 4);
+	  stream_put_ipv4 (s, attr->nexthop.s_addr);
+	  break;
+	default:
+	  break;
+      }
+      break;
     default:
       break;
     }
@@ -2600,6 +2620,8 @@ bgp_packet_mpattr_prefix (struct stream *s, afi_t afi, safi_t safi,
       stream_put (s, prd->val, 8);
       stream_put (s, &p->u.prefix, PSIZE (p->prefixlen));
     }
+  else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
+    bgp_evpn_encode_prefix (s, p, prd, addpath_encode, addpath_tx_id);
   else
     stream_put_prefix_addpath (s, p, addpath_encode, addpath_tx_id);
 }
@@ -2610,6 +2632,8 @@ bgp_packet_mpattr_prefix_size (afi_t afi, safi_t safi, struct prefix *p)
   int size = PSIZE (p->prefixlen);
   if (safi == SAFI_MPLS_VPN)
       size += 88;
+  else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
+      size += 232; // TODO: Maximum possible for type-2 and type-3
   return size;
 }
 
@@ -3135,6 +3159,8 @@ bgp_packet_mpunreach_prefix (struct stream *s, struct prefix *p,
       stream_put (s, prd->val, 8);
       stream_put (s, &p->u.prefix, PSIZE (p->prefixlen));
     }
+  else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
+    bgp_evpn_encode_prefix (s, p, prd, addpath_encode, addpath_tx_id);
   else
     stream_put_prefix_addpath (s, p, addpath_encode, addpath_tx_id);
 }

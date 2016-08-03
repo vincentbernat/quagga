@@ -51,6 +51,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_vty.h"
 #include "bgpd/bgp_updgrp.h"
+#if defined(HAVE_EVPN)
+#include "bgpd/bgp_evpn.h"
+#endif
+
 
 /* Set up BGP packet marker and packet type. */
 int
@@ -1755,6 +1759,37 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	    zlog_debug ("rcvd End-of-RIB for IPv6 Encap from %s", peer->host);
 	}
     }
+#if defined(HAVE_EVPN)
+  if (peer->afc[AFI_L2VPN][SAFI_EVPN])
+    {
+      if (mp_update.length
+          && mp_update.afi == AFI_L2VPN
+          && mp_update.safi == SAFI_EVPN)
+        bgp_evpn_nlri_parse (peer, NLRI_ATTR_ARG, &mp_update);
+
+      if (mp_withdraw.length
+          && mp_withdraw.afi == AFI_L2VPN
+          && mp_withdraw.safi == SAFI_EVPN)
+	bgp_evpn_nlri_parse (peer, NULL, &mp_withdraw);
+
+      if (! withdraw_len
+          && mp_withdraw.afi == AFI_L2VPN
+          && mp_withdraw.safi == SAFI_EVPN
+          && mp_withdraw.length == 0)
+        {
+          /* End-of-RIB received */
+          if (!CHECK_FLAG (peer->af_sflags[AFI_L2VPN][SAFI_EVPN],
+                           PEER_STATUS_EOR_RECEIVED))
+            {
+              SET_FLAG (peer->af_sflags[AFI_L2VPN][SAFI_EVPN], PEER_STATUS_EOR_RECEIVED);
+              bgp_update_explicit_eors(peer);
+            }
+
+          if (bgp_debug_neighbor_events(peer))
+            zlog_debug ("rcvd End-of-RIB for EVPN from %s", peer->host);
+        }
+    }
+#endif
 
   /* Everything is done.  We unintern temporary structures which
      interned in bgp_attr_parse(). */

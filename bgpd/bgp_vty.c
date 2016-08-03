@@ -13862,13 +13862,6 @@ DEFUN (show_ip_bgp_instance_peer_group,
   return bgp_show_peer_group_vty (vty, argv[1], show_peer_group, argv[2]);
 }
 
-static void
-bgp_evpn_show_all_vni_iterator (struct hash_backet *backet, struct vty *vty)
-{
-  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
-  vty_out (vty, "%d     %s%s", vpn->vni, "local", VTY_NEWLINE);
-}
-
 DEFUN (show_bgp_evpn_vni,
        show_bgp_evpn_vni_cmd,
        "show bgp evpn vni",
@@ -13887,7 +13880,7 @@ DEFUN (show_bgp_evpn_vni,
 
       hash_iterate (bgp->vnihash,
                     (void (*) (struct hash_backet *, void *))
-                    bgp_evpn_show_all_vni_iterator,
+                    bgp_evpn_show_vni,
                     vty);
     }
   return CMD_SUCCESS;
