@@ -24,6 +24,14 @@ Boston, MA 02111-1307, USA.  */
 #define BGP_NEXTHOP_BUF_SIZE (8 * sizeof (struct in_addr *))
 #define BGP_IFINDICES_BUF_SIZE (8 * sizeof (unsigned int))
 
+/* Information for route install BGP to zebra - per AFI/SAFI */
+struct bgp_route_install_info
+{
+  int install_route;
+  int (*install_fn) (struct bgp *, afi_t, safi_t, struct prefix *, struct bgp_info *);
+  int (*uninstall_fn) (struct bgp *, afi_t, safi_t, struct prefix *, struct bgp_info *);
+};
+
 extern struct stream *bgp_nexthop_buf;
 extern struct stream *bgp_ifindices_buf;
 
@@ -34,10 +42,9 @@ extern int bgp_config_write_maxpaths (struct vty *, struct bgp *, afi_t,
 				      safi_t, int *);
 extern int bgp_config_write_redistribute (struct vty *, struct bgp *, afi_t, safi_t,
 				   int *);
-extern void bgp_zebra_announce (struct prefix *, struct bgp_info *, struct bgp *,
-                                afi_t, safi_t);
+extern int bgp_zebra_announce (struct bgp *, afi_t, safi_t, struct prefix *, struct bgp_info *);
 extern void bgp_zebra_announce_table (struct bgp *, afi_t, safi_t);
-extern void bgp_zebra_withdraw (struct prefix *, struct bgp_info *, safi_t);
+extern int bgp_zebra_withdraw (struct bgp *, afi_t, safi_t, struct prefix *, struct bgp_info *);
 
 extern void bgp_zebra_initiate_radv (struct bgp *bgp, struct peer *peer);
 extern void bgp_zebra_terminate_radv (struct bgp *bgp, struct peer *peer);
@@ -62,7 +69,7 @@ extern struct interface *if_lookup_by_ipv6 (struct in6_addr *, unsigned int, vrf
 extern struct interface *if_lookup_by_ipv6_exact (struct in6_addr *, unsigned int, vrf_id_t);
 #endif /* HAVE_IPV6 */
 
-extern const int bgp_zebra_route_install[AFI_MAX][SAFI_MAX];
+extern const struct bgp_route_install_info bgp_zebra_route_install[AFI_MAX][SAFI_MAX];
 
 /* Should this route be announced to (or withdrawn from) the RIB? */
 static inline int
@@ -72,6 +79,6 @@ is_bgp_zebra_rib_route (struct bgp *bgp, afi_t afi, safi_t safi)
       || bgp_option_check (BGP_OPT_NO_FIB))
     return 0;
 
-  return bgp_zebra_route_install[afi][safi];
+  return bgp_zebra_route_install[afi][safi].install_route;
 }
 #endif /* _QUAGGA_BGP_ZEBRA_H */

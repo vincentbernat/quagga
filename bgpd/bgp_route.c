@@ -1836,7 +1836,7 @@ bgp_process_main (struct work_queue *wq, void *data)
           CHECK_FLAG (old_select->flags, BGP_INFO_MULTIPATH_CHG))
         {
           if (is_bgp_zebra_rib_route (bgp, afi, safi))
-            bgp_zebra_announce (p, old_select, bgp, afi, safi);
+            bgp_zebra_announce (bgp, afi, safi, p, old_select);
         }
           
       UNSET_FLAG (old_select->flags, BGP_INFO_MULTIPATH_CHG);
@@ -1879,7 +1879,7 @@ bgp_process_main (struct work_queue *wq, void *data)
 	  && new_select->type == ZEBRA_ROUTE_BGP 
 	  && (new_select->sub_type == BGP_ROUTE_NORMAL ||
               new_select->sub_type == BGP_ROUTE_AGGREGATE))
-	bgp_zebra_announce (p, new_select, bgp, afi, safi);
+	bgp_zebra_announce (bgp, afi, safi, p, new_select);
       else
 	{
 	  /* Withdraw the route from the kernel. */
@@ -1887,7 +1887,7 @@ bgp_process_main (struct work_queue *wq, void *data)
 	      && old_select->type == ZEBRA_ROUTE_BGP
 	      && (old_select->sub_type == BGP_ROUTE_NORMAL ||
                   old_select->sub_type == BGP_ROUTE_AGGREGATE))
-	    bgp_zebra_withdraw (p, old_select, safi);
+	    bgp_zebra_withdraw (bgp, afi, safi, p, old_select);
 	}
     }
     
@@ -2155,7 +2155,8 @@ bgp_update_martian_nexthop (struct bgp *bgp, afi_t afi, safi_t safi, struct attr
   int ret = 0;
 
   /* Only validated for unicast and multicast currently. */
-  if (safi != SAFI_UNICAST && safi != SAFI_MULTICAST)
+  /* Also valid for EVPN where the nexthop is an IP address. */
+  if (safi != SAFI_UNICAST && safi != SAFI_MULTICAST && safi != SAFI_EVPN)
     return 0;
 
   /* If NEXT_HOP is present, validate it. */
@@ -3068,7 +3069,8 @@ bgp_clear_stale_route (struct peer *peer, afi_t afi, safi_t safi)
 }
 
 static void
-bgp_cleanup_table(struct bgp_table *table, safi_t safi)
+bgp_cleanup_table(struct bgp_table *table, struct bgp *bgp,
+                  afi_t afi, safi_t safi)
 {
   struct bgp_node *rn;
   struct bgp_info *ri;
@@ -3082,7 +3084,7 @@ bgp_cleanup_table(struct bgp_table *table, safi_t safi)
             && ri->type == ZEBRA_ROUTE_BGP
             && (ri->sub_type == BGP_ROUTE_NORMAL ||
                 ri->sub_type == BGP_ROUTE_AGGREGATE))
-          bgp_zebra_withdraw (&rn->p, ri, safi);
+          bgp_zebra_withdraw (bgp, afi, safi, &rn->p, ri);
       }
 }
 
@@ -3101,7 +3103,7 @@ bgp_cleanup_routes (void)
         for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
           {
             if (is_bgp_zebra_rib_route (bgp, afi, safi))
-	      bgp_cleanup_table(bgp->rib[afi][safi], safi);
+	      bgp_cleanup_table(bgp->rib[afi][safi], bgp, afi, safi);
           }
     }
 }
