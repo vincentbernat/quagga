@@ -2440,8 +2440,10 @@ netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int
   if (cmd == RTM_NEWNEIGH)
     req.n.nlmsg_flags |= NLM_F_CREATE;
   req.n.nlmsg_type = cmd;
-  req.ndm.ndm_family = AF_BRIDGE;
+  req.ndm.ndm_family = PF_BRIDGE;
   req.ndm.ndm_state = NUD_NOARP | NUD_PERMANENT;
+  req.ndm.ndm_flags |= NTF_SELF; // Handle by "self", not "master"
+
 
   addattr_l (&req.n, sizeof (req), NDA_LLADDR, &dst_mac, 6);
   req.ndm.ndm_ifindex = ifp->ifindex;
