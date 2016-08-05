@@ -2474,13 +2474,15 @@ DEFUN (ip_pim_rp,
 {
   int result;
 
-  result = inet_pton(AF_INET, argv[0], &qpim_rp.rpf_addr.s_addr);
-  if (result <= 0) {
-    vty_out(vty, "%% Bad RP address specified: %s", argv[0]);
-    return CMD_WARNING;
-  }
+  result = pim_rp_new (argv[0], argv[1]);
 
-  if (!pim_rp_setup ())
+  if (result == -1)
+    {
+      vty_out(vty, "%% Bad RP address specified: %s", argv[0]);
+      return CMD_ERR_NO_MATCH;
+    }
+
+  if (result == -2)
     {
       vty_out(vty, "%% No Path to RP address specified: %s", argv[0]);
       return CMD_WARNING;
@@ -2489,16 +2491,25 @@ DEFUN (ip_pim_rp,
   return CMD_SUCCESS;
 }
 
+ALIAS (ip_pim_rp,
+       ip_pim_rp_group_cmd,
+       "ip pim rp A.B.C.D A.B.C.D/M",
+       IP_STR
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "ip address of RP\n"
+       "Range of Group\n")
+
 DEFUN (no_ip_pim_rp,
        no_ip_pim_rp_cmd,
-       "no ip pim rp {A.B.C.D}",
+       "no ip pim rp A.B.C.D {A.B.C.D/M}",
        NO_STR
        IP_STR
        "pim multicast routing\n"
        "Rendevous Point\n"
        "ip address of RP\n")
 {
-  qpim_rp.rpf_addr.s_addr = INADDR_NONE;
+  pim_rp_del (argv[0], argv[1]);
 
   return CMD_SUCCESS;
 }
@@ -4810,14 +4821,11 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &ip_multicast_routing_cmd);
   install_element (CONFIG_NODE, &no_ip_multicast_routing_cmd);
   install_element (CONFIG_NODE, &ip_pim_rp_cmd);
+  install_element (CONFIG_NODE, &ip_pim_rp_group_cmd);
   install_element (CONFIG_NODE, &no_ip_pim_rp_cmd);
   install_element (CONFIG_NODE, &ip_ssmpingd_cmd);
   install_element (CONFIG_NODE, &no_ip_ssmpingd_cmd); 
-#if 0
-  install_element (CONFIG_NODE, &interface_cmd); /* from if.h */
-#else
   install_element (CONFIG_NODE, &pim_interface_cmd);
-#endif
   install_element (CONFIG_NODE, &no_interface_cmd); /* from if.h */
 
   install_default (INTERFACE_NODE);
