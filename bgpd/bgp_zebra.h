@@ -81,4 +81,6 @@ is_bgp_zebra_rib_route (struct bgp *bgp, afi_t afi, safi_t safi)
 
   return bgp_zebra_route_install[afi][safi].install_route;
 }
+
+extern int bgp_zebra_advertise_vni (struct bgp *, int); 
 #endif /* _QUAGGA_BGP_ZEBRA_H */

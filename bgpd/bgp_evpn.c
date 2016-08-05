@@ -38,6 +38,7 @@
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
+#include "bgpd/bgp_zebra.h"
 
 #define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
 
@@ -510,7 +511,6 @@ void
 bgp_evpn_init (struct bgp *bgp)
 {
   bgp->vnihash = hash_create(vni_hash_key_make, vni_hash_cmp);
-  bgp->advertise_vni = 1; // TODO: Temporary initialization
 }
 
 /*
@@ -527,6 +527,15 @@ bgp_evpn_cleanup (struct bgp *bgp)
                 bgp);
   hash_free(bgp->vnihash);
   bgp->vnihash = NULL;
+}
+
+/* Function to register/deregister advertise_vni with zebra */
+void
+bgp_evpn_update_advertise_vni (struct bgp *bgp)
+{
+ zlog_debug("%s:Update advertise vni flag:%d in zebra\n", __FUNCTION__,
+                                                        bgp->advertise_vni);
+ bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
 }
 
 #else
@@ -583,4 +592,8 @@ bgp_evpn_cleanup (struct bgp *bgp)
 {
 }
 
+void
+bgp_evpn_update_advertise_vni (struct bgp *bgp)
+{
+}
 #endif /* HAVE_EVPN */

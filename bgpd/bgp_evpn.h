@@ -51,5 +51,6 @@ extern int bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr,
                                 struct bgp_nlri *packet);
 extern void bgp_evpn_init (struct bgp *);
 extern void bgp_evpn_cleanup (struct bgp *bgp);
+extern void bgp_evpn_update_advertise_vni (struct bgp *);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

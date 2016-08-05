@@ -203,7 +203,7 @@ bgp_read_import_check_update(int command, struct zclient *zclient,
   return 0;
 }
 
-static int
+int
 bgp_zebra_advertise_vni (struct bgp *bgp, int advertise_vni)
 {
 #if defined(HAVE_EVPN)
