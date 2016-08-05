@@ -143,6 +143,7 @@ struct sioc_vif_req {
 #define IGMPMSG_NOCACHE         1               /* Kern cache fill request to mrouted */
 #define IGMPMSG_WRONGVIF        2               /* For PIM assert processing (unused) */
 #define IGMPMSG_WHOLEPKT        3               /* For PIM Register processing */
+#define IGMPMSG_WRVIFWHOLE      4
 #endif
 
 #ifndef HAVE_STRUCT_IGMPMSG
