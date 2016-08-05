@@ -2464,6 +2464,34 @@ DEFUN (show_ip_ssmpingd,
   return CMD_SUCCESS;
 }
 
+static int
+pim_rp_cmd_worker (struct vty *vty, const char *rp, const char *group)
+{
+  int result;
+
+  result = pim_rp_new (rp, group);
+
+  if (result == -1)
+    {
+      vty_out (vty, "%% Bad RP/group address specified: %s", rp);
+      return CMD_WARNING;
+    }
+
+  if (result == -2)
+    {
+      vty_out (vty, "%% No Path to RP address specified: %s", rp);
+      return CMD_WARNING;
+    }
+
+  if (result == -3)
+    {
+      vty_out (vty, "%% Group range specified cannot overlap");
+      return CMD_ERR_NO_MATCH;
+    }
+
+  return CMD_SUCCESS;
+
+}
 DEFUN (ip_pim_rp,
        ip_pim_rp_cmd,
        "ip pim rp A.B.C.D",
@@ -2472,46 +2500,51 @@ DEFUN (ip_pim_rp,
        "Rendevous Point\n"
        "ip address of RP\n")
 {
-  int result;
+  return pim_rp_cmd_worker (vty, argv[0], NULL);
+}
 
-  result = pim_rp_new (argv[0], argv[1]);
+DEFUN (ip_pim_rp_range,
+       ip_pim_rp_range_cmd,
+       "ip pim rp A.B.C.D A.B.C.D/M",
+       IP_STR
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "ip address of RP\n"
+       "Group range for RP\n")
+{
+  return pim_rp_cmd_worker (vty, argv[0], argv[1]);
+}
+
+static int
+pim_no_rp_cmd_worker (struct vty *vty, const char *rp, const char *group)
+{
+  int result = pim_rp_del (rp, group);
 
   if (result == -1)
     {
-      vty_out(vty, "%% Bad RP address specified: %s", argv[0]);
-      return CMD_ERR_NO_MATCH;
+      vty_out (vty, "%% Unable to Decode specified RP");
+      return CMD_WARNING;
     }
 
   if (result == -2)
     {
-      vty_out(vty, "%% No Path to RP address specified: %s", argv[0]);
+      vty_out (vty, "%% Unable to find specified RP");
       return CMD_WARNING;
     }
 
   return CMD_SUCCESS;
 }
 
-ALIAS (ip_pim_rp,
-       ip_pim_rp_group_cmd,
-       "ip pim rp A.B.C.D A.B.C.D/M",
-       IP_STR
-       "pim multicast routing\n"
-       "Rendevous Point\n"
-       "ip address of RP\n"
-       "Range of Group\n")
-
-DEFUN (no_ip_pim_rp,
-       no_ip_pim_rp_cmd,
-       "no ip pim rp A.B.C.D {A.B.C.D/M}",
+DEFUN (no_ip_pim_rp_range,
+       no_ip_pim_rp_range_cmd,
+       "no ip pim rp A.B.C.D A.B.C.D/M",
        NO_STR
        IP_STR
        "pim multicast routing\n"
        "Rendevous Point\n"
        "ip address of RP\n")
 {
-  pim_rp_del (argv[0], argv[1]);
-
-  return CMD_SUCCESS;
+  return pim_no_rp_cmd_worker (vty, argv[0], argv[1]);
 }
 
 DEFUN (ip_multicast_routing,
@@ -4821,8 +4854,8 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &ip_multicast_routing_cmd);
   install_element (CONFIG_NODE, &no_ip_multicast_routing_cmd);
   install_element (CONFIG_NODE, &ip_pim_rp_cmd);
-  install_element (CONFIG_NODE, &ip_pim_rp_group_cmd);
-  install_element (CONFIG_NODE, &no_ip_pim_rp_cmd);
+  install_element (CONFIG_NODE, &ip_pim_rp_range_cmd);
+  install_element (CONFIG_NODE, &no_ip_pim_rp_range_cmd);
   install_element (CONFIG_NODE, &ip_ssmpingd_cmd);
   install_element (CONFIG_NODE, &no_ip_ssmpingd_cmd); 
   install_element (CONFIG_NODE, &pim_interface_cmd);

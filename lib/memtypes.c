@@ -291,6 +291,7 @@ struct memory_list memory_list_pim[] =
   { MTYPE_PIM_SSMPINGD,          "PIM sspimgd socket"             },
   { MTYPE_PIM_STATIC_ROUTE,      "PIM Static Route"               },
   { MTYPE_PIM_BR,                "PIM Bridge Router info"         },
+  { MTYPE_PIM_RP,                "PIM RP info"                    },
   { -1, NULL },
 };
 
