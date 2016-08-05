@@ -776,11 +776,7 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   ifa = NLMSG_DATA (h);
 
-  if (ifa->ifa_family != AF_INET
-#ifdef HAVE_IPV6
-      && ifa->ifa_family != AF_INET6
-#endif /* HAVE_IPV6 */
-    )
+  if (ifa->ifa_family != AF_INET && ifa->ifa_family != AF_INET6)
     return 0;
 
   if (h->nlmsg_type != RTM_NEWADDR && h->nlmsg_type != RTM_DELADDR)
@@ -880,7 +876,6 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h,
                                (struct in_addr *) addr, ifa->ifa_prefixlen,
                                (struct in_addr *) broad);
     }
-#ifdef HAVE_IPV6
   if (ifa->ifa_family == AF_INET6)
     {
       if (h->nlmsg_type == RTM_NEWADDR)
@@ -898,7 +893,6 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h,
                                (struct in6_addr *) addr, ifa->ifa_prefixlen,
                                (struct in6_addr *) broad);
     }
-#endif /* HAVE_IPV6 */
 
   return 0;
 }
@@ -1057,7 +1051,6 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
             rib_add_ipv4_multipath (&p, rib, SAFI_UNICAST);
         }
     }
-#ifdef HAVE_IPV6
   if (rtm->rtm_family == AF_INET6)
     {
       struct prefix_ipv6 p;
@@ -1068,7 +1061,6 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
       rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, 0, flags, &p, gate, index, vrf_id,
                     table, metric, 0, SAFI_UNICAST);
     }
-#endif /* HAVE_IPV6 */
 
   return 0;
 }
@@ -1085,13 +1077,28 @@ static const struct message rtproto_str[] = {
 #ifdef RTPROT_BIRD
   {RTPROT_BIRD,     "BIRD"},
 #endif /* RTPROT_BIRD */
+  {RTPROT_MROUTED,  "mroute"},
   {0,               NULL}
+};
+
+static const struct message family_str[] = {
+  {AF_INET,           "ipv4"},
+  {AF_INET6,          "ipv6"},
+  {RTNL_FAMILY_IPMR,  "ipv4MR"},
+  {RTNL_FAMILY_IP6MR, "ipv6MR"},
+  {0,                 NULL},
+};
+
+static const struct message rttype_str[] = {
+  {RTN_UNICAST,   "unicast"},
+  {RTN_MULTICAST, "multicast"},
+  {0,             NULL},
 };
 
 /* Routing information change from the kernel. */
 static int
-netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                      ns_id_t ns_id)
+netlink_route_change_read_unicast (struct sockaddr_nl *snl, struct nlmsghdr *h,
+				   ns_id_t ns_id)
 {
   int len;
   struct rtmsg *rtm;
@@ -1112,31 +1119,7 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   rtm = NLMSG_DATA (h);
 
-  if (!(h->nlmsg_type == RTM_NEWROUTE || h->nlmsg_type == RTM_DELROUTE))
-    {
-      /* If this is not route add/delete message print warning. */
-      zlog_warn ("Kernel message: %d vrf %u\n", h->nlmsg_type, vrf_id);
-      return 0;
-    }
-
-  /* Connected route. */
-  if (IS_ZEBRA_DEBUG_KERNEL)
-    zlog_debug ("%s %s %s proto %s vrf %u",
-               h->nlmsg_type ==
-               RTM_NEWROUTE ? "RTM_NEWROUTE" : "RTM_DELROUTE",
-               rtm->rtm_family == AF_INET ? "ipv4" : "ipv6",
-               rtm->rtm_type == RTN_UNICAST ? "unicast" : "multicast",
-               lookup (rtproto_str, rtm->rtm_protocol),
-               vrf_id);
-
-  if (rtm->rtm_type != RTN_UNICAST)
-    {
-      return 0;
-    }
-
   len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct rtmsg));
-  if (len < 0)
-    return -1;
 
   memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
@@ -1281,7 +1264,6 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                          vrf_id, table, SAFI_UNICAST);
     }
 
-#ifdef HAVE_IPV6
   if (rtm->rtm_family == AF_INET6)
     {
       struct prefix_ipv6 p;
@@ -1305,7 +1287,71 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
         rib_delete_ipv6 (ZEBRA_ROUTE_KERNEL, 0, zebra_flags, &p, gate, index,
                          vrf_id, table, SAFI_UNICAST);
     }
-#endif /* HAVE_IPV6 */
+
+  return 0;
+}
+
+static int
+netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h,
+				     ns_id_t ns_id)
+{
+  int len;
+  struct rtmsg *rtm;
+  struct rtattr *tb[RTA_MAX + 1];
+
+  rtm = NLMSG_DATA (h);
+
+  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct rtmsg));
+
+  memset (tb, 0, sizeof tb);
+  netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
+
+  return 0;
+}
+
+static int
+netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
+		      ns_id_t ns_id)
+{
+  int len;
+  vrf_id_t vrf_id = ns_id;
+  struct rtmsg *rtm;
+
+  rtm = NLMSG_DATA (h);
+
+  if (!(h->nlmsg_type == RTM_NEWROUTE || h->nlmsg_type == RTM_DELROUTE))
+    {
+      /* If this is not route add/delete message print warning. */
+      zlog_warn ("Kernel message: %d vrf %u\n", h->nlmsg_type, vrf_id);
+      return 0;
+    }
+
+  /* Connected route. */
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_debug ("%s %s %s proto %s vrf %u",
+               h->nlmsg_type ==
+               RTM_NEWROUTE ? "RTM_NEWROUTE" : "RTM_DELROUTE",
+               lookup (family_str, rtm->rtm_family),
+               rtm->rtm_type == RTN_UNICAST ? "unicast" : "multicast",
+               lookup (rtproto_str, rtm->rtm_protocol),
+               vrf_id);
+
+  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct rtmsg));
+  if (len < 0)
+    return -1;
+
+  switch (rtm->rtm_type)
+    {
+    case RTN_UNICAST:
+      netlink_route_change_read_unicast (snl, h, ns_id);
+      break;
+    case RTN_MULTICAST:
+      netlink_route_change_read_multicast (snl, h, ns_id);
+      break;
+    default:
+      return 0;
+      break;
+    }
 
   return 0;
 }
@@ -1588,7 +1634,6 @@ interface_lookup_netlink (struct zebra_ns *zns)
   if (ret < 0)
     return ret;
 
-#ifdef HAVE_IPV6
   /* Get IPv6 address of the interfaces. */
   ret = netlink_request (AF_INET6, RTM_GETADDR, &zns->netlink_cmd);
   if (ret < 0)
@@ -1596,7 +1641,6 @@ interface_lookup_netlink (struct zebra_ns *zns)
   ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0);
   if (ret < 0)
     return ret;
-#endif /* HAVE_IPV6 */
 
   return 0;
 }
@@ -1616,7 +1660,6 @@ netlink_route_read (struct zebra_ns *zns)
   if (ret < 0)
     return ret;
 
-#ifdef HAVE_IPV6
   /* Get IPv6 routing table. */
   ret = netlink_request (AF_INET6, RTM_GETROUTE, &zns->netlink_cmd);
   if (ret < 0)
@@ -1624,7 +1667,6 @@ netlink_route_read (struct zebra_ns *zns)
   ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0);
   if (ret < 0)
     return ret;
-#endif /* HAVE_IPV6 */
 
   return 0;
 }
@@ -2385,7 +2427,6 @@ kernel_delete_ipv4 (struct prefix *p, struct rib *rib)
   return netlink_route_multipath (RTM_DELROUTE, p, rib, AF_INET, 0);
 }
 
-#ifdef HAVE_IPV6
 int
 kernel_add_ipv6 (struct prefix *p, struct rib *rib)
 {
@@ -2412,7 +2453,6 @@ kernel_delete_ipv6 (struct prefix *p, struct rib *rib)
       return netlink_route_multipath (RTM_DELROUTE, p, rib, AF_INET6, 0);
     }
 }
-#endif /* HAVE_IPV6 */
 
 #if defined(HAVE_EVPN)
 /*
@@ -2572,9 +2612,9 @@ kernel_init (struct zebra_ns *zns)
   unsigned long groups;
 
   groups = RTMGRP_LINK | RTMGRP_IPV4_ROUTE | RTMGRP_IPV4_IFADDR;
-#ifdef HAVE_IPV6
   groups |= RTMGRP_IPV6_ROUTE | RTMGRP_IPV6_IFADDR;
-#endif /* HAVE_IPV6 */
+  groups |= RTMGRP_IPV4_MROUTE;
+
   netlink_socket (&zns->netlink, groups, zns->ns_id);
   netlink_socket (&zns->netlink_cmd, 0, zns->ns_id);
 

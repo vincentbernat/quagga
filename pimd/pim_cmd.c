@@ -128,11 +128,11 @@ static void pim_if_membership_refresh(struct interface *ifp)
       for (ALL_LIST_ELEMENTS_RO(grp->group_source_list, srcnode, src)) {
 
 	if (IGMP_SOURCE_TEST_FORWARDING(src->source_flags)) {
-	  struct prefix sg;
+	  struct prefix_sg sg;
 
-	  memset (&sg, 0, sizeof (struct prefix));
-	  sg.u.sg.src = src->source_addr;
-	  sg.u.sg.grp = grp->group_addr;
+	  memset (&sg, 0, sizeof (struct prefix_sg));
+	  sg.src = src->source_addr;
+	  sg.grp = grp->group_addr;
 	  pim_ifchannel_local_membership_add(ifp, &sg);
 	}
 	
@@ -180,9 +180,9 @@ static void pim_show_assert(struct vty *vty)
       char uptime[10];
       char timer[10];
 
-      pim_inet4_dump("<ch_src?>", ch->sg.u.sg.src,
+      pim_inet4_dump("<ch_src?>", ch->sg.src,
 		     ch_src_str, sizeof(ch_src_str));
-      pim_inet4_dump("<ch_grp?>", ch->sg.u.sg.grp,
+      pim_inet4_dump("<ch_grp?>", ch->sg.grp,
 		     ch_grp_str, sizeof(ch_grp_str));
       pim_inet4_dump("<assrt_win?>", ch->ifassert_winner,
 		     winner_str, sizeof(winner_str));
@@ -238,9 +238,9 @@ static void pim_show_assert_internal(struct vty *vty)
       char ch_src_str[100];
       char ch_grp_str[100];
 
-      pim_inet4_dump("<ch_src?>", ch->sg.u.sg.src,
+      pim_inet4_dump("<ch_src?>", ch->sg.src,
 		     ch_src_str, sizeof(ch_src_str));
-      pim_inet4_dump("<ch_grp?>", ch->sg.u.sg.grp,
+      pim_inet4_dump("<ch_grp?>", ch->sg.grp,
 		     ch_grp_str, sizeof(ch_grp_str));
       vty_out(vty, "%-9s %-15s %-15s %-15s %-3s %-3s %-3s %-4s%s",
 	      ifp->name,
@@ -286,9 +286,9 @@ static void pim_show_assert_metric(struct vty *vty)
 
       am = pim_macro_spt_assert_metric(&ch->upstream->rpf, pim_ifp->primary_address);
 
-      pim_inet4_dump("<ch_src?>", ch->sg.u.sg.src,
+      pim_inet4_dump("<ch_src?>", ch->sg.src,
 		     ch_src_str, sizeof(ch_src_str));
-      pim_inet4_dump("<ch_grp?>", ch->sg.u.sg.grp,
+      pim_inet4_dump("<ch_grp?>", ch->sg.grp,
 		     ch_grp_str, sizeof(ch_grp_str));
       pim_inet4_dump("<addr?>", am.ip_address,
 		     addr_str, sizeof(addr_str));
@@ -339,9 +339,9 @@ static void pim_show_assert_winner_metric(struct vty *vty)
 
       am = &ch->ifassert_winner_metric;
 
-      pim_inet4_dump("<ch_src?>", ch->sg.u.sg.src,
+      pim_inet4_dump("<ch_src?>", ch->sg.src,
 		     ch_src_str, sizeof(ch_src_str));
-      pim_inet4_dump("<ch_grp?>", ch->sg.u.sg.grp,
+      pim_inet4_dump("<ch_grp?>", ch->sg.grp,
 		     ch_grp_str, sizeof(ch_grp_str));
       pim_inet4_dump("<addr?>", am->ip_address,
 		     addr_str, sizeof(addr_str));
@@ -396,9 +396,9 @@ static void pim_show_membership(struct vty *vty)
       char ch_src_str[100];
       char ch_grp_str[100];
 
-      pim_inet4_dump("<ch_src?>", ch->sg.u.sg.src,
+      pim_inet4_dump("<ch_src?>", ch->sg.src,
 		     ch_src_str, sizeof(ch_src_str));
-      pim_inet4_dump("<ch_grp?>", ch->sg.u.sg.grp,
+      pim_inet4_dump("<ch_grp?>", ch->sg.grp,
 		     ch_grp_str, sizeof(ch_grp_str));
 
       vty_out(vty, "%-9s %-15s %-15s %-15s %-10s%s",
@@ -730,9 +730,9 @@ static void pim_show_join(struct vty *vty)
       char expire[10];
       char prune[10];
 
-      pim_inet4_dump("<ch_src?>", ch->sg.u.sg.src,
+      pim_inet4_dump("<ch_src?>", ch->sg.src,
 		     ch_src_str, sizeof(ch_src_str));
-      pim_inet4_dump("<ch_grp?>", ch->sg.u.sg.grp,
+      pim_inet4_dump("<ch_grp?>", ch->sg.grp,
 		     ch_grp_str, sizeof(ch_grp_str));
 
       pim_time_uptime_begin(uptime, sizeof(uptime), now, ch->ifjoin_creation);
@@ -991,8 +991,8 @@ static void pim_show_upstream(struct vty *vty)
       char join_timer[10];
       char rs_timer[10];
 
-      pim_inet4_dump("<src?>", up->sg.u.sg.src, src_str, sizeof(src_str));
-      pim_inet4_dump("<grp?>", up->sg.u.sg.grp, grp_str, sizeof(grp_str));
+      pim_inet4_dump("<src?>", up->sg.src, src_str, sizeof(src_str));
+      pim_inet4_dump("<grp?>", up->sg.grp, grp_str, sizeof(grp_str));
       pim_time_uptime(uptime, sizeof(uptime), now - up->state_transition);
       pim_time_timer_to_hhmmss(join_timer, sizeof(join_timer), up->t_join_timer);
       pim_time_timer_to_hhmmss (rs_timer, sizeof (rs_timer), up->t_rs_timer);
@@ -1034,8 +1034,8 @@ static void pim_show_join_desired(struct vty *vty)
     for (ALL_LIST_ELEMENTS_RO(pim_ifp->pim_ifchannel_list, chnode, ch)) {
       struct pim_upstream *up = ch->upstream;
 
-      pim_inet4_dump("<src?>", up->sg.u.sg.src, src_str, sizeof(src_str));
-      pim_inet4_dump("<grp?>", up->sg.u.sg.grp, grp_str, sizeof(grp_str));
+      pim_inet4_dump("<src?>", up->sg.src, src_str, sizeof(src_str));
+      pim_inet4_dump("<grp?>", up->sg.grp, grp_str, sizeof(grp_str));
 
       vty_out(vty, "%-9s %-15s %-15s %-10s %-5s %-10s %-11s %-6s%s",
 	      ifp->name,
@@ -1070,8 +1070,8 @@ static void pim_show_upstream_rpf(struct vty *vty)
     
     rpf = &up->rpf;
     
-    pim_inet4_dump("<src?>", up->sg.u.sg.src, src_str, sizeof(src_str));
-    pim_inet4_dump("<grp?>", up->sg.u.sg.grp, grp_str, sizeof(grp_str));
+    pim_inet4_dump("<src?>", up->sg.src, src_str, sizeof(src_str));
+    pim_inet4_dump("<grp?>", up->sg.grp, grp_str, sizeof(grp_str));
     pim_inet4_dump("<nexthop?>", rpf->source_nexthop.mrib_nexthop_addr, rpf_nexthop_str, sizeof(rpf_nexthop_str));
     pim_inet4_dump("<rpf?>", rpf->rpf_addr, rpf_addr_str, sizeof(rpf_addr_str));
     
@@ -1147,8 +1147,8 @@ static void pim_show_rpf(struct vty *vty)
     const char *rpf_ifname;
     struct pim_rpf  *rpf = &up->rpf;
     
-    pim_inet4_dump("<src?>", up->sg.u.sg.src, src_str, sizeof(src_str));
-    pim_inet4_dump("<grp?>", up->sg.u.sg.grp, grp_str, sizeof(grp_str));
+    pim_inet4_dump("<src?>", up->sg.src, src_str, sizeof(src_str));
+    pim_inet4_dump("<grp?>", up->sg.grp, grp_str, sizeof(grp_str));
     pim_inet4_dump("<rpf?>", rpf->rpf_addr, rpf_addr_str, sizeof(rpf_addr_str));
     pim_inet4_dump("<nexthop?>", rpf->source_nexthop.mrib_nexthop_addr, rib_nexthop_str, sizeof(rib_nexthop_str));
     
@@ -2464,6 +2464,34 @@ DEFUN (show_ip_ssmpingd,
   return CMD_SUCCESS;
 }
 
+static int
+pim_rp_cmd_worker (struct vty *vty, const char *rp, const char *group)
+{
+  int result;
+
+  result = pim_rp_new (rp, group);
+
+  if (result == -1)
+    {
+      vty_out (vty, "%% Bad RP/group address specified: %s", rp);
+      return CMD_WARNING;
+    }
+
+  if (result == -2)
+    {
+      vty_out (vty, "%% No Path to RP address specified: %s", rp);
+      return CMD_WARNING;
+    }
+
+  if (result == -3)
+    {
+      vty_out (vty, "%% Group range specified cannot overlap");
+      return CMD_ERR_NO_MATCH;
+    }
+
+  return CMD_SUCCESS;
+
+}
 DEFUN (ip_pim_rp,
        ip_pim_rp_cmd,
        "ip pim rp A.B.C.D",
@@ -2472,35 +2500,51 @@ DEFUN (ip_pim_rp,
        "Rendevous Point\n"
        "ip address of RP\n")
 {
-  int result;
+  return pim_rp_cmd_worker (vty, argv[0], NULL);
+}
 
-  result = inet_pton(AF_INET, argv[0], &qpim_rp.rpf_addr.s_addr);
-  if (result <= 0) {
-    vty_out(vty, "%% Bad RP address specified: %s", argv[0]);
-    return CMD_WARNING;
-  }
+DEFUN (ip_pim_rp_range,
+       ip_pim_rp_range_cmd,
+       "ip pim rp A.B.C.D A.B.C.D/M",
+       IP_STR
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "ip address of RP\n"
+       "Group range for RP\n")
+{
+  return pim_rp_cmd_worker (vty, argv[0], argv[1]);
+}
 
-  if (!pim_rp_setup ())
+static int
+pim_no_rp_cmd_worker (struct vty *vty, const char *rp, const char *group)
+{
+  int result = pim_rp_del (rp, group);
+
+  if (result == -1)
     {
-      vty_out(vty, "%% No Path to RP address specified: %s", argv[0]);
+      vty_out (vty, "%% Unable to Decode specified RP");
+      return CMD_WARNING;
+    }
+
+  if (result == -2)
+    {
+      vty_out (vty, "%% Unable to find specified RP");
       return CMD_WARNING;
     }
 
   return CMD_SUCCESS;
 }
 
-DEFUN (no_ip_pim_rp,
-       no_ip_pim_rp_cmd,
-       "no ip pim rp {A.B.C.D}",
+DEFUN (no_ip_pim_rp_range,
+       no_ip_pim_rp_range_cmd,
+       "no ip pim rp A.B.C.D A.B.C.D/M",
        NO_STR
        IP_STR
        "pim multicast routing\n"
        "Rendevous Point\n"
        "ip address of RP\n")
 {
-  qpim_rp.rpf_addr.s_addr = INADDR_NONE;
-
-  return CMD_SUCCESS;
+  return pim_no_rp_cmd_worker (vty, argv[0], argv[1]);
 }
 
 DEFUN (ip_multicast_routing,
@@ -4810,14 +4854,11 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &ip_multicast_routing_cmd);
   install_element (CONFIG_NODE, &no_ip_multicast_routing_cmd);
   install_element (CONFIG_NODE, &ip_pim_rp_cmd);
-  install_element (CONFIG_NODE, &no_ip_pim_rp_cmd);
+  install_element (CONFIG_NODE, &ip_pim_rp_range_cmd);
+  install_element (CONFIG_NODE, &no_ip_pim_rp_range_cmd);
   install_element (CONFIG_NODE, &ip_ssmpingd_cmd);
   install_element (CONFIG_NODE, &no_ip_ssmpingd_cmd); 
-#if 0
-  install_element (CONFIG_NODE, &interface_cmd); /* from if.h */
-#else
   install_element (CONFIG_NODE, &pim_interface_cmd);
-#endif
   install_element (CONFIG_NODE, &no_interface_cmd); /* from if.h */
 
   install_default (INTERFACE_NODE);

@@ -44,30 +44,8 @@
 
 struct thread *send_test_packet_timer = NULL;
 
-/*
- * This seems stupidly expensive.  A list lookup.  Why is this
- * not a hash?
- */
-static int
-pim_check_is_my_ip_address (struct in_addr dest_addr)
-{
-  /*
-   * See if we can short-cut some?
-   * This might not make sense if we ever leave a static RP
-   * type of configuration.
-   * Note - Premature optimization might bite our patooeys' here.
-   */
-  if (I_am_RP(dest_addr) && (dest_addr.s_addr == qpim_rp.rpf_addr.s_addr))
-    return 1;
-
-  if (if_lookup_exact_address (&dest_addr, AF_INET))
-    return 1;
-
-  return 0;
-}
-
 static void
-pim_register_stop_send (struct interface *ifp, struct prefix *sg,
+pim_register_stop_send (struct interface *ifp, struct prefix_sg *sg,
 			struct in_addr originator)
 {
   struct pim_interface *pinfo;
@@ -86,12 +64,12 @@ pim_register_stop_send (struct interface *ifp, struct prefix *sg,
   memset (buffer, 0, 3000);
   b1 = (uint8_t *)buffer + PIM_MSG_REGISTER_STOP_LEN;
 
-  length = pim_encode_addr_group (b1, AFI_IP, 0, 0, sg->u.sg.grp);
+  length = pim_encode_addr_group (b1, AFI_IP, 0, 0, sg->grp);
   b1length += length;
   b1 += length;
 
   p.family = AF_INET;
-  p.u.prefix4 = sg->u.sg.src;
+  p.u.prefix4 = sg->src;
   p.prefixlen = 32;
   length = pim_encode_addr_ucast (b1, &p);
   b1length += length;
@@ -123,16 +101,16 @@ pim_register_stop_recv (uint8_t *buf, int buf_size)
   struct pim_upstream *upstream = NULL;
   struct prefix source;
   struct prefix group;
-  struct prefix sg;
+  struct prefix_sg sg;
   int l;
 
   l = pim_parse_addr_group (&group, buf, buf_size);
   buf += l;
   buf_size -= l;
   l = pim_parse_addr_ucast (&source, buf, buf_size);
-  memset (&sg, 0, sizeof (struct prefix));
-  sg.u.sg.src = source.u.prefix4;
-  sg.u.sg.grp = group.u.prefix4;
+  memset (&sg, 0, sizeof (struct prefix_sg));
+  sg.src = source.u.prefix4;
+  sg.grp = group.u.prefix4;
 
   if (PIM_DEBUG_PIM_REG)
     {
@@ -188,7 +166,7 @@ pim_register_send (const uint8_t *buf, int buf_size, struct pim_rpf *rpg, int nu
 
   memset(buffer, 0, 3000);
   b1 = buffer + PIM_MSG_HEADER_LEN;
-  *b1 |= null_register << 31;
+  *b1 |= null_register << 6;
   b1 = buffer + PIM_MSG_REGISTER_LEN;
 
   memcpy(b1, (const unsigned char *)buf, buf_size);
@@ -260,10 +238,13 @@ pim_register_recv (struct interface *ifp,
 {
   int sentRegisterStop = 0;
   struct ip *ip_hdr;
-  struct prefix sg;
+  struct prefix_sg sg;
   uint32_t *bits;
 
-  if (!pim_check_is_my_ip_address (dest_addr)) {
+#define PIM_MSG_REGISTER_BIT_RESERVED_LEN 4
+  ip_hdr = (struct ip *)(tlv_buf + PIM_MSG_REGISTER_BIT_RESERVED_LEN);
+
+  if (!pim_rp_check_is_my_ip_address (ip_hdr->ip_dst, dest_addr)) {
     if (PIM_DEBUG_PIM_REG) {
       char dest[100];
 
@@ -308,13 +289,11 @@ pim_register_recv (struct interface *ifp,
    * Line above.  So we need to add 4 bytes to get to the
    * start of the actual Encapsulated data.
    */
-#define PIM_MSG_REGISTER_BIT_RESERVED_LEN 4
-  ip_hdr = (struct ip *)(tlv_buf + PIM_MSG_REGISTER_BIT_RESERVED_LEN);
-  memset (&sg, 0, sizeof (struct prefix));
-  sg.u.sg.src = ip_hdr->ip_src;
-  sg.u.sg.grp = ip_hdr->ip_dst;
+  memset (&sg, 0, sizeof (struct prefix_sg));
+  sg.src = ip_hdr->ip_src;
+  sg.grp = ip_hdr->ip_dst;
 
-  if (I_am_RP (sg.u.sg.grp) && (dest_addr.s_addr == ((RP (sg.u.sg.grp))->rpf_addr.s_addr))) {
+  if (I_am_RP (sg.grp) && (dest_addr.s_addr == ((RP (sg.grp))->rpf_addr.s_addr))) {
     sentRegisterStop = 0;
 
     if (*bits & PIM_REGISTER_BORDER_BIT) {
@@ -342,11 +321,11 @@ pim_register_recv (struct interface *ifp,
       {
 	upstream = pim_upstream_add (&sg, ifp);
 
-	pim_rp_set_upstream_addr (&upstream->upstream_addr, sg.u.sg.src);
+	pim_rp_set_upstream_addr (&upstream->upstream_addr, sg.src, sg.grp);
 	pim_nexthop_lookup (&upstream->rpf.source_nexthop,
 			    upstream->upstream_addr, NULL);
 	upstream->rpf.source_nexthop.interface = ifp;
-	upstream->sg.u.sg.src = sg.u.sg.src;
+	upstream->sg.src = sg.src;
 	upstream->rpf.rpf_addr = upstream->rpf.source_nexthop.mrib_nexthop_addr;
 
 	pim_upstream_switch (upstream, PIM_UPSTREAM_PRUNE);

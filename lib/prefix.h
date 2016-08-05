@@ -95,19 +95,12 @@ struct prefix
   {
     u_char prefix;
     struct in_addr prefix4;
-#ifdef HAVE_IPV6
     struct in6_addr prefix6;
-#endif /* HAVE_IPV6 */
     struct 
     {
       struct in_addr id;
       struct in_addr adv_router;
     } lp;
-    struct
-    {
-      struct in_addr src;
-      struct in_addr grp;
-    } sg;
     u_char val[8];
     uintptr_t ptr;
 #if defined(HAVE_EVPN)
@@ -125,14 +118,12 @@ struct prefix_ipv4
 };
 
 /* IPv6 prefix structure. */
-#ifdef HAVE_IPV6
 struct prefix_ipv6
 {
   u_char family;
   u_char prefixlen;
   struct in6_addr prefix __attribute__ ((aligned (8)));
 };
-#endif /* HAVE_IPV6 */
 
 struct prefix_ls
 {
@@ -156,6 +147,14 @@ struct prefix_ptr
   u_char family;
   u_char prefixlen;
   uintptr_t prefix __attribute__ ((aligned (8)));
+};
+
+struct prefix_sg
+{
+  u_char family;
+  u_char prefixlen;
+  struct in_addr src __attribute ((aligned (8)));
+  struct in_addr grp;
 };
 
 /* helper to get type safety/avoid casts on calls
@@ -288,7 +287,6 @@ extern in_addr_t ipv4_broadcast_addr (in_addr_t hostaddr, int masklen);
 
 extern int netmask_str2prefix_str (const char *, const char *, char *);
 
-#ifdef HAVE_IPV6
 extern struct prefix_ipv6 *prefix_ipv6_new (void);
 extern void prefix_ipv6_free (struct prefix_ipv6 *);
 extern int str2prefix_ipv6 (const char *, struct prefix_ipv6 *);
@@ -314,8 +312,6 @@ static inline int ipv6_martian (struct in6_addr *addr)
 
   return 0;
 }
-
-#endif /* HAVE_IPV6 */
 
 extern int all_digit (const char *);
 

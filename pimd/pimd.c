@@ -36,6 +36,7 @@
 #include "pim_rpf.h"
 #include "pim_ssmpingd.h"
 #include "pim_static.h"
+#include "pim_rp.h"
 
 const char *const PIM_ALL_SYSTEMS      = MCAST_ALL_SYSTEMS;
 const char *const PIM_ALL_ROUTERS      = MCAST_ALL_ROUTERS;
@@ -69,7 +70,6 @@ int64_t                   qpim_mroute_add_last = 0;
 int64_t                   qpim_mroute_del_events = 0;
 int64_t                   qpim_mroute_del_last = 0;
 struct list              *qpim_static_route_list = NULL;
-struct pim_rpf            qpim_rp = { .rpf_addr.s_addr = INADDR_NONE };
 
 int32_t qpim_register_suppress_time = PIM_REGISTER_SUPPRESSION_TIME_DEFAULT;
 int32_t qpim_register_probe_time = PIM_REGISTER_PROBE_TIME_DEFAULT;
@@ -86,11 +86,15 @@ static void pim_free()
 
   if (qpim_static_route_list)
      list_free(qpim_static_route_list);
+
+  pim_rp_free ();
 }
 
 void pim_init()
 {
   srandom(time(NULL));
+
+  pim_rp_init ();
 
   if (!inet_aton(PIM_ALL_PIM_ROUTERS, &qpim_all_pim_routers_addr)) {
     zlog_err("%s %s: could not solve %s to group address: errno=%d: %s",
