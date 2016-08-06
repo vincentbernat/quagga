@@ -376,6 +376,26 @@ zvni_vtep_del (zebra_vni_t *zvni, zebra_vtep_t *zvtep)
 }
 
 /*
+ * Delete all remote VTEPs for this VNI (upon VNI delete).
+ */
+static int
+zvni_vtep_del_all (zebra_vni_t *zvni)
+{
+  zebra_vtep_t *zvtep, *zvtep_next;
+
+  if (!zvni)
+    return -1;
+
+  for (zvtep = zvni->vteps; zvtep; zvtep = zvtep_next)
+    {
+      zvtep_next = zvtep->next;
+      zvni_vtep_del (zvni, zvtep);
+    }
+
+  return 0;
+}
+
+/*
  * Add remote VTEP to the flood list for this VxLAN interface (VNI). This
  * is currently implemented only for the netlink interface.
  */
@@ -530,6 +550,9 @@ zebra_vxlan_if_del (struct interface *ifp)
   /* Inform BGP if required. */
   if (zvrf->advertise_vni)
     zvni_send_del_to_client (zvrf, zvni->vni);
+
+  /* Free up all remote VTEPs, if any. */
+  zvni_vtep_del_all (zvni);
 
   /* Delete the hash entry. */
   if (zvni_del (zvrf, zvni))
