@@ -97,7 +97,16 @@ do { \
 /* Specify whether to (un)install route to/from RIB */
 const struct bgp_route_install_info bgp_zebra_route_install[AFI_MAX][SAFI_MAX] = 
 {
-  { /* AFI_IP */
+  { /* unused */
+    { 0, NULL, NULL },
+    { 0, NULL, NULL },
+    { 0, NULL, NULL },
+    { 0, NULL, NULL },
+    { 0, NULL, NULL },
+    { 0, NULL, NULL },
+    { 0, NULL, NULL }
+  },
+  { /* AFI_IP(1) */
     { 0, NULL, NULL },
     { 1, bgp_zebra_announce, bgp_zebra_withdraw },
     { 1, bgp_zebra_announce, bgp_zebra_withdraw },
@@ -106,7 +115,7 @@ const struct bgp_route_install_info bgp_zebra_route_install[AFI_MAX][SAFI_MAX] =
     { 0, NULL, NULL },
     { 0, NULL, NULL }
   },
-  { /* AFI_IP6 */
+  { /* AFI_IP6(2) */
     { 0, NULL, NULL },
     { 1, bgp_zebra_announce, bgp_zebra_withdraw },
     { 1, bgp_zebra_announce, bgp_zebra_withdraw },
@@ -115,7 +124,7 @@ const struct bgp_route_install_info bgp_zebra_route_install[AFI_MAX][SAFI_MAX] =
     { 0, NULL, NULL },
     { 0, NULL, NULL }
   },
-  { /* AFI_L2VPN */
+  { /* AFI_L2VPN(3) */
     { 0, NULL, NULL },
     { 0, NULL, NULL },
     { 0, NULL, NULL },
