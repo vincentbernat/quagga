@@ -51,9 +51,7 @@
 #include "zebra/interface.h"
 #include "zebra/zebra_ptm.h"
 #include "zebra/rtadv.h"
-#if defined(HAVE_EVPN)
 #include "zebra/zebra_vxlan.h"
-#endif
 
 /* Event list of zebra. */
 enum event { ZEBRA_SERV, ZEBRA_READ, ZEBRA_WRITE };
@@ -2116,7 +2114,6 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_INTERFACE_DISABLE_RADV:
       zebra_interface_radv_set (client, sock, length, zvrf, 0);
       break;
-#if defined(HAVE_EVPN)
     case ZEBRA_REMOTE_VTEP_ADD:
       zebra_vxlan_remote_vtep_add (client, sock, length, zvrf);
       break;
@@ -2126,7 +2123,6 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_ADVERTISE_VNI:
       zebra_vxlan_advertise_vni (client, sock, length, zvrf);
       break;
-#endif
     default:
       zlog_info ("Zebra received unknown command %d", command);
       break;
@@ -2424,12 +2420,10 @@ zebra_show_client_detail (struct vty *vty, struct zserv *client)
 	   VTY_NEWLINE);
   vty_out (vty, "Interface Down Notifications: %d%s", client->ifdown_cnt,
 	   VTY_NEWLINE);
-#if defined(HAVE_EVPN)
   vty_out (vty, "VNI add notifications: %d%s", client->vniadd_cnt,
            VTY_NEWLINE);
   vty_out (vty, "VNI delete notifications: %d%s", client->vnidel_cnt,
            VTY_NEWLINE);
-#endif
 
   vty_out (vty, "%s", VTY_NEWLINE);
   return;

@@ -22,8 +22,6 @@
 
 #include <zebra.h>
 
-#if defined(HAVE_EVPN)
-
 #include "if.h"
 #include "prefix.h"
 #include "table.h"
@@ -834,4 +832,3 @@ zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
     return;
   zvrf->vni_table = hash_create(vni_hash_keymake, vni_hash_cmp);
 }
-#endif /* HAVE_EVPN */

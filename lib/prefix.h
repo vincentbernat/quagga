@@ -44,7 +44,6 @@
 #endif
 #endif
 
-#if defined(HAVE_EVPN)
 /* MAC address. */
 struct eth_addr
 {
@@ -75,7 +74,6 @@ struct prefix_evpn
   struct evpn_addr prefix __attribute__ ((aligned (8)));
 };
 
-#endif
 
 /*
  * A struct prefix contains an address family, a prefix length, and an
@@ -103,9 +101,7 @@ struct prefix
     } lp;
     u_char val[8];
     uintptr_t ptr;
-#if defined(HAVE_EVPN)
     struct evpn_addr prefix_evpn;
-#endif
   } u __attribute__ ((aligned (8)));
 };
 

@@ -51,9 +51,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_vty.h"
 #include "bgpd/bgp_updgrp.h"
-#if defined(HAVE_EVPN)
 #include "bgpd/bgp_evpn.h"
-#endif
 
 
 /* Set up BGP packet marker and packet type. */
@@ -1759,7 +1757,6 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	    zlog_debug ("rcvd End-of-RIB for IPv6 Encap from %s", peer->host);
 	}
     }
-#if defined(HAVE_EVPN)
   if (peer->afc[AFI_L2VPN][SAFI_EVPN])
     {
       if (mp_update.length
@@ -1789,7 +1786,6 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
             zlog_debug ("rcvd End-of-RIB for EVPN from %s", peer->host);
         }
     }
-#endif
 
   /* Everything is done.  We unintern temporary structures which
      interned in bgp_attr_parse(). */

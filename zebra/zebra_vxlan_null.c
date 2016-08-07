@@ -1,7 +1,5 @@
 #include <zebra.h>
 
-#if defined(HAVE_EVPN)
-
 #include "if.h"
 #include "zebra/debug.h"
 #include "zebra/zserv.h"
@@ -53,4 +51,3 @@ void
 zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
 {
 }
-#endif /* HAVE_EVPN */

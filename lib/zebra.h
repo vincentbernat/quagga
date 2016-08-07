@@ -445,16 +445,12 @@ struct in_pktinfo
 #define ZEBRA_INTERFACE_ENABLE_RADV       47
 #define ZEBRA_INTERFACE_DISABLE_RADV      48
 #define ZEBRA_IPV4_NEXTHOP_LOOKUP_MRIB    49
-#if defined(HAVE_EVPN)
 #define ZEBRA_VNI_ADD                     50
 #define ZEBRA_VNI_DEL                     51
 #define ZEBRA_REMOTE_VTEP_ADD             52
 #define ZEBRA_REMOTE_VTEP_DEL             53
 #define ZEBRA_ADVERTISE_VNI               54
 #define ZEBRA_MESSAGE_MAX                 55
-#else
-#define ZEBRA_MESSAGE_MAX                 50
-#endif
 
 /* Marker value used in new Zserv, in the byte location corresponding
  * the command value in the old zserv header. To allow old and new
@@ -658,10 +654,8 @@ static inline safi_t safi_iana2int (safi_t safi)
     return SAFI_MPLS_VPN;
   if (safi == IANA_SAFI_ENCAP)
     return SAFI_ENCAP;
-#ifdef HAVE_EVPN
   if (safi == IANA_SAFI_EVPN)
     return SAFI_EVPN;
-#endif /* HAVE_EVPN */
   return SAFI_MAX;
 }
 
@@ -675,10 +669,8 @@ static inline safi_t safi_int2iana (safi_t safi)
     return IANA_SAFI_MPLS_VPN;
   if (safi == SAFI_ENCAP)
     return IANA_SAFI_ENCAP;
-#ifdef HAVE_EVPN
   if (safi == SAFI_EVPN)
     return IANA_SAFI_EVPN;
-#endif /* HAVE_EVPN */
   return IANA_SAFI_RESERVED;
 }
 

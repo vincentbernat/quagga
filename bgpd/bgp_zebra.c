@@ -45,10 +45,7 @@ Boston, MA 02111-1307, USA.  */
 #include "bgpd/bgp_mpath.h"
 #include "bgpd/bgp_nexthop.h"
 #include "bgpd/bgp_nht.h"
-
-#if defined(HAVE_EVPN)
 #include "bgpd/bgp_evpn.h"
-#endif
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -215,7 +212,6 @@ bgp_read_import_check_update(int command, struct zclient *zclient,
 int
 bgp_zebra_advertise_vni (struct bgp *bgp, int advertise_vni)
 {
-#if defined(HAVE_EVPN)
   struct stream *s;
 
   /* Check socket. */
@@ -234,9 +230,6 @@ bgp_zebra_advertise_vni (struct bgp *bgp, int advertise_vni)
   stream_putw_at (s, 0, stream_get_endp (s));
 
   return zclient_send_message(zclient);
-#else
-  return 0;
-#endif
 }
 
 /* Set or clear interface on which unnumbered neighbor is configured. This
@@ -2139,8 +2132,6 @@ bgp_zebra_connected (struct zclient *zclient)
    */
 }
 
-
-#if defined(HAVE_EVPN)
 static int
 bgp_zebra_process_local_vni (int command, struct zclient *zclient,
                              zebra_size_t length, vrf_id_t vrf_id)
@@ -2165,7 +2156,6 @@ bgp_zebra_process_local_vni (int command, struct zclient *zclient,
   else
     return bgp_evpn_local_vni_del (bgp, vni);
 }
-#endif
 
 void
 bgp_zebra_init (struct thread_master *master)
@@ -2194,10 +2184,8 @@ bgp_zebra_init (struct thread_master *master)
   zclient->redistribute_route_ipv6_del = zebra_read_ipv6;
   zclient->nexthop_update = bgp_read_nexthop_update;
   zclient->import_check_update = bgp_read_import_check_update;
-#if defined(HAVE_EVPN)
   zclient->local_vni_add = bgp_zebra_process_local_vni;
   zclient->local_vni_del = bgp_zebra_process_local_vni;
-#endif
 
   bgp_nexthop_buf = stream_new(BGP_NEXTHOP_BUF_SIZE);
   bgp_ifindices_buf = stream_new(BGP_IFINDICES_BUF_SIZE);

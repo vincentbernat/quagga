@@ -15789,9 +15789,7 @@ bgp_vty_init (void)
 #ifdef HAVE_IPV6
   install_element (BGP_NODE, &address_family_encapv6_cmd);
 #endif
-#ifdef HAVE_EVPN
   install_element (BGP_NODE, &address_family_evpn_cmd);
-#endif /* HAVE_EVPN */
 
   /* "exit-address-family" command. */
   install_element (BGP_IPV4_NODE, &exit_address_family_cmd);
@@ -16389,12 +16387,10 @@ bgp_vty_init (void)
   install_element (RESTRICTED_NODE, &show_bgp_vrfs_cmd);
   install_element (ENABLE_NODE, &show_bgp_vrfs_cmd);
   
-#ifdef HAVE_EVPN
   /* "show bgp evpn" commands. */
   install_element (VIEW_NODE, &show_bgp_evpn_vni_cmd);
   install_element (RESTRICTED_NODE, &show_bgp_evpn_vni_cmd);
   install_element (ENABLE_NODE, &show_bgp_evpn_vni_cmd);
-#endif /* HAVE_EVPN */
 
   /* Community-list. */
   community_list_vty ();

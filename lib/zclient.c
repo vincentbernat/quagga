@@ -1504,7 +1504,6 @@ zclient_read (struct thread *thread)
       if (zclient->redistribute_route_ipv6_del)
 	(*zclient->redistribute_route_ipv6_del) (command, zclient, length, vrf_id);
       break;
-#if defined(HAVE_EVPN)
     case ZEBRA_VNI_ADD:
       if (zclient->local_vni_add)
 	(*zclient->local_vni_add) (command, zclient, length, vrf_id);
@@ -1513,7 +1512,6 @@ zclient_read (struct thread *thread)
       if (zclient->local_vni_del)
 	(*zclient->local_vni_del) (command, zclient, length, vrf_id);
       break;
-#endif
     default:
       break;
     }

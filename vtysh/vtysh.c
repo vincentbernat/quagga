@@ -3021,9 +3021,7 @@ vtysh_init_vty (void)
   install_element (BGP_NODE, &address_family_vpnv6_unicast_cmd);
   install_element (BGP_NODE, &address_family_encap_cmd);
   install_element (BGP_NODE, &address_family_encapv6_cmd);
-#ifdef HAVE_EVPN
   install_element (BGP_NODE, &address_family_evpn_cmd);
-#endif /* HAVE_EVPN */
   install_element (BGP_NODE, &address_family_ipv4_unicast_cmd);
   install_element (BGP_NODE, &address_family_ipv4_multicast_cmd);
 #ifdef HAVE_IPV6

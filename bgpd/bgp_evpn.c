@@ -43,8 +43,6 @@
 
 #define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
 
-#if defined(HAVE_EVPN)
-
 /*
  * Hash table of VNIs - configured, learnt and local.
  * TODO: Configuration is not supported right now.
@@ -906,7 +904,7 @@ bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
 /*
  * bgp_evpn_init
  *
- * Initialize vnihash. Do this only if HAVE_EVPN flag is enabled.
+ * Initialize vnihash.
  */
 void
 bgp_evpn_init (struct bgp *bgp)
@@ -938,77 +936,3 @@ bgp_evpn_update_advertise_vni (struct bgp *bgp)
                                                         bgp->advertise_vni);
  bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
 }
-
-#else
-
-void
-bgp_evpn_update_vni (struct bgp* bgp, vni_t vni, int add)
-{
-}
-
-int
-bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni)
-{
-  return 0;
-}
-
-int
-bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni)
-{
-  return 0;
-}
-
-void
-bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty)
-{
-}
-
-void
-bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
-                        struct prefix_rd *prd, int addpath_encode,
-                        u_int32_t addpath_tx_id)
-{
-}
-
-int
-bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
-                            u_char *pnt, bgp_size_t length, int *numpfx)
-{
-  return 0;
-}
-
-int
-bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *packet)
-{
-  return 0;
-}
-
-int
-bgp_evpn_install_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                        struct prefix *p, struct bgp_info *ri)
-{
-  return 0;
-}
-
-int
-bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                          struct prefix *p, struct bgp_info *ri)
-{
-  return 0;
-}
-
-void
-bgp_evpn_init (struct bgp *bgp)
-{
-}
-
-void
-bgp_evpn_cleanup (struct bgp *bgp)
-{
-}
-
-void
-bgp_evpn_update_advertise_vni (struct bgp *bgp)
-{
-}
-#endif /* HAVE_EVPN */

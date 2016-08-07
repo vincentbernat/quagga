@@ -31,9 +31,7 @@ unsigned long zebra_debug_kernel;
 unsigned long zebra_debug_rib;
 unsigned long zebra_debug_fpm;
 unsigned long zebra_debug_nht;
-#if defined(HAVE_EVPN)
 unsigned long zebra_debug_vxlan;
-#endif
 
 DEFUN (show_debugging_zebra,
        show_debugging_zebra_cmd,
@@ -85,10 +83,8 @@ DEFUN (show_debugging_zebra,
     vty_out (vty, "  Zebra FPM debugging is on%s", VTY_NEWLINE);
   if (IS_ZEBRA_DEBUG_NHT)
     vty_out (vty, "  Zebra next-hop tracking debugging is on%s", VTY_NEWLINE);
-#if defined(HAVE_EVPN)
   if (IS_ZEBRA_DEBUG_VXLAN)
     vty_out (vty, "  Zebra VxLAN (EVPN) debugging is on%s", VTY_NEWLINE);
-#endif
 
   return CMD_SUCCESS;
 }
@@ -115,7 +111,6 @@ DEFUN (debug_zebra_nht,
   return CMD_WARNING;
 }
 
-#if defined(HAVE_EVPN)
 DEFUN (debug_zebra_vxlan,
        debug_zebra_vxlan_cmd,
        "debug zebra vxlan",
@@ -126,8 +121,6 @@ DEFUN (debug_zebra_vxlan,
   zebra_debug_vxlan = ZEBRA_DEBUG_VXLAN;
   return CMD_WARNING;
 }
-#endif
-
 
 DEFUN (debug_zebra_packet,
        debug_zebra_packet_cmd,
@@ -266,7 +259,6 @@ DEFUN (no_debug_zebra_nht,
   return CMD_SUCCESS;
 }
 
-#if defined(HAVE_EVPN)
 DEFUN (no_debug_zebra_vxlan,
        no_debug_zebra_vxlan_cmd,
        "no debug zebra vxlan",
@@ -278,7 +270,6 @@ DEFUN (no_debug_zebra_vxlan,
   zebra_debug_vxlan = 0;
   return CMD_SUCCESS;
 }
-#endif
 
 DEFUN (no_debug_zebra_packet,
        no_debug_zebra_packet_cmd,
@@ -436,13 +427,11 @@ config_write_debug (struct vty *vty)
       vty_out (vty, "debug zebra fpm%s", VTY_NEWLINE);
       write++;
     }
-#if defined(HAVE_EVPN)
   if (IS_ZEBRA_DEBUG_VXLAN)
     {
       vty_out (vty, "debug zebra vxlan%s", VTY_NEWLINE);
       write++;
     }
-#endif
   return write;
 }
 
@@ -454,9 +443,7 @@ zebra_debug_init (void)
   zebra_debug_kernel = 0;
   zebra_debug_rib = 0;
   zebra_debug_fpm = 0;
-#if defined(HAVE_EVPN)
   zebra_debug_vxlan = 0;
-#endif
 
   install_node (&debug_node, config_write_debug);
 
@@ -465,9 +452,7 @@ zebra_debug_init (void)
   install_element (ENABLE_NODE, &show_debugging_zebra_cmd);
   install_element (ENABLE_NODE, &debug_zebra_events_cmd);
   install_element (ENABLE_NODE, &debug_zebra_nht_cmd);
-#if defined(HAVE_EVPN)
   install_element (ENABLE_NODE, &debug_zebra_vxlan_cmd);
-#endif
   install_element (ENABLE_NODE, &debug_zebra_packet_cmd);
   install_element (ENABLE_NODE, &debug_zebra_packet_direct_cmd);
   install_element (ENABLE_NODE, &debug_zebra_packet_detail_cmd);
@@ -478,9 +463,7 @@ zebra_debug_init (void)
   install_element (ENABLE_NODE, &debug_zebra_fpm_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_events_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_nht_cmd);
-#if defined(HAVE_EVPN)
   install_element (ENABLE_NODE, &no_debug_zebra_vxlan_cmd);
-#endif
   install_element (ENABLE_NODE, &no_debug_zebra_packet_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_kernel_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_kernel_msgdump_cmd);
@@ -490,9 +473,7 @@ zebra_debug_init (void)
 
   install_element (CONFIG_NODE, &debug_zebra_events_cmd);
   install_element (CONFIG_NODE, &debug_zebra_nht_cmd);
-#if defined(HAVE_EVPN)
   install_element (CONFIG_NODE, &debug_zebra_vxlan_cmd);
-#endif
   install_element (CONFIG_NODE, &debug_zebra_packet_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_direct_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_detail_cmd);
@@ -503,9 +484,7 @@ zebra_debug_init (void)
   install_element (CONFIG_NODE, &debug_zebra_fpm_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_events_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_nht_cmd);
-#if defined(HAVE_EVPN)
   install_element (CONFIG_NODE, &no_debug_zebra_vxlan_cmd);
-#endif
   install_element (CONFIG_NODE, &no_debug_zebra_packet_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_kernel_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_kernel_msgdump_cmd);

@@ -75,7 +75,6 @@ struct zebra_vrf
    */
   struct zebra_ns *zns;
 
-#if defined(HAVE_EVPN)
   /*
    * VNI hash table (for EVPN). Only in default instance.
    */
@@ -84,7 +83,6 @@ struct zebra_vrf
    * Whether EVPN is enabled or not.
    */
   int advertise_vni;
-#endif
 };
 
 extern struct list *zvrf_list;

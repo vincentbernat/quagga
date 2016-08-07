@@ -48,10 +48,7 @@
 #include "zebra/debug.h"
 #include "zebra/rtadv.h"
 #include "zebra/zebra_ptm.h"
-
-#if defined(HAVE_EVPN)
 #include "zebra/zebra_vxlan.h"
-#endif
 
 #include "rt_netlink.h"
 
@@ -530,7 +527,6 @@ netlink_interface_update_hw_addr (struct rtattr **tb, struct interface *ifp)
 #define parse_rtattr_nested(tb, max, rta) \
           netlink_parse_rtattr((tb), (max), RTA_DATA(rta), RTA_PAYLOAD(rta))
 
-#if defined(HAVE_EVPN)
 static int
 zebra_extract_vni_from_netlink_msg (struct rtattr *link_data, vni_t *vni)
 {
@@ -552,7 +548,6 @@ zebra_extract_vni_from_netlink_msg (struct rtattr *link_data, vni_t *vni)
   return 0;
 
 }
-#endif
 
 static void
 netlink_vrf_change (struct nlmsghdr *h, struct rtattr *tb, const char *name)
@@ -654,10 +649,8 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   char *kind = NULL;
   char *slave_kind = NULL;
   int vrf_device = 0;
-#if defined(HAVE_EVPN)
   int vxlan_if = 0;
   vni_t vni;
-#endif
 
   ifi = NLMSG_DATA (h);
 
@@ -708,7 +701,6 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
           netlink_vrf_change(h, tb[IFLA_LINKINFO], name);
           vrf_id = (vrf_id_t)ifi->ifi_index;
         }
-#if defined(HAVE_EVPN)
       else if (kind && strcmp(kind, "vxlan") == 0)
         {
           if (linkinfo[IFLA_INFO_DATA]) // This should be true
@@ -719,7 +711,6 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
                 vxlan_if = 1;
             }
         }
-#endif
     }
 
   if (tb[IFLA_MASTER])
@@ -747,13 +738,11 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   if_add_update (ifp);
 
-#if defined(HAVE_EVPN)
   if (vxlan_if)
     {
       /* Update VNI, create or update hash table, notify BGP, if needed. */
       zebra_vxlan_if_add (ifp, vni);
     }
-#endif
 
   return 0;
 }
@@ -1369,10 +1358,8 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   char *kind = NULL;
   char *slave_kind = NULL;
   int vrf_device = 0;
-#if defined(HAVE_EVPN)
   int vxlan_if = 0;
   vni_t vni;
-#endif
 
   vrf_id_t vrf_id = ns_id;
 
@@ -1431,7 +1418,6 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           netlink_vrf_change(h, tb[IFLA_LINKINFO], name);
           vrf_id = (vrf_id_t)ifi->ifi_index;
         }
-#if defined(HAVE_EVPN)
       else if (kind && strcmp(kind, "vxlan") == 0)
         {
           if (linkinfo[IFLA_INFO_DATA]) // This should be true
@@ -1442,7 +1428,6 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                 vxlan_if = 1;
             }
         }
-#endif
     }
 
   /* See if interface is present. */
@@ -1492,14 +1477,11 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           /* Inform clients, install any configured addresses. */
           if_add_update (ifp);
 
-#if defined(HAVE_EVPN)
           if (vxlan_if)
             {
               /* Update VNI, create or update hash table, notify BGP, if needed. */
               zebra_vxlan_if_add (ifp, vni);
             }
-#endif
-
         }
       else if (ifp->vrf_id != vrf_id)
         {
@@ -1555,14 +1537,12 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
       if (IS_ZEBRA_DEBUG_KERNEL)
         zlog_debug ("RTM_DELLINK for %s(%u)", name, ifp->ifindex);
 
-#if defined(HAVE_EVPN)
       vxlan_if = is_interface_vxlan (ifp);
       if (vxlan_if)
         {
           /* Clear VNI, delete from hash table, notify BGP, if needed. */
           zebra_vxlan_if_del (ifp);
         }
-#endif
 
       UNSET_FLAG(ifp->status, ZEBRA_INTERFACE_VRF_LOOPBACK);
 
@@ -2454,7 +2434,6 @@ kernel_delete_ipv6 (struct prefix *p, struct rib *rib)
     }
 }
 
-#if defined(HAVE_EVPN)
 /*
  * Add remote VTEP to the flood list for this VxLAN interface (VNI). This
  * is done by adding an FDB entry with a MAC of 00:00:00:00:00:00.
@@ -2492,7 +2471,6 @@ netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int
 
   return netlink_talk (&req.n, &zns->netlink_cmd, NS_DEFAULT);
 }
-#endif /* HAVE_EVPN */
 
 /* Interface address modification. */
 static int

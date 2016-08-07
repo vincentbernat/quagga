@@ -41,9 +41,7 @@
 #define ZEBRA_DEBUG_FPM     0x01
 #define ZEBRA_DEBUG_NHT     0x01
 
-#if defined(HAVE_EVPN)
 #define ZEBRA_DEBUG_VXLAN   0x01
-#endif
 
 /* Debug related macro. */
 #define IS_ZEBRA_DEBUG_EVENT  (zebra_debug_event & ZEBRA_DEBUG_EVENT)
@@ -66,9 +64,7 @@
 #define IS_ZEBRA_DEBUG_FPM (zebra_debug_fpm & ZEBRA_DEBUG_FPM)
 #define IS_ZEBRA_DEBUG_NHT  (zebra_debug_nht & ZEBRA_DEBUG_NHT)
 
-#if defined(HAVE_EVPN)
 #define IS_ZEBRA_DEBUG_VXLAN (zebra_debug_vxlan & ZEBRA_DEBUG_VXLAN)
-#endif
 
 extern unsigned long zebra_debug_event;
 extern unsigned long zebra_debug_packet;
@@ -76,9 +72,7 @@ extern unsigned long zebra_debug_kernel;
 extern unsigned long zebra_debug_rib;
 extern unsigned long zebra_debug_fpm;
 extern unsigned long zebra_debug_nht;
-#if defined(HAVE_EVPN)
 extern unsigned long zebra_debug_vxlan;
-#endif
 
 extern void zebra_debug_init (void);
 

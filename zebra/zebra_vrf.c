@@ -29,9 +29,7 @@
 #include "zebra/rib.h"
 #include "zebra/zebra_vrf.h"
 #include "zebra/router-id.h"
-#if defined(HAVE_EVPN)
 #include "zebra/zebra_vxlan.h"
-#endif
 
 extern struct zebra_t zebrad;
 struct list *zvrf_list;
@@ -332,9 +330,7 @@ zebra_vrf_alloc (vrf_id_t vrf_id, const char *name)
       zvrf->name[strlen(name)] = '\0';
     }
 
-#if defined(HAVE_EVPN)
   zebra_vxlan_init_tables (zvrf);
-#endif
 
   return zvrf;
 }
