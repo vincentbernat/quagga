@@ -122,6 +122,10 @@ static int
 zvni_vtep_install (zebra_vni_t *zvni, struct prefix *vtep);
 static int
 zvni_vtep_uninstall (zebra_vni_t *zvni, struct prefix *vtep);
+static void
+zvni_print (zebra_vni_t *zvni, void *ctxt);
+static void
+zvni_print_hash (struct hash_backet *backet, void *ctxt);
 
 
 
@@ -463,6 +467,59 @@ zvni_vtep_uninstall (zebra_vni_t *zvni, struct prefix *vtep)
   return 0;
 }
 
+/*
+ * Print an VNI entry.
+ */
+static void
+zvni_print (zebra_vni_t *zvni, void *ctxt)
+{
+  struct vty *vty;
+  zebra_vtep_t *zvtep;
+  char buf[PREFIX_STRLEN];
+
+  vty = (struct vty *) ctxt;
+
+  vty_out(vty, "VNI: %u%s", zvni->vni, VTY_NEWLINE);
+  if (!zvni->vxlan_if)
+    { // unexpected
+      vty_out(vty, " VxLAN interface: unknown%s", VTY_NEWLINE);
+      return;
+    }
+  vty_out(vty, " VxLAN interface: %s ifIndex: %u%s",
+          zvni->vxlan_if->name, zvni->vxlan_if->ifindex, VTY_NEWLINE);
+
+  if (!zvni->vteps)
+    {
+      vty_out(vty, " No remote VTEPs known for this VNI%s", VTY_NEWLINE);
+      return;
+    }
+
+  vty_out(vty, " Remote VTEPs for this VNI:%s", VTY_NEWLINE);
+  for (zvtep = zvni->vteps; zvtep; zvtep = zvtep->next)
+    {
+      struct prefix *p = &zvtep->vtep_ip;
+      vty_out(vty, "  %s%s",
+              inet_ntop (p->family, &p->u.prefix, buf, sizeof (buf)),
+              VTY_NEWLINE);
+    }
+}
+
+/*
+ * Print a VNI hash entry.
+ */
+static void
+zvni_print_hash (struct hash_backet *backet, void *ctxt)
+{
+  zebra_vni_t *zvni;
+
+  zvni = (zebra_vni_t *) backet->data;
+  if (!zvni)
+    return;
+
+  zvni_print (zvni, ctxt);
+}
+
+
 
 /* Public functions */
 
@@ -738,6 +795,33 @@ int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
 
   return 0;
 }
+
+/*
+ * Display VNI information (VTY command handler).
+ */
+void
+zebra_evpn_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
+{
+  zebra_vni_t *zvni;
+
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      vty_out (vty, "%% VNI %u does not exist%s", vni, VTY_NEWLINE);
+      return;
+    }
+  zvni_print (zvni, (void *)vty);
+}
+
+/*
+ * Display VNI hash table (VTY command handler).
+ */
+void
+zebra_evpn_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
+{
+  hash_iterate(zvrf->vni_table, zvni_print_hash, vty);
+}
+
 
 /*
  * Allocate VNI hash table for this VRF and do other initialization.
