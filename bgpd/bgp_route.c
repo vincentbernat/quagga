@@ -1836,7 +1836,8 @@ bgp_process_main (struct work_queue *wq, void *data)
           CHECK_FLAG (old_select->flags, BGP_INFO_MULTIPATH_CHG))
         {
           if (is_bgp_zebra_rib_route (bgp, afi, safi))
-            bgp_zebra_announce (bgp, afi, safi, p, old_select);
+            (*(bgp_zebra_route_install[afi][safi].install_fn))
+                                     (bgp, afi, safi, p, old_select);
         }
           
       UNSET_FLAG (old_select->flags, BGP_INFO_MULTIPATH_CHG);
@@ -1879,7 +1880,8 @@ bgp_process_main (struct work_queue *wq, void *data)
 	  && new_select->type == ZEBRA_ROUTE_BGP 
 	  && (new_select->sub_type == BGP_ROUTE_NORMAL ||
               new_select->sub_type == BGP_ROUTE_AGGREGATE))
-	bgp_zebra_announce (bgp, afi, safi, p, new_select);
+        (*(bgp_zebra_route_install[afi][safi].install_fn))
+                                 (bgp, afi, safi, p, new_select);
       else
 	{
 	  /* Withdraw the route from the kernel. */
@@ -1887,7 +1889,8 @@ bgp_process_main (struct work_queue *wq, void *data)
 	      && old_select->type == ZEBRA_ROUTE_BGP
 	      && (old_select->sub_type == BGP_ROUTE_NORMAL ||
                   old_select->sub_type == BGP_ROUTE_AGGREGATE))
-	    bgp_zebra_withdraw (bgp, afi, safi, p, old_select);
+            (*(bgp_zebra_route_install[afi][safi].uninstall_fn))
+                                     (bgp, afi, safi, p, old_select);
 	}
     }
     
@@ -3084,7 +3087,8 @@ bgp_cleanup_table(struct bgp_table *table, struct bgp *bgp,
             && ri->type == ZEBRA_ROUTE_BGP
             && (ri->sub_type == BGP_ROUTE_NORMAL ||
                 ri->sub_type == BGP_ROUTE_AGGREGATE))
-          bgp_zebra_withdraw (bgp, afi, safi, &rn->p, ri);
+          (*(bgp_zebra_route_install[afi][safi].uninstall_fn))
+                                     (bgp, afi, safi, &rn->p, ri);
       }
 }
 
