@@ -324,7 +324,7 @@ zvni_vtep_find (zebra_vni_t *zvni, struct prefix *vtep)
 
   for (zvtep = zvni->vteps; zvtep; zvtep = zvtep->next)
     {
-      if (!zvni_vtep_match (vtep, zvtep))
+      if (zvni_vtep_match (vtep, zvtep))
         break;
     }
 
