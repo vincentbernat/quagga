@@ -1813,7 +1813,7 @@ bgp_process_main (struct work_queue *wq, void *data)
         for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
           {
             if (is_bgp_zebra_rib_route (bgp, afi, safi))
-              bgp_zebra_announce_table(bgp, afi, safi);
+              bgp_install_routes_for_afi_safi (bgp, afi, safi);
           }
       bgp->main_peers_update_hold = 0;
 
@@ -3072,8 +3072,55 @@ bgp_clear_stale_route (struct peer *peer, afi_t afi, safi_t safi)
 }
 
 static void
-bgp_cleanup_table(struct bgp_table *table, struct bgp *bgp,
-                  afi_t afi, safi_t safi)
+bgp_install_table (struct bgp_table *table, struct bgp *bgp,
+                   afi_t afi, safi_t safi)
+{
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+
+  if (!table) return;
+
+  for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
+    for (ri = rn->info; ri; ri = ri->next)
+      if (CHECK_FLAG (ri->flags, BGP_INFO_SELECTED)
+          && ri->type == ZEBRA_ROUTE_BGP
+          && ri->sub_type == BGP_ROUTE_NORMAL)
+        (*(bgp_zebra_route_install[afi][safi].install_fn))
+                                 (bgp, afi, safi, &rn->p, ri);
+}
+
+/* Install all routes of an AFI/SAFI into zebra */
+void
+bgp_install_routes_for_afi_safi (struct bgp *bgp, afi_t afi, safi_t safi)
+{
+  struct bgp_table *table;
+  struct bgp_node *rn;
+
+  /* Don't try to install if we're not connected to Zebra or Zebra doesn't
+   * know of this instance.
+   */
+  if (!bgp_install_info_to_zebra (bgp))
+    return;
+
+  table = bgp->rib[afi][safi];
+
+  /* Do special handling for 2-level tables. */
+  if (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP || safi == SAFI_EVPN)
+    {
+      for (rn = bgp_table_top(table); rn; rn = bgp_route_next (rn))
+        {
+          if (rn->info)
+            bgp_install_table ((struct bgp_table *)(rn->info),
+                               bgp, afi, safi);
+        }
+    }
+  else
+    bgp_install_table (table, bgp, afi, safi);
+}
+
+static void
+bgp_cleanup_table (struct bgp_table *table, struct bgp *bgp,
+                    afi_t afi, safi_t safi)
 {
   struct bgp_node *rn;
   struct bgp_info *ri;
@@ -3092,6 +3139,33 @@ bgp_cleanup_table(struct bgp_table *table, struct bgp *bgp,
       }
 }
 
+static void
+bgp_cleanup_routes_for_afi_safi (struct bgp *bgp, afi_t afi, safi_t safi)
+{
+  struct bgp_table *table;
+  struct bgp_node *rn;
+
+  table = bgp->rib[afi][safi];
+
+  /* Do special handling for 2-level tables. */
+  if (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP || safi == SAFI_EVPN)
+    {
+      for (rn = bgp_table_top(table); rn; rn = bgp_route_next (rn))
+        {
+          if (rn->info)
+            {
+              bgp_cleanup_table ((struct bgp_table *)(rn->info),
+                                 bgp, afi, safi);
+              bgp_table_finish ((struct bgp_table **)&(rn->info));
+              rn->info = NULL;
+              bgp_unlock_node(rn);
+            }
+        }
+    }
+  else
+    bgp_cleanup_table (table, bgp, afi, safi);
+}
+
 /* Delete all kernel routes. */
 void
 bgp_cleanup_routes (void)
@@ -3107,7 +3181,7 @@ bgp_cleanup_routes (void)
         for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
           {
             if (is_bgp_zebra_rib_route (bgp, afi, safi))
-	      bgp_cleanup_table(bgp->rib[afi][safi], bgp, afi, safi);
+              bgp_cleanup_routes_for_afi_safi (bgp, afi, safi);
           }
     }
 }
@@ -4167,7 +4241,7 @@ bgp_table_map_set (struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
     }
 
   if (is_bgp_zebra_rib_route (bgp, afi, safi))
-    bgp_zebra_announce_table(bgp, afi, safi);
+    bgp_install_routes_for_afi_safi (bgp, afi, safi);
 
   return CMD_SUCCESS;
 }
@@ -4185,7 +4259,7 @@ bgp_table_map_unset (struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
   rmap->map = NULL;
 
   if (is_bgp_zebra_rib_route (bgp, afi, safi))
-    bgp_zebra_announce_table(bgp, afi, safi);
+    bgp_install_routes_for_afi_safi (bgp, afi, safi);
 
   return CMD_SUCCESS;
 }

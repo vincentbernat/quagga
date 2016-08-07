@@ -214,6 +214,7 @@ bgp_bump_version (struct bgp_node *node)
 extern void bgp_process_queue_init (void);
 extern void bgp_route_init (void);
 extern void bgp_route_finish (void);
+extern void bgp_install_routes_for_afi_safi (struct bgp *, afi_t, safi_t);
 extern void bgp_cleanup_routes (void);
 extern void bgp_announce_route (struct peer *, afi_t, safi_t);
 extern void bgp_stop_announce_route_timer(struct peer_af *paf);

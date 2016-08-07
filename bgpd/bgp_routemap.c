@@ -2796,7 +2796,7 @@ bgp_route_map_process_update (struct bgp *bgp, const char *rmap_name, int route_
 			 "table map", rmap_name);
 	    if (route_update
                 && is_bgp_zebra_rib_route (bgp, afi, safi))
-	      bgp_zebra_announce_table(bgp, afi, safi);
+	      bgp_install_routes_for_afi_safi (bgp, afi, safi);
 	  }
 
         /* For network route-map updates. */

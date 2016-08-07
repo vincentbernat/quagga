@@ -44,7 +44,6 @@ extern int bgp_config_write_redistribute (struct vty *, struct bgp *, afi_t, saf
 				   int *);
 extern int bgp_install_info_to_zebra (struct bgp *bgp);
 extern int bgp_zebra_announce (struct bgp *, afi_t, safi_t, struct prefix *, struct bgp_info *);
-extern void bgp_zebra_announce_table (struct bgp *, afi_t, safi_t);
 extern int bgp_zebra_withdraw (struct bgp *, afi_t, safi_t, struct prefix *, struct bgp_info *);
 
 extern void bgp_zebra_initiate_radv (struct bgp *bgp, struct peer *peer);

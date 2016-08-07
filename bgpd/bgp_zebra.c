@@ -1676,31 +1676,6 @@ bgp_zebra_announce (struct bgp *bgp, afi_t afi, safi_t safi,
   return -1;
 }
 
-/* Announce all routes of a table to zebra */
-void
-bgp_zebra_announce_table (struct bgp *bgp, afi_t afi, safi_t safi)
-{
-  struct bgp_node *rn;
-  struct bgp_table *table;
-  struct bgp_info *ri;
-
-  /* Don't try to install if we're not connected to Zebra or Zebra doesn't
-   * know of this instance.
-   */
-  if (!bgp_install_info_to_zebra (bgp))
-    return;
-
-  table = bgp->rib[afi][safi];
-  if (!table) return;
-
-  for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
-    for (ri = rn->info; ri; ri = ri->next)
-      if (CHECK_FLAG (ri->flags, BGP_INFO_SELECTED)
-          && ri->type == ZEBRA_ROUTE_BGP
-          && ri->sub_type == BGP_ROUTE_NORMAL)
-        bgp_zebra_announce (bgp, afi, safi, &rn->p, ri);
-}
-
 int
 bgp_zebra_withdraw (struct bgp *bgp, afi_t afi, safi_t safi,
                     struct prefix *p, struct bgp_info *info)
