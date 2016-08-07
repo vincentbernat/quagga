@@ -2478,7 +2478,7 @@ netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int
   req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
   req.n.nlmsg_flags = NLM_F_REQUEST;
   if (cmd == RTM_NEWNEIGH)
-    req.n.nlmsg_flags |= NLM_F_CREATE;
+    req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
   req.n.nlmsg_type = cmd;
   req.ndm.ndm_family = PF_BRIDGE;
   req.ndm.ndm_state = NUD_NOARP | NUD_PERMANENT;
