@@ -75,7 +75,7 @@ pim_ifchannel_remove_children (struct pim_ifchannel *ch)
 static void
 pim_ifchannel_find_new_children (struct pim_ifchannel *ch)
 {
-  struct pim_interface *pim_ifp;
+  struct pim_interface *pim_ifp = ch->interface->info;
   struct pim_ifchannel *child;
   struct listnode *ch_node;
 
