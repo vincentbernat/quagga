@@ -7,7 +7,7 @@
 ##
 AC_PREREQ(2.60)
 
-AC_INIT(Quagga, 0.99.24+cl3u2, [https://bugzilla.quagga.net])
+AC_INIT(Quagga, 0.99.24+cl3u3, [https://bugzilla.quagga.net])
 CONFIG_ARGS="$*"
 AC_SUBST(CONFIG_ARGS)
 AC_CONFIG_SRCDIR(lib/zebra.h)
@@ -326,13 +326,10 @@ AC_ARG_ENABLE(rr-semantics,
 AC_CHECK_HEADERS(json-c/json.h)
 AC_CHECK_LIB(json-c, json_object_get, LIBS="$LIBS -ljson-c")
 if test $ac_cv_lib_json_c_json_object_get = no; then
-  AC_MSG_ERROR([lib json is needed to compile])
-fi
-
-AC_CHECK_HEADERS(json-c/json.h)
-AC_CHECK_LIB(json-c, json_object_get, LIBS="$LIBS -ljson-c")
-if test $ac_cv_lib_json_c_json_object_get = no; then
-  AC_MSG_ERROR([lib json is needed to compile])
+  AC_CHECK_LIB(json, json_object_get, LIBS="$LIBS -ljson")
+  if test $ac_cv_lib_json_json_object_get = no; then
+      AC_MSG_ERROR([lib json is needed to compile])
+  fi
 fi
 
 if test x"${enable_gcc_rdynamic}" != x"no" ; then
@@ -999,11 +996,46 @@ dnl figure out how to specify an interface in multicast sockets API
 dnl ---------------------------------------------------------------
 AC_CHECK_MEMBERS([struct ip_mreqn.imr_ifindex], [], [], QUAGGA_INCLUDES)
 
-AC_CHECK_HEADERS([linux/mroute.h], [], [],
-[
-#if HAVE_NETINET_IN_H
-#include<netinet/in.h>
-#endif])
+AC_CHECK_HEADERS([linux/mroute.h], [], [],[
+	#ifdef HAVE_SYS_SOCKET_H
+	# include <sys/socket.h>
+	#endif
+	#ifdef HAVE_NETINET_IN_H
+	# include <netinet/in.h>
+	#endif
+	#define _LINUX_IN_H             /* For Linux <= 2.6.25 */
+	#include <linux/types.h>
+])
+
+m4_define([QUAGGA_INCLUDES],
+QUAGGA_INCLUDES
+[#if HAVE_LINUX_MROUTE_H
+# include <linux/mroute.h>
+#endif
+])dnl
+
+AC_CHECK_HEADERS([netinet/ip_mroute.h], [], [],[
+	#ifdef HAVE_SYS_SOCKET_H
+	# include <sys/socket.h>
+	#endif
+	#ifdef HAVE_SYS_TYPES_H
+	# include <sys/types.h>
+	#endif
+	#ifdef HAVE_NETINET_IN_H
+	# include <netinet/in.h>
+	#endif
+	#ifdef HAVE_NET_ROUTE_H
+	# include <net/route.h>
+	#endif
+])
+
+m4_define([QUAGGA_INCLUDES],
+QUAGGA_INCLUDES
+[#if HAVE_NETINET_IP_MROUTE_H
+# include <netinet/ip_mroute.h>
+#endif
+])dnl
+
 AC_MSG_CHECKING([for BSD struct ip_mreq hack])
 AC_TRY_COMPILE([#ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -1100,6 +1132,11 @@ IPFORWARD=ipforward_${quagga_cv_ipforward_method}.o
 AC_SUBST(IPFORWARD)
 
 AC_CHECK_FUNCS(getaddrinfo, [have_getaddrinfo=yes], [have_getaddrinfo=no])
+
+dnl ----------------------------------------------------------------------------
+dnl figure out if domainname is available in the utsname struct (GNU extension).
+dnl ----------------------------------------------------------------------------
+AC_CHECK_MEMBERS([struct utsname.domainname], [], [], [#include <sys/utsname.h>])
 
 dnl ----------
 dnl IPv6 check

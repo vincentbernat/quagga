@@ -60,7 +60,7 @@ int kernel_address_delete_ipv4 (struct interface *a, struct connected *b)
   return 0;
 }
 
-int netlink_neigh_update (int cmd, int ifindex, __u32 addr, char *lla, int llalen)
+int kernel_neigh_update (int a, int b, uint32_t c, char *d, int e)
 {
   return 0;
 }

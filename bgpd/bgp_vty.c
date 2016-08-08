@@ -538,7 +538,7 @@ bgp_clear_vty (struct vty *vty, const char *name, afi_t afi, safi_t safi,
     }
   else
     {
-      bgp = (vty->index) ? vty->index : bgp_get_default ();
+      bgp = bgp_get_default ();
       if (bgp == NULL)
         {
           vty_out (vty, "No BGP process is configured%s", VTY_NEWLINE);
@@ -551,26 +551,22 @@ bgp_clear_vty (struct vty *vty, const char *name, afi_t afi, safi_t safi,
 
 /* clear soft inbound */
 static void
-bgp_clear_star_soft_in (struct vty *vty)
+bgp_clear_star_soft_in (struct vty *vty, const char *name)
 {
-  bgp_clear_vty (vty, NULL, AFI_IP, SAFI_UNICAST, clear_all,
+  bgp_clear_vty (vty,name, AFI_IP, SAFI_UNICAST, clear_all,
                  BGP_CLEAR_SOFT_IN, NULL);
-#ifdef HAVE_IPV6
-  bgp_clear_vty (vty, NULL, AFI_IP6, SAFI_UNICAST, clear_all,
+  bgp_clear_vty (vty, name, AFI_IP6, SAFI_UNICAST, clear_all,
                  BGP_CLEAR_SOFT_IN, NULL);
-#endif /* HAVE_IPV6 */
 }
 
 /* clear soft outbound */
 static void
-bgp_clear_star_soft_out (struct vty *vty)
+bgp_clear_star_soft_out (struct vty *vty, const char *name)
 {
-  bgp_clear_vty (vty, NULL, AFI_IP, SAFI_UNICAST, clear_all,
+  bgp_clear_vty (vty, name, AFI_IP, SAFI_UNICAST, clear_all,
 		 BGP_CLEAR_SOFT_OUT, NULL);
-#ifdef HAVE_IPV6
-  bgp_clear_vty (vty, NULL, AFI_IP6, SAFI_UNICAST, clear_all,
+  bgp_clear_vty (vty, name, AFI_IP6, SAFI_UNICAST, clear_all,
 		 BGP_CLEAR_SOFT_OUT, NULL);
-#endif /* HAVE_IPV6 */
 }
 
 
@@ -839,11 +835,7 @@ DEFUN (bgp_router_id,
       return CMD_WARNING;
     }
 
-  if (IPV4_ADDR_SAME (&bgp->router_id_static, &id))
-    return CMD_SUCCESS;
-
-  bgp->router_id_static = id;
-  bgp_router_id_set (bgp, &id);
+  bgp_router_id_static_set (bgp, id);
 
   return CMD_SUCCESS;
 }
@@ -893,8 +885,8 @@ DEFUN (no_bgp_router_id,
       }
     }
 
-  bgp->router_id_static.s_addr = 0;
-  bgp_router_id_set (bgp, &bgp->router_id_zebra);
+  id.s_addr = 0;
+  bgp_router_id_static_set (bgp, id);
 
   return CMD_SUCCESS;
 }
@@ -938,10 +930,7 @@ DEFUN (bgp_router_id_interface,
 
     if (p && (p->family == AF_INET))
     {
-      if (IPV4_ADDR_SAME (&bgp->router_id_static, &p->u.prefix4))
-        return CMD_SUCCESS;
-      bgp->router_id_static = p->u.prefix4;
-      bgp_router_id_set (bgp, &p->u.prefix4);
+      bgp_router_id_static_set(bgp, p->u.prefix4);
       return CMD_SUCCESS;
     }
   }
@@ -980,7 +969,7 @@ DEFUN (bgp_cluster_id,
     }
 
   bgp_cluster_id_set (bgp, &cluster);
-  bgp_clear_star_soft_out (vty);
+  bgp_clear_star_soft_out (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -1016,7 +1005,7 @@ DEFUN (no_bgp_cluster_id,
     }
 
   bgp_cluster_id_unset (bgp);
-  bgp_clear_star_soft_out (vty);
+  bgp_clear_star_soft_out (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -1713,7 +1702,7 @@ DEFUN (bgp_client_to_client_reflection,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_NO_CLIENT_TO_CLIENT);
-  bgp_clear_star_soft_out (vty);
+  bgp_clear_star_soft_out (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -1730,7 +1719,7 @@ DEFUN (no_bgp_client_to_client_reflection,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_NO_CLIENT_TO_CLIENT);
-  bgp_clear_star_soft_out (vty);
+  bgp_clear_star_soft_out (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -1951,7 +1940,7 @@ DEFUN (bgp_enforce_first_as,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_ENFORCE_FIRST_AS);
-  bgp_clear_star_soft_in (vty);
+  bgp_clear_star_soft_in (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -1967,7 +1956,7 @@ DEFUN (no_bgp_enforce_first_as,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_ENFORCE_FIRST_AS);
-  bgp_clear_star_soft_in (vty);
+  bgp_clear_star_soft_in (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -2385,7 +2374,7 @@ DEFUN (bgp_default_local_preference,
   VTY_GET_INTEGER ("local preference", local_pref, argv[0]);
 
   bgp_default_local_preference_set (bgp, local_pref);
-  bgp_clear_star_soft_in (vty);
+  bgp_clear_star_soft_in (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -2402,7 +2391,7 @@ DEFUN (no_bgp_default_local_preference,
 
   bgp = vty->index;
   bgp_default_local_preference_unset (bgp);
-  bgp_clear_star_soft_in (vty);
+  bgp_clear_star_soft_in (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -2475,7 +2464,7 @@ DEFUN (bgp_rr_allow_outbound_policy,
     {
       bgp_flag_set(bgp, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
       update_group_announce_rrclients(bgp);
-      bgp_clear_star_soft_out (vty);
+      bgp_clear_star_soft_out (vty, bgp->name);
     }
 
   return CMD_SUCCESS;
@@ -2497,7 +2486,7 @@ DEFUN (no_bgp_rr_allow_outbound_policy,
     {
       bgp_flag_unset(bgp, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
       update_group_announce_rrclients(bgp);
-      bgp_clear_star_soft_out (vty);
+      bgp_clear_star_soft_out (vty, bgp->name);
     }
 
   return CMD_SUCCESS;
@@ -2744,7 +2733,7 @@ DEFUN (bgp_disable_connected_route_check,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_DISABLE_NH_CONNECTED_CHK);
-  bgp_clear_star_soft_in (vty);
+  bgp_clear_star_soft_in (vty, bgp->name);
 
   return CMD_SUCCESS;
 }
@@ -2760,7 +2749,7 @@ DEFUN (no_bgp_disable_connected_route_check,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_DISABLE_NH_CONNECTED_CHK);
-  bgp_clear_star_soft_in (vty);
+  bgp_clear_star_soft_in (vty, bgp->name);
 
   return CMD_SUCCESS;
 }

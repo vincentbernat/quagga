@@ -210,8 +210,8 @@ bgp_config_check (struct bgp *bgp, int config)
 }
 
 /* Set BGP router identifier. */
-int
-bgp_router_id_set (struct bgp *bgp, struct in_addr *id)
+static int
+bgp_router_id_set (struct bgp *bgp, const struct in_addr *id)
 {
   struct peer *peer;
   struct listnode *node, *nnode;
@@ -233,6 +233,46 @@ bgp_router_id_set (struct bgp *bgp, struct in_addr *id)
                           BGP_NOTIFY_CEASE_CONFIG_CHANGE);
        }
     }
+  return 0;
+}
+
+void
+bgp_router_id_zebra_bump (vrf_id_t vrf_id, const struct prefix *router_id)
+{
+  struct listnode *node, *nnode;
+  struct bgp *bgp;
+
+  if (vrf_id == VRF_DEFAULT)
+    {
+      /* Router-id change for default VRF has to also update all views. */
+      for (ALL_LIST_ELEMENTS (bm->bgp, node, nnode, bgp))
+        {
+          if (bgp->inst_type == BGP_INSTANCE_TYPE_VRF)
+            continue;
+
+          bgp->router_id_zebra = router_id->u.prefix4;
+          if (!bgp->router_id_static.s_addr)
+            bgp_router_id_set (bgp, &router_id->u.prefix4);
+        }
+    }
+  else
+    {
+      bgp = bgp_lookup_by_vrf_id (vrf_id);
+      if (bgp)
+        {
+          bgp->router_id_zebra = router_id->u.prefix4;
+
+          if (!bgp->router_id_static.s_addr)
+            bgp_router_id_set (bgp, &router_id->u.prefix4);
+        }
+    }
+}
+
+int
+bgp_router_id_static_set (struct bgp *bgp, struct in_addr id)
+{
+  bgp->router_id_static = id;
+  bgp_router_id_set (bgp, id.s_addr ? &id : &bgp->router_id_zebra);
   return 0;
 }
 
@@ -1305,7 +1345,7 @@ bgp_peer_conf_if_to_su_update_v4 (struct peer *peer, struct interface *ifp)
               else if (s_addr % 4 == 2)
                 peer->su.sin.sin_addr.s_addr = htonl(s_addr-1);
 #ifdef HAVE_STRUCT_SOCKADDR_IN_SIN_LEN
-              peer->su->sin.sin_len = sizeof(struct sockaddr_in);
+              peer->su.sin.sin_len = sizeof(struct sockaddr_in);
 #endif /* HAVE_STRUCT_SOCKADDR_IN_SIN_LEN */
               return 1;
             }
@@ -1318,7 +1358,7 @@ bgp_peer_conf_if_to_su_update_v4 (struct peer *peer, struct interface *ifp)
               else
                 peer->su.sin.sin_addr.s_addr = htonl(s_addr-1);
 #ifdef HAVE_STRUCT_SOCKADDR_IN_SIN_LEN
-              peer->su->sin.sin_len = sizeof(struct sockaddr_in);
+              peer->su.sin.sin_len = sizeof(struct sockaddr_in);
 #endif /* HAVE_STRUCT_SOCKADDR_IN_SIN_LEN */
               return 1;
             }
@@ -1857,6 +1897,15 @@ peer_deactivate (struct peer *peer, afi_t afi, safi_t safi)
     }
 
   return ret;
+}
+
+int
+peer_afc_set (struct peer *peer, afi_t afi, safi_t safi, int enable)
+{
+  if (enable)
+    return peer_activate (peer, afi, safi);
+  else
+    return peer_deactivate (peer, afi, safi);
 }
 
 static void
@@ -4127,7 +4176,7 @@ peer_ebgp_multihop_unset (struct peer *peer)
 
 /* Neighbor description. */
 int
-peer_description_set (struct peer *peer, char *desc)
+peer_description_set (struct peer *peer, const char *desc)
 {
   if (peer->desc)
     XFREE (MTYPE_PEER_DESC, peer->desc);
@@ -4220,7 +4269,7 @@ peer_update_source_if_set (struct peer *peer, const char *ifname)
 }
 
 int
-peer_update_source_addr_set (struct peer *peer, union sockunion *su)
+peer_update_source_addr_set (struct peer *peer, const union sockunion *su)
 {
   struct peer_group *group;
   struct listnode *node, *nnode;

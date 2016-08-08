@@ -5966,7 +5966,7 @@ route_vty_out (struct vty *vty, struct prefix *p,
 	        vty_out (vty, "%-16s", inet_ntoa (attr->nexthop));
             }
 	}
-#ifdef HAVE_IPV6
+
       /* IPv6 Next Hop */
       else if (p->family == AF_INET6 || BGP_ATTR_NEXTHOP_AFI_IP6(attr))
 	{
@@ -5994,8 +5994,9 @@ route_vty_out (struct vty *vty, struct prefix *p,
                   json_object_string_add(json_nexthop_ll, "afi", "ipv6");
                   json_object_string_add(json_nexthop_ll, "scope", "link-local");
 
-                  if (IPV6_ADDR_CMP (&attr->extra->mp_nexthop_global,
-                                     &attr->extra->mp_nexthop_local) != 0)
+                  if ((IPV6_ADDR_CMP (&attr->extra->mp_nexthop_global,
+                                      &attr->extra->mp_nexthop_local) != 0) &&
+                                      !attr->extra->mp_nexthop_prefer_global)
                     json_object_boolean_true_add(json_nexthop_ll, "used");
                   else
                     json_object_boolean_true_add(json_nexthop_global, "used");
@@ -6005,7 +6006,10 @@ route_vty_out (struct vty *vty, struct prefix *p,
             }
           else
             {
-	      if ((attr->extra->mp_nexthop_len == 32) || (binfo->peer->conf_if))
+              /* Display LL if LL/Global both in table unless prefer-global is set */
+	      if (((attr->extra->mp_nexthop_len == 32) &&
+                   !attr->extra->mp_nexthop_prefer_global) ||
+                   (binfo->peer->conf_if))
 		{
 		  if (binfo->peer->conf_if)
 		    {
@@ -6047,7 +6051,6 @@ route_vty_out (struct vty *vty, struct prefix *p,
 		}
             }
 	}
-#endif /* HAVE_IPV6 */
 
       /* MED/Metric */
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
@@ -6728,7 +6731,6 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
           if (json_paths)
             json_object_string_add(json_nexthop_global, "afi", "ipv4");
 	}
-#ifdef HAVE_IPV6
       else
 	{
 	  assert (attr->extra);
@@ -6747,8 +6749,6 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
 			          buf, INET6_ADDRSTRLEN));
             }
 	}
-#endif /* HAVE_IPV6 */
-
 
       /* Display the IGP cost or 'inaccessible' */
       if (! CHECK_FLAG (binfo->flags, BGP_INFO_VALID))
@@ -6854,7 +6854,6 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       if (!json_paths)
         vty_out (vty, "%s", VTY_NEWLINE);
 
-#ifdef HAVE_IPV6
       /* display the link-local nexthop */
       if (attr->extra && attr->extra->mp_nexthop_len == BGP_ATTR_NHLEN_IPV6_GLOBAL_AND_LL)
 	{
@@ -6868,13 +6867,19 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
               json_object_string_add(json_nexthop_ll, "scope", "link-local");
 
               json_object_boolean_true_add(json_nexthop_ll, "accessible");
-              json_object_boolean_true_add(json_nexthop_ll, "used");
+
+              if (!attr->extra->mp_nexthop_prefer_global)
+                json_object_boolean_true_add(json_nexthop_ll, "used");
+              else
+                json_object_boolean_true_add(json_nexthop_global, "used");
             }
           else
             {
-	      vty_out (vty, "    (%s) (used)%s",
-		       inet_ntop (AF_INET6, &attr->extra->mp_nexthop_local,
+	      vty_out (vty, "    (%s) %s%s",
+                       inet_ntop (AF_INET6, &attr->extra->mp_nexthop_local,
 			          buf, INET6_ADDRSTRLEN),
+                       attr->extra->mp_nexthop_prefer_global ?
+                                   "(prefer-global)" : "(used)",
 		       VTY_NEWLINE);
             }
 	}
@@ -6884,7 +6889,6 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
           if (json_paths)
             json_object_boolean_true_add(json_nexthop_global, "used");
         }
-#endif /* HAVE_IPV6 */
 
       /* Line 3 display Origin, Med, Locpref, Weight, Tag, valid, Int/Ext/Local, Atomic, best */
       if (json_paths)

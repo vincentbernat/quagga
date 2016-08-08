@@ -272,7 +272,7 @@ ospf_new (u_short instance)
   new->lsa_refresh_interval = OSPF_LSA_REFRESH_INTERVAL_DEFAULT;
   new->t_lsa_refresher = thread_add_timer (master, ospf_lsa_refresh_walker,
 					   new, new->lsa_refresh_interval);
-  new->lsa_refresher_started = quagga_time (NULL);
+  new->lsa_refresher_started = quagga_monotime ();
 
   if ((new->fd = ospf_sock_init()) < 0)
     {
@@ -1598,7 +1598,7 @@ ospf_timers_refresh_set (struct ospf *ospf, int interval)
     return 1;
 
   time_left = ospf->lsa_refresh_interval -
-    (quagga_time (NULL) - ospf->lsa_refresher_started);
+    (quagga_monotime () - ospf->lsa_refresher_started);
   
   if (time_left > interval)
     {
@@ -1617,7 +1617,7 @@ ospf_timers_refresh_unset (struct ospf *ospf)
   int time_left;
 
   time_left = ospf->lsa_refresh_interval -
-    (quagga_time (NULL) - ospf->lsa_refresher_started);
+    (quagga_monotime () - ospf->lsa_refresher_started);
 
   if (time_left > OSPF_LSA_REFRESH_INTERVAL_DEFAULT)
     {
@@ -1939,5 +1939,4 @@ ospf_master_init ()
   om = &ospf_master;
   om->ospf = list_new ();
   om->master = thread_master_create ();
-  om->start_time = quagga_time (NULL);
 }
