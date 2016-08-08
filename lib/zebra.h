@@ -538,10 +538,12 @@ typedef enum {
  * not optimal for use in data-structure sizing.
  * Note: Only useful (i.e., supported) values are defined below.
  */
-#define IANA_AFI_RESERVED             0
-#define IANA_AFI_IPV4                 1
-#define IANA_AFI_IPV6                 2
-#define IANA_AFI_L2VPN                25
+typedef enum {
+  IANA_AFI_RESERVED = 0,
+  IANA_AFI_IPV4 = 1,
+  IANA_AFI_IPV6 = 2,
+  IANA_AFI_L2VPN = 25,
+} iana_afi_t;
 
 #define IANA_SAFI_RESERVED            0
 #define IANA_SAFI_UNICAST             1
@@ -622,18 +624,18 @@ struct fifo
 #define FIFO_TOP(F)                                   \
   (FIFO_EMPTY(F) ? NULL : ((struct fifo *)(F))->next)
 
-static inline afi_t afi_iana2int (afi_t afi)
+static inline afi_t afi_iana2int (iana_afi_t iana_afi)
 {
-  if (afi == IANA_AFI_IPV4)
+  if (iana_afi == IANA_AFI_IPV4)
     return AFI_IP;
-  if (afi == IANA_AFI_IPV6)
+  if (iana_afi == IANA_AFI_IPV6)
     return AFI_IP6;
-  if (afi == IANA_AFI_L2VPN)
+  if (iana_afi == IANA_AFI_L2VPN)
     return AFI_L2VPN;
   return AFI_MAX;
 }
 
-static inline afi_t afi_int2iana (afi_t afi)
+static inline iana_afi_t afi_int2iana (afi_t afi)
 {
   if (afi == AFI_IP)
     return IANA_AFI_IPV4;
