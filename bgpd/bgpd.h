@@ -1178,7 +1178,7 @@ extern struct peer *peer_unlock_with_caller(const char *, struct peer *);
 extern bgp_peer_sort_t peer_sort (struct peer *peer);
 extern int peer_active (struct peer *);
 extern int peer_active_nego (struct peer *);
-extern void bgp_recalculate_all_bestpaths (struct bgp *bgp);
+extern void bgp_recalculate_all_bestpaths (struct bgp *, afi_t, safi_t);
 extern struct peer *peer_create(union sockunion *, const char *, struct bgp *,
                                 as_t, as_t, int, afi_t, safi_t, struct peer_group *);
 extern struct peer *peer_create_accept (struct bgp *);

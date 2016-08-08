@@ -1165,7 +1165,7 @@ bgp_maxpaths_config_vty (struct vty *vty, int peer_type, const char *mpaths,
       return CMD_WARNING;
     }
 
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, afi, safi);
 
   return CMD_SUCCESS;
 }
@@ -1735,7 +1735,7 @@ DEFUN (bgp_always_compare_med,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_ALWAYS_COMPARE_MED);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -1751,7 +1751,7 @@ DEFUN (no_bgp_always_compare_med,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_ALWAYS_COMPARE_MED);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -1770,7 +1770,7 @@ DEFUN (bgp_deterministic_med,
   if (!bgp_flag_check(bgp, BGP_FLAG_DETERMINISTIC_MED))
     {
       bgp_flag_set (bgp, BGP_FLAG_DETERMINISTIC_MED);
-      bgp_recalculate_all_bestpaths (bgp);
+      bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
     }
 
   return CMD_SUCCESS;
@@ -1819,7 +1819,7 @@ DEFUN (no_bgp_deterministic_med,
       else
         {
           bgp_flag_unset (bgp, BGP_FLAG_DETERMINISTIC_MED);
-          bgp_recalculate_all_bestpaths (bgp);
+          bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
         }
     }
 
@@ -1973,7 +1973,7 @@ DEFUN (bgp_bestpath_compare_router_id,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_COMPARE_ROUTER_ID);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -1990,7 +1990,7 @@ DEFUN (no_bgp_bestpath_compare_router_id,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_COMPARE_ROUTER_ID);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2008,7 +2008,7 @@ DEFUN (bgp_bestpath_aspath_ignore,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_ASPATH_IGNORE);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2026,7 +2026,7 @@ DEFUN (no_bgp_bestpath_aspath_ignore,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_ASPATH_IGNORE);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2044,7 +2044,7 @@ DEFUN (bgp_bestpath_aspath_confed,
 
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_ASPATH_CONFED);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2062,7 +2062,7 @@ DEFUN (no_bgp_bestpath_aspath_confed,
 
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_ASPATH_CONFED);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2090,7 +2090,7 @@ DEFUN (bgp_bestpath_aspath_multipath_relax,
   else
     bgp_flag_unset (bgp, BGP_FLAG_MULTIPATH_RELAX_AS_SET) ;
 
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2111,7 +2111,7 @@ DEFUN (no_bgp_bestpath_aspath_multipath_relax,
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_ASPATH_MULTIPATH_RELAX);
   bgp_flag_unset (bgp, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2163,7 +2163,7 @@ DEFUN (bgp_bestpath_med,
   else
     bgp_flag_set (bgp, BGP_FLAG_MED_MISSING_AS_WORST);
 
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2182,7 +2182,7 @@ DEFUN (bgp_bestpath_med2,
   bgp = vty->index;
   bgp_flag_set (bgp, BGP_FLAG_MED_CONFED);
   bgp_flag_set (bgp, BGP_FLAG_MED_MISSING_AS_WORST);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2215,7 +2215,7 @@ DEFUN (no_bgp_bestpath_med,
   else
     bgp_flag_unset (bgp, BGP_FLAG_MED_MISSING_AS_WORST);
 
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }
@@ -2235,7 +2235,7 @@ DEFUN (no_bgp_bestpath_med2,
   bgp = vty->index;
   bgp_flag_unset (bgp, BGP_FLAG_MED_CONFED);
   bgp_flag_unset (bgp, BGP_FLAG_MED_MISSING_AS_WORST);
-  bgp_recalculate_all_bestpaths (bgp);
+  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
 
   return CMD_SUCCESS;
 }

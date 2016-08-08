@@ -1453,22 +1453,52 @@ bgp_peer_conf_if_to_su_update (struct peer *peer)
  * when 'bgp bestpath' commands are entered.
  */
 void
-bgp_recalculate_all_bestpaths (struct bgp *bgp)
+bgp_recalculate_all_bestpaths (struct bgp *bgp, afi_t this_afi, safi_t this_safi)
 {
   afi_t afi;
   safi_t safi;
-  struct bgp_node *rn;
+  struct bgp_node *rn, *nrn;
 
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  if (this_afi == AFI_MAX)
     {
-      for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
+      for (afi = AFI_IP; afi < AFI_MAX; afi++)
         {
-          for (rn = bgp_table_top (bgp->rib[afi][safi]); rn; rn = bgp_route_next (rn))
+          for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
             {
-              if (rn->info != NULL)
+              for (rn = bgp_table_top (bgp->rib[afi][safi]); rn; 
+                   rn = bgp_route_next (rn))
                 {
-                  bgp_process (bgp, rn, afi, safi);
+                  if (rn->info != NULL)
+                    {
+                      if (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP || 
+                          safi == SAFI_EVPN)
+                        {
+                          for (nrn = bgp_table_top((struct bgp_table *)(rn->info));
+                               nrn; nrn = bgp_route_next (nrn))
+                            bgp_process (bgp, nrn, afi, safi);
+                        }
+                      else
+                        bgp_process (bgp, rn, afi, safi);
+                    }
                 }
+            }
+        }
+    }
+  else
+    {
+      for (rn = bgp_table_top (bgp->rib[this_afi][this_safi]); rn; rn = bgp_route_next (rn))
+        {
+          if (rn->info != NULL)
+            {
+              if (this_safi == SAFI_MPLS_VPN || this_safi == SAFI_ENCAP ||
+                  this_safi == SAFI_EVPN)
+                {
+                  for (nrn = bgp_table_top((struct bgp_table *)(rn->info));
+                       nrn; nrn = bgp_route_next (nrn))
+                    bgp_process (bgp, nrn, this_afi, this_safi);
+                }
+              else
+                bgp_process (bgp, rn, this_afi, this_safi);
             }
         }
     }
@@ -4022,7 +4052,7 @@ peer_af_flag_modify (struct peer *peer, afi_t afi, safi_t safi, u_int32_t flag,
                             " for addpath-tx-bestpath-per-AS",
                             peer->host);
                   bgp_flag_set (bgp, BGP_FLAG_DETERMINISTIC_MED);
-                  bgp_recalculate_all_bestpaths (bgp);
+                  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
                 }
             }
         }
