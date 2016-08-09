@@ -1172,7 +1172,7 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
   struct bgp *bgp;
   struct attr *riattr;
   struct peer_af *paf;
-  char buf[SU_ADDRSTRLEN];
+  char buf[PREFIX_STRLEN];
   int ret;
   int transparent;
   int reflect;
@@ -1261,11 +1261,9 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
       (IPV4_ADDR_SAME (&onlypeer->remote_id, &riattr->extra->originator_id)))
 	{
           if (bgp_debug_update(NULL, p, subgrp->update_group, 0))
-	    zlog_debug ("%s [Update:SEND] %s/%d originator-id is same as "
+	    zlog_debug ("%s [Update:SEND] %s originator-id is same as "
 		  "remote router-id",
-		  onlypeer->host,
-		  inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-		  p->prefixlen);
+		  onlypeer->host, prefix2str (p, buf, sizeof (buf)));
 	  return 0;
 	}
 
@@ -1279,10 +1277,8 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
 	if (prefix_list_apply (peer->orf_plist[afi][safi], p) == PREFIX_DENY)
 	  {
             if (bgp_debug_update(NULL, p, subgrp->update_group, 0))
-              zlog_debug ("%s [Update:SEND] %s/%d is filtered via ORF",
-                          peer->host,
-                          inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-                          p->prefixlen);
+              zlog_debug ("%s [Update:SEND] %s is filtered via ORF",
+                          peer->host, prefix2str (p, buf, sizeof (buf)));
 	    return 0;
 	  }
       }
@@ -1291,10 +1287,8 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
   if (bgp_output_filter (peer, p, riattr, afi, safi) == FILTER_DENY)
     {
       if (bgp_debug_update(NULL, p, subgrp->update_group, 0))
-	zlog_debug ("%s [Update:SEND] %s/%d is filtered",
-	      peer->host,
-	      inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-	      p->prefixlen);
+	zlog_debug ("%s [Update:SEND] %s is filtered",
+	      peer->host, prefix2str (p, buf, sizeof (buf)));
       return 0;
     }
 
@@ -2143,14 +2137,6 @@ info_make (int type, int sub_type, u_short instance, struct peer *peer, struct a
   return new;
 }
 
-static void
-bgp_info_addpath_rx_str(u_int32_t addpath_id, char *buf)
-{
-  if (addpath_id)
-    sprintf(buf, " with addpath ID %d", addpath_id);
-}
-
-
 /* Check if received nexthop is valid or not. */
 static int
 bgp_update_martian_nexthop (struct bgp *bgp, afi_t afi, safi_t safi, struct attr *attr)
@@ -2221,8 +2207,7 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   struct bgp_info *ri;
   struct bgp_info *new;
   const char *reason;
-  char buf[SU_ADDRSTRLEN];
-  char buf2[30];
+  char pfx_buf[BGP_PRD_PATH_STRLEN];
   int connected = 0;
 
   bgp = peer->bgp;
@@ -2323,13 +2308,9 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	      && CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
 	    {
 	      if (bgp_debug_update(peer, p, NULL, 1))
-                {
-                  bgp_info_addpath_rx_str(addpath_id, buf2);
-		  zlog_debug ("%s rcvd %s/%d%s",
-		              peer->host,
-		              inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-		              p->prefixlen, buf2);
-                }
+                zlog_debug ("%s rcvd %s", peer->host,
+                            bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                      addpath_id, pfx_buf, sizeof (pfx_buf)));
 
 	      if (bgp_damp_update (ri, rn, afi, safi) != BGP_DAMP_SUPPRESSED)
 	        {
@@ -2347,11 +2328,10 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
                     peer->rcvd_attr_printed = 1;
                   }
 
-                  bgp_info_addpath_rx_str(addpath_id, buf2);
-		  zlog_debug ("%s rcvd %s/%d%s...duplicate ignored",
+		  zlog_debug ("%s rcvd %s...duplicate ignored",
 		              peer->host,
-		              inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-		              p->prefixlen, buf2);
+                              bgp_debug_rdpfxpath2str (prd, p, addpath_id ?
+                                1 : 0, addpath_id, pfx_buf, sizeof (pfx_buf)));
                 }
 
 	      /* graceful restart STALE flag unset. */
@@ -2372,25 +2352,18 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       if (CHECK_FLAG(ri->flags, BGP_INFO_REMOVED))
         {
           if (bgp_debug_update(peer, p, NULL, 1))
-            {
-              bgp_info_addpath_rx_str(addpath_id, buf2);
-              zlog_debug ("%s rcvd %s/%d%s, flapped quicker than processing",
-                          peer->host,
-                          inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-                          p->prefixlen, buf2);
-            }
+            zlog_debug ("%s rcvd %s, flapped quicker than processing",
+                        peer->host,
+                        bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                  addpath_id, pfx_buf, sizeof (pfx_buf)));
           bgp_info_restore (rn, ri);
         }
 
       /* Received Logging. */
       if (bgp_debug_update(peer, p, NULL, 1))
-        {
-          bgp_info_addpath_rx_str(addpath_id, buf2);
-	  zlog_debug ("%s rcvd %s/%d%s",
-	            peer->host,
-	            inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-	            p->prefixlen, buf2);
-        }
+	  zlog_debug ("%s rcvd %s", peer->host,
+                      bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                        addpath_id, pfx_buf, sizeof (pfx_buf)));
 
       /* graceful restart STALE flag unset. */
       if (CHECK_FLAG (ri->flags, BGP_INFO_STALE))
@@ -2479,11 +2452,9 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           peer->rcvd_attr_printed = 1;
         }
 
-      bgp_info_addpath_rx_str(addpath_id, buf2);
-      zlog_debug ("%s rcvd %s/%d%s",
-	          peer->host,
-	          inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-	          p->prefixlen, buf2);
+      zlog_debug ("%s rcvd %s", peer->host,
+                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                 addpath_id, pfx_buf, sizeof (pfx_buf)));
     }
 
   /* Make new BGP info. */
@@ -2552,11 +2523,10 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           peer->rcvd_attr_printed = 1;
         }
 
-      bgp_info_addpath_rx_str(addpath_id, buf2);
-      zlog_debug ("%s rcvd UPDATE about %s/%d%s -- DENIED due to: %s",
+      zlog_debug ("%s rcvd UPDATE about %s -- DENIED due to: %s",
                   peer->host,
-                  inet_ntop (p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-                  p->prefixlen, buf2, reason);
+                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                             addpath_id, pfx_buf, sizeof (pfx_buf)), reason);
     }
 
   if (ri)
@@ -2573,8 +2543,7 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	      struct prefix_rd *prd, u_char *tag)
 {
   struct bgp *bgp;
-  char buf[SU_ADDRSTRLEN];
-  char buf2[30];
+  char pfx_buf[BGP_PRD_PATH_STRLEN];
   struct bgp_node *rn;
   struct bgp_info *ri;
 
@@ -2597,10 +2566,10 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
     if (!bgp_adj_in_unset (rn, peer, addpath_id))
       {
         if (bgp_debug_update (peer, p, NULL, 1))
-          zlog_debug ("%s withdrawing route %s/%d "
-		      "not in adj-in", peer->host,
-		      inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-		      p->prefixlen);
+          zlog_debug ("%s withdrawing route %s not in adj-in",
+                      peer->host,
+                      bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                       addpath_id, pfx_buf, sizeof (pfx_buf)));
         bgp_unlock_node (rn);
         return 0;
       }
@@ -2614,20 +2583,20 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   /* Logging. */
   if (bgp_debug_update(peer, p, NULL, 1))
     {
-      bgp_info_addpath_rx_str(addpath_id, buf2);
-      zlog_debug ("%s rcvd UPDATE about %s/%d%s -- withdrawn",
-	        peer->host,
-	        inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-	        p->prefixlen, buf2);
+      zlog_debug ("%s rcvd UPDATE about %s -- withdrawn",
+                  peer->host,
+                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                   addpath_id, pfx_buf, sizeof (pfx_buf)));
     }
 
   /* Withdraw specified route from routing table. */
   if (ri && ! CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
     bgp_rib_withdraw (rn, ri, peer, afi, safi);
   else if (bgp_debug_update(peer, p, NULL, 1))
-    zlog_debug ("%s Can't find the route %s/%d", peer->host,
-	        inet_ntop (p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
-	        p->prefixlen);
+    zlog_debug ("%s Can't find the route %s",
+                peer->host,
+                bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
+                                    addpath_id, pfx_buf, sizeof (pfx_buf)));
 
   /* Unlock bgp_node_get() lock. */
   bgp_unlock_node (rn);

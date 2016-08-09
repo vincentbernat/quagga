@@ -36,6 +36,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 /* dump detail */
 #define DUMP_DETAIL   32
 
+/* RD + Prefix + Path-Id */
+#define BGP_PRD_PATH_STRLEN (PREFIX_STRLEN + RD_ADDRSTRLEN + 20)
+
 extern int dump_open;
 extern int dump_update;
 extern int dump_keepalive;
@@ -147,4 +150,6 @@ extern int bgp_debug_update(struct peer *peer, struct prefix *p,
 extern int bgp_debug_bestpath(struct prefix *p);
 extern int bgp_debug_zebra(struct prefix *p);
 
+extern const char *bgp_debug_rdpfxpath2str (struct prefix_rd *, union prefixconstptr,
+                                            int, u_int32_t, char *, int);
 #endif /* _QUAGGA_BGP_DEBUG_H */
