@@ -1784,7 +1784,7 @@ netlink_talk (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *,
    * Get reply from netlink socket. 
    * The reply should either be an acknowlegement or an error.
    */
-  return netlink_parse_info (netlink_talk_filter, nl, zns, 0);
+  return netlink_parse_info (filter, nl, zns, 0);
 }
 
 /* This function takes a nexthop as argument and adds
