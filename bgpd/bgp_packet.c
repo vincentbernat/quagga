@@ -148,7 +148,7 @@ static struct stream *
 bgp_update_packet_eor (struct peer *peer, afi_t afi, safi_t safi)
 {
   struct stream *s;
-  afi_t pkt_afi;
+  iana_afi_t pkt_afi;
   safi_t pkt_safi;
 
   if (DISABLE_BGP_ANNOUNCE)
@@ -691,7 +691,7 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
   struct stream *s;
   struct bgp_filter *filter;
   int orf_refresh = 0;
-  afi_t pkt_afi;
+  iana_afi_t pkt_afi;
   safi_t pkt_safi;
 
   if (DISABLE_BGP_ANNOUNCE)
@@ -778,7 +778,7 @@ bgp_capability_send (struct peer *peer, afi_t afi, safi_t safi,
 		     int capability_code, int action)
 {
   struct stream *s;
-  afi_t pkt_afi;
+  iana_afi_t pkt_afi;
   safi_t pkt_safi;
 
   /* Convert AFI, SAFI to values for packet. */
@@ -1898,7 +1898,8 @@ bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
 static void
 bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
 {
-  afi_t pkt_afi, afi;
+  iana_afi_t pkt_afi;
+  afi_t afi;
   safi_t pkt_safi, safi;
   struct stream *s;
   struct peer_af *paf;
@@ -2119,7 +2120,8 @@ bgp_capability_msg_parse (struct peer *peer, u_char *pnt, bgp_size_t length)
   struct capability_mp_data mpc;
   struct capability_header *hdr;
   u_char action;
-  afi_t pkt_afi, afi;
+  iana_afi_t pkt_afi;
+  afi_t afi;
   safi_t pkt_safi, safi;
 
   end = pnt + length;
