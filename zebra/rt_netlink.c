@@ -1726,7 +1726,9 @@ netlink_talk_filter (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
 /* sendmsg() to netlink socket then recvmsg(). */
 static int
-netlink_talk (struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns)
+netlink_talk (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *,
+			     ns_id_t),
+	      struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns)
 {
   int status;
   struct sockaddr_nl snl;
@@ -2106,7 +2108,7 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
   addattr_l(&req.n, sizeof(req), NDA_DST, &addr, 4);
   addattr_l(&req.n, sizeof(req), NDA_LLADDR, lla, llalen);
 
-  return netlink_talk (&req.n, &zns->netlink_cmd, NS_DEFAULT);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, NS_DEFAULT);
 }
 
 /* Routing table change via netlink interface. */
@@ -2386,7 +2388,7 @@ skip:
   snl.nl_family = AF_NETLINK;
 
   /* Talk to netlink socket. */
-  return netlink_talk (&req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
 }
 
 int
@@ -2469,7 +2471,7 @@ netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int
   dst_alen = (vtep->family == AF_INET ? 4 : 16);
   addattr_l (&req.n, sizeof (req), NDA_DST, &vtep->u.prefix, dst_alen);
 
-  return netlink_talk (&req.n, &zns->netlink_cmd, NS_DEFAULT);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, NS_DEFAULT);
 }
 
 /* Interface address modification. */
@@ -2521,7 +2523,7 @@ netlink_address (int cmd, int family, struct interface *ifp,
     addattr_l (&req.n, sizeof req, IFA_LABEL, ifc->label,
                strlen (ifc->label) + 1);
 
-  return netlink_talk (&req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
 }
 
 int
