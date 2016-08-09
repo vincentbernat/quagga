@@ -712,13 +712,9 @@ bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni)
   return 0;
 }
 
-/*
- * Display a VNI (upon user query).
- */
-void
-bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty)
+static void
+bgp_evpn_display_vni (struct vty *vty, struct bgpevpn *vpn)
 {
-  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
   char buf1[INET6_ADDRSTRLEN];
   struct rd_as rd_as;
 
@@ -731,6 +727,30 @@ bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty)
   decode_rd_as((u_char *)vpn->export_rt.val+2, &rd_as);
   vty_out (vty, "  Export Route Target: %u:%d%s", rd_as.as, rd_as.val,
                 VTY_NEWLINE);
+}
+
+void
+bgp_evpn_show_one_vni (struct vty *vty, struct bgp *bgp, vni_t vni)
+{
+  struct bgpevpn *vpn;
+
+  vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  if (!vpn)
+    {
+      vty_out (vty, "VNI not found%s", VTY_NEWLINE);
+      return;
+    }
+  bgp_evpn_display_vni (vty, vpn);
+}
+
+/*
+ * Display a VNI (upon user query).
+ */
+void
+bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty)
+{
+  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
+  bgp_evpn_display_vni (vty, vpn);
 }
 
 /*

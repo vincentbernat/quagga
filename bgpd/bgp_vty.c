@@ -14069,6 +14069,30 @@ DEFUN (show_bgp_evpn_vni,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_bgp_evpn_vni_num,
+       show_bgp_evpn_vni_num_cmd,
+       "show bgp evpn vni " CMD_VNI_RANGE,
+       SHOW_STR
+       BGP_STR
+       "Address family modifier\n"
+       "Show VNI\n"
+       "VNI number\n")
+{
+  vni_t vni;
+  struct bgp *bgp;
+  bgp = bgp_get_default ();
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+
+  if (bgp)
+    {
+      vty_out (vty, "BGP EVPN INFORMATION%s", VTY_NEWLINE);
+      vty_out (vty, "Advertise VNI flag: %s%s", 
+                    (bgp->advertise_vni)? "Enabled":"Disabled", VTY_NEWLINE);
+      bgp_evpn_show_one_vni (vty, bgp, vni);
+    }
+  return CMD_SUCCESS;
+}
 /* Redistribute VTY commands.  */
 
 DEFUN (bgp_redistribute_ipv4,
@@ -16535,8 +16559,11 @@ bgp_vty_init (void)
   
   /* "show bgp evpn" commands. */
   install_element (VIEW_NODE, &show_bgp_evpn_vni_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_vni_num_cmd);
   install_element (RESTRICTED_NODE, &show_bgp_evpn_vni_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_vni_num_cmd);
   install_element (ENABLE_NODE, &show_bgp_evpn_vni_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_vni_num_cmd);
 
   /* Community-list. */
   community_list_vty ();
