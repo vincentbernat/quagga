@@ -1318,12 +1318,12 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   /* Connected route. */
   if (IS_ZEBRA_DEBUG_KERNEL)
     zlog_debug ("%s %s %s proto %s vrf %u",
-               h->nlmsg_type ==
-               RTM_NEWROUTE ? "RTM_NEWROUTE" : "RTM_DELROUTE",
-               lookup (family_str, rtm->rtm_family),
-               rtm->rtm_type == RTN_UNICAST ? "unicast" : "multicast",
-               lookup (rtproto_str, rtm->rtm_protocol),
-               vrf_id);
+		h->nlmsg_type ==
+		RTM_NEWROUTE ? "RTM_NEWROUTE" : "RTM_DELROUTE",
+		lookup (family_str, rtm->rtm_family),
+		lookup (rttype_str, rtm->rtm_type),
+		lookup (rtproto_str, rtm->rtm_protocol),
+		vrf_id);
 
   len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct rtmsg));
   if (len < 0)
