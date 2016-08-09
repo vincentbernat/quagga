@@ -936,3 +936,17 @@ bgp_evpn_update_advertise_vni (struct bgp *bgp)
                                                         bgp->advertise_vni);
  bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
 }
+
+int
+bgp_evpn_print_prefix (struct vty *vty, struct prefix_evpn *p)
+{
+  int len = 0;
+
+  if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
+    {
+      len = vty_out (vty, "[%d]:[0]:[%d]:[%s]",p->prefix.route_type,
+                     (p->prefix.flags == IP_ADDR_V4)? IP_ADDR_V4:IP_ADDR_V6,
+                     inet_ntoa(p->prefix.ip.v4_addr));
+    }
+  return len;
+}

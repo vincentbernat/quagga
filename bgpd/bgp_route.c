@@ -62,6 +62,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_vty.h"
+#include "bgpd/bgp_evpn.c"
 
 /* Extern from bgp_dump.c */
 extern const char *bgp_origin_str[];
@@ -5786,6 +5787,10 @@ route_vty_out_route (struct prefix *p, struct vty *vty)
         }
       else
         len += vty_out (vty, "/%d", p->prefixlen);
+    }
+  else if (p->family == AF_ETHERNET)
+    {
+      len = bgp_evpn_print_prefix(vty, (struct prefix_evpn *)p);
     }
   else
     len = vty_out (vty, "%s/%d", inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),

@@ -1200,7 +1200,7 @@ DEFUNSH (VTYSH_BGPD,
 DEFUNSH (VTYSH_BGPD,
        address_family_evpn,
        address_family_evpn_cmd,
-       "address-family l2vpn evpn",
+       "address-family evpn",
        "Enter Address Family command mode\n"
 	   "Address family\n"
 	   "Address Family Modifier\n")

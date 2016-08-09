@@ -6150,7 +6150,7 @@ DEFUN (address_family_encapv6,
 
 DEFUN (address_family_evpn,
        address_family_evpn_cmd,
-       "address-family l2vpn evpn",
+       "address-family evpn",
        "Enter Address Family command mode\n"
        "Address family\n"
        "Address Family Modifier\n")
@@ -11083,6 +11083,155 @@ DEFUN (show_ipv6_mbgp_summary,
   return bgp_show_summary_vty (vty, NULL, AFI_IP6, SAFI_MULTICAST, uj);
 }
 #endif /* HAVE_IPV6 */
+
+/* `show bgp evpn summary' commands. */
+DEFUN (show_bgp_evpn_summary,
+       show_bgp_evpn_summary_cmd,
+       "show bgp evpn summary {json}",
+       SHOW_STR
+       BGP_STR
+       "L2VPN\n"
+       "EVPN\n"
+       "Summary of BGP neighbor status\n"
+       "JavaScript Object Notation\n")
+{
+  u_char uj = use_json(argc, argv);
+  return bgp_show_summary_vty (vty, NULL, AFI_L2VPN, SAFI_EVPN, uj);
+}
+
+static int 
+bgp_show_evpn_route (struct vty *vty, struct prefix_rd *prd)
+{
+  struct bgp *bgp;
+  struct bgp_table *table;
+  struct bgp_node *rn;
+  struct bgp_node *rm;
+  struct bgp_info *ri;
+  int header = 1;
+  int rd_header;
+  afi_t afi;
+  safi_t safi;
+  char v4_header[] = "   Network          Next Hop            Metric LocPrf Weight Path%s";
+  
+  unsigned long output_count = 0;
+  unsigned long total_count  = 0;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+  bgp = bgp_get_default ();
+  if (bgp == NULL)
+    {
+      vty_out (vty, "No BGP process is configured%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  for (rn = bgp_table_top (bgp->rib[afi][safi]); rn; rn = bgp_route_next (rn))
+    {
+      if (prd && memcmp (rn->p.u.val, prd->val, 8) != 0)
+	continue;
+
+      if ((table = rn->info) != NULL)
+	{
+	  rd_header = 1;
+
+	  for (rm = bgp_table_top (table); rm; rm = bgp_route_next (rm))
+	    for (ri = rm->info; ri; ri = ri->next)
+	      {
+                total_count++;
+		if (header)
+		  {
+                    vty_out (vty, "BGP table version is 0, local router ID is %s%s",
+                             inet_ntoa (bgp->router_id), VTY_NEWLINE);
+                    vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s",
+                             VTY_NEWLINE);
+                    vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s",
+                             VTY_NEWLINE, VTY_NEWLINE);
+                    vty_out (vty, v4_header, VTY_NEWLINE);
+                    header = 0;
+		  }
+
+		if (rd_header)
+		  {
+		    u_int16_t type;
+		    struct rd_as rd_as;
+		    struct rd_ip rd_ip;
+		    u_char *pnt;
+
+		    pnt = rn->p.u.val;
+
+		    /* Decode RD type. */
+		    type = decode_rd_type (pnt);
+
+		    vty_out (vty, "Route Distinguisher: ");
+
+		    switch (type) 
+                    {
+
+		    case RD_TYPE_AS:
+		      decode_rd_as (pnt + 2, &rd_as);
+		      vty_out (vty, "%u:%d", rd_as.as, rd_as.val);
+		      break;
+
+		    case RD_TYPE_IP:
+		      decode_rd_ip (pnt + 2, &rd_ip);
+		      vty_out (vty, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
+		      break;
+
+		    default:
+		      vty_out (vty, "Unknown RD type");
+		      break;
+		    }
+
+		    vty_out (vty, "%s", VTY_NEWLINE);		  
+		    rd_header = 0;
+		  }
+		route_vty_out (vty, &rm->p, ri, 0, SAFI_EVPN, NULL);
+                output_count++;
+	      }
+        }
+    }
+  if (output_count == 0)
+    vty_out (vty, "No prefixes displayed, %ld exist%s", total_count, VTY_NEWLINE);
+  else
+    vty_out (vty, "%sDisplayed %ld out of %ld total prefixes%s",
+	     VTY_NEWLINE, output_count, total_count, VTY_NEWLINE);
+
+  return CMD_SUCCESS;
+}
+
+/* Show bgp evpn route */
+DEFUN (show_bgp_evpn_route,
+       show_bgp_evpn_route_cmd,
+       "show bgp evpn route",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n")
+{
+  return bgp_show_evpn_route(vty, NULL);
+}
+
+DEFUN (show_bgp_evpn_route_rd,
+       show_bgp_evpn_route_rd_cmd,
+       "show bgp evpn route rd ASN:nn_or_IP-address:nn",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "Route Distinguisher\n"
+       "ASN:XX or A.B.C.D:XX\n")
+{
+  int ret;
+  struct prefix_rd prd;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return bgp_show_evpn_route(vty, &prd);
+}
 
 const char *
 afi_safi_print (afi_t afi, safi_t safi)
@@ -16140,6 +16289,9 @@ bgp_vty_init (void)
   install_element (VIEW_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (VIEW_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
+  install_element (VIEW_NODE, &show_bgp_evpn_summary_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_rd_cmd);
   install_element (RESTRICTED_NODE, &show_ip_bgp_summary_cmd);
   install_element (RESTRICTED_NODE, &show_ip_bgp_updgrps_cmd);
   install_element (RESTRICTED_NODE, &show_ip_bgp_instance_updgrps_cmd);
@@ -16180,6 +16332,9 @@ bgp_vty_init (void)
   install_element (RESTRICTED_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (RESTRICTED_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_summary_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_route_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_route_rd_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_summary_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_updgrps_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_instance_updgrps_cmd);
@@ -16220,6 +16375,9 @@ bgp_vty_init (void)
   install_element (ENABLE_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (ENABLE_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
+  install_element (ENABLE_NODE, &show_bgp_evpn_summary_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_route_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_route_rd_cmd);
 
   /* "show ip bgp neighbors" commands. */
   install_element (VIEW_NODE, &show_ip_bgp_neighbors_cmd);

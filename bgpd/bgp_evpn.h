@@ -56,5 +56,6 @@ extern int bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
 extern void bgp_evpn_update_advertise_vni (struct bgp *);
 extern void bgp_evpn_init (struct bgp *);
 extern void bgp_evpn_cleanup (struct bgp *bgp);
+extern int bgp_evpn_print_prefix (struct vty *, struct prefix_evpn *);
 
 #endif /* _QUAGGA_BGP_EVPN_H */
