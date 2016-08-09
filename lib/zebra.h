@@ -517,7 +517,8 @@ typedef enum {
   AFI_IP  = 1,
   AFI_IP6 = 2,
   AFI_L2VPN = 3,
-  AFI_MAX = 4
+  AFI_IPMR = 4,
+  AFI_MAX = 5
 } afi_t;
 
 /* Subsequent Address Family Identifier. */
@@ -543,6 +544,8 @@ typedef enum {
   IANA_AFI_IPV4 = 1,
   IANA_AFI_IPV6 = 2,
   IANA_AFI_L2VPN = 25,
+  IANA_AFI_IPMR = 128,
+  IANA_AFI_IP6MR = 129
 } iana_afi_t;
 
 #define IANA_SAFI_RESERVED            0
@@ -632,6 +635,8 @@ static inline afi_t afi_iana2int (iana_afi_t iana_afi)
     return AFI_IP6;
   if (iana_afi == IANA_AFI_L2VPN)
     return AFI_L2VPN;
+  if (iana_afi == IANA_AFI_IPMR)
+    return AFI_IPMR;
   return AFI_MAX;
 }
 
@@ -643,6 +648,8 @@ static inline iana_afi_t afi_int2iana (afi_t afi)
     return IANA_AFI_IPV6;
   if (afi == AFI_L2VPN)
     return IANA_AFI_L2VPN;
+  if (afi == AFI_IPMR)
+    return IANA_AFI_IPMR;
   return IANA_AFI_RESERVED;
 }
 
