@@ -719,7 +719,18 @@ void
 bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty)
 {
   struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
-  vty_out (vty, "%d     %s%s", vpn->vni, "local", VTY_NEWLINE);
+  char buf1[INET6_ADDRSTRLEN];
+  struct rd_as rd_as;
+
+  vty_out (vty, "VNI: %d%s", vpn->vni, VTY_NEWLINE);
+  vty_out (vty, "  RD: %s%s", prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN), 
+                VTY_NEWLINE);
+  decode_rd_as((u_char *)vpn->import_rt.val+2, &rd_as);
+  vty_out (vty, "  Import Route Target: %u:%d%s", rd_as.as, rd_as.val, 
+                VTY_NEWLINE);
+  decode_rd_as((u_char *)vpn->export_rt.val+2, &rd_as);
+  vty_out (vty, "  Export Route Target: %u:%d%s", rd_as.as, rd_as.val,
+                VTY_NEWLINE);
 }
 
 /*
