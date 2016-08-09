@@ -3030,7 +3030,7 @@ vtysh_init_vty (void)
   install_element (BGP_NODE, &address_family_ipv6_multicast_cmd);
 #endif
   /* EVPN commands */
-  install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
+  /*install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);*/
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
 

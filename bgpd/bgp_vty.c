@@ -15941,13 +15941,13 @@ bgp_vty_init (void)
   install_element (BGP_EVPN_VNI_NODE, &exit_address_family_cmd);
 
   /* EVPN commands */
-  install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
+  /*install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);*/
   install_element (BGP_EVPN_NODE, &bgp_evpn_advertise_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
 
   /* "no" EVPN commands */
-  install_element (BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);
+  /*install_element (BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);*/
   install_element (BGP_EVPN_NODE, &no_bgp_evpn_advertise_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);
