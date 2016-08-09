@@ -807,14 +807,36 @@ str2prefix (const char *str, struct prefix *p)
 }
 
 const char *
-prefix2str (union prefix46constptr pu, char *str, int size)
+prefix2str (union prefixconstptr pu, char *str, int size)
 {
   const struct prefix *p = pu.p;
   char buf[PREFIX2STR_BUFFER];
 
-  snprintf (str, size, "%s/%d",
-	    inet_ntop (p->family, &p->u.prefix, buf, PREFIX2STR_BUFFER),
-		       p->prefixlen);
+  switch (p->family)
+    {
+      u_char family;
+
+      case AF_INET:
+      case AF_INET6:
+        snprintf (str, size, "%s/%d",
+                  inet_ntop (p->family, &p->u.prefix, buf, PREFIX2STR_BUFFER),
+                  p->prefixlen);
+        break;
+
+      case AF_ETHERNET:
+        family = (p->u.prefix_evpn.flags & IP_ADDR_V4) ? AF_INET : AF_INET6;
+        snprintf (str, size, "[%d]:[%s]/%d",
+                  p->u.prefix_evpn.route_type,
+                  inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                             buf, PREFIX2STR_BUFFER),
+                  p->prefixlen);
+        break;
+
+      default:
+        sprintf (str, "UNK prefix");
+        break;
+    }
+
   return str;
 }
 

@@ -61,6 +61,7 @@ struct evpn_addr
   struct eth_addr mac;
   union
   {
+    u_char addr;
     struct in_addr v4_addr;
     struct in6_addr v6_addr;
   } ip;
@@ -165,11 +166,12 @@ union prefix46ptr
   struct prefix_ipv6 *p6;
 } __attribute__ ((transparent_union));
 
-union prefix46constptr
+union prefixconstptr
 {
   const struct prefix *p;
   const struct prefix_ipv4 *p4;
   const struct prefix_ipv6 *p6;
+  const struct prefix_evpn *evp;
 } __attribute__ ((transparent_union));
 
 #ifndef INET_ADDRSTRLEN
@@ -242,7 +244,7 @@ extern int str2prefix (const char *, struct prefix *);
 
 #define PREFIX2STR_BUFFER  PREFIX_STRLEN
 
-extern const char *prefix2str (union prefix46constptr, char *, int);
+extern const char *prefix2str (union prefixconstptr, char *, int);
 extern int prefix_match (const struct prefix *, const struct prefix *);
 extern int prefix_same (const struct prefix *, const struct prefix *);
 extern int prefix_cmp (const struct prefix *, const struct prefix *);
