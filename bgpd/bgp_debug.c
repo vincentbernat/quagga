@@ -38,6 +38,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_updgrp.h"
+#include "bgpd/bgp_ecommunity.h"
 
 unsigned long conf_bgp_debug_as4;
 unsigned long conf_bgp_debug_neighbor_events;
@@ -418,6 +419,10 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
   if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES))) 
     snprintf (buf + strlen (buf), size - strlen (buf), ", community %s",
 	      community_str (attr->community));
+
+  if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES)))
+    snprintf (buf + strlen (buf), size - strlen (buf), ", extcommunity %s",
+	      ecommunity_str (attr->extra->ecommunity));
 
   if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE)))
     snprintf (buf + strlen (buf), size - strlen (buf), ", atomic-aggregate");
