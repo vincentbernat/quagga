@@ -939,13 +939,37 @@ bgp_evpn_cleanup (struct bgp *bgp)
   bgp->vnihash = NULL;
 }
 
+static void
+bgp_evpn_cleanup_local_vni_and_withdraw_route_iterator (struct hash_backet *backet, 
+                                                        struct bgp *bgp)
+{
+  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
+  
+  /* Remove EVPN type-3 route and schedule for processing. */
+  bgp_evpn_delete_type3_route (bgp, vpn);
+
+  /* Clear locally "learnt" flag and see if hash needs to be freed. */
+  UNSET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
+  if (!CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
+    bgp_evpn_free(bgp, vpn);
+}
+
 /* Function to register/deregister advertise_vni with zebra */
 void
 bgp_evpn_update_advertise_vni (struct bgp *bgp)
 {
- zlog_debug("%s:Update advertise vni flag:%d in zebra\n", __FUNCTION__,
+  zlog_debug("%s:Update advertise vni flag:%d in zebra\n", __FUNCTION__,
                                                         bgp->advertise_vni);
- bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
+  bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
+
+  /* Cleanup for 'no advertise-vni' */
+  if (!bgp->advertise_vni)
+    {
+      hash_iterate (bgp->vnihash,
+                (void (*) (struct hash_backet *, void *))
+                bgp_evpn_cleanup_local_vni_and_withdraw_route_iterator,
+                bgp);
+    } 
 }
 
 int
