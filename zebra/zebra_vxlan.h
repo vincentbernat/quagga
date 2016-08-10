@@ -32,6 +32,8 @@
 #include "zebra/interface.h"
 #include "zebra/zebra_vrf.h"
 
+extern int zebra_vxlan_if_up (struct interface *ifp);
+extern int zebra_vxlan_if_down (struct interface *ifp);
 extern int zebra_vxlan_if_add (struct interface *ifp, vni_t vni);
 extern int zebra_vxlan_if_del (struct interface *ifp);
 extern int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,

@@ -113,6 +113,8 @@ zvni_vtep_add (zebra_vni_t *zvni, struct prefix *vtep);
 static int
 zvni_vtep_del (zebra_vni_t *zvni, zebra_vtep_t *zvtep);
 static int
+zvni_vtep_del_all (zebra_vni_t *zvni, int uninstall);
+static int
 kernel_add_vni_flood_list (struct interface *ifp, struct prefix *vtep);
 static int
 kernel_del_vni_flood_list (struct interface *ifp, struct prefix *vtep);
@@ -378,10 +380,11 @@ zvni_vtep_del (zebra_vni_t *zvni, zebra_vtep_t *zvtep)
 }
 
 /*
- * Delete all remote VTEPs for this VNI (upon VNI delete).
+ * Delete all remote VTEPs for this VNI (upon VNI delete). Also
+ * uninstall from kernel if asked to.
  */
 static int
-zvni_vtep_del_all (zebra_vni_t *zvni)
+zvni_vtep_del_all (zebra_vni_t *zvni, int uninstall)
 {
   zebra_vtep_t *zvtep, *zvtep_next;
 
@@ -391,6 +394,8 @@ zvni_vtep_del_all (zebra_vni_t *zvni)
   for (zvtep = zvni->vteps; zvtep; zvtep = zvtep_next)
     {
       zvtep_next = zvtep->next;
+      if (uninstall)
+        zvni_vtep_uninstall (zvni, &zvtep->vtep_ip);
       zvni_vtep_del (zvni, zvtep);
     }
 
@@ -435,15 +440,7 @@ kernel_del_vni_flood_list (struct interface *ifp, struct prefix *vtep)
 static int
 zvni_vtep_install (zebra_vni_t *zvni, struct prefix *vtep)
 {
-  if (!zvni->vxlan_if)
-    {
-      zlog_err ("VNI %u hash %p couldn't be installed - no intf",
-                zvni->vni, zvni);
-      return -1;
-    }
-
   kernel_add_vni_flood_list (zvni->vxlan_if, vtep);
-
   return 0;
 }
 
@@ -522,6 +519,95 @@ zvni_print_hash (struct hash_backet *backet, void *ctxt)
 /* Public functions */
 
 /*
+ * Handle VxLAN interface up - update BGP if required.
+ */
+int
+zebra_vxlan_if_up (struct interface *ifp)
+{
+  struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
+  zebra_vni_t *zvni;
+  vni_t vni;
+
+  zif = ifp->info;
+  assert(zif);
+
+  /* Locate VRF corresponding to interface. */
+  zvrf = vrf_info_lookup(ifp->vrf_id);
+  assert(zvrf);
+
+  vni = vni_from_intf (ifp);
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Intf %s(%u) VNI %u is UP",
+                ifp->vrf_id, ifp->name, ifp->ifindex, vni);
+
+  /* Locate hash entry; it is expected to exist. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      zlog_err ("Failed to locate VNI hash at UP, VRF %d IF %s(%u) VNI %u",
+                ifp->vrf_id, ifp->name, ifp->ifindex, vni);
+      return -1;
+    }
+
+  assert (zvni->vxlan_if == ifp);
+
+  /* Inform BGP if required. */
+  if (!zvrf->advertise_vni)
+    return 0;
+
+  zvni_send_add_to_client (zvrf, vni);
+  return 0;
+}
+
+/*
+ * Handle VxLAN interface down - update BGP if required, and do
+ * internal cleanup.
+ */
+int
+zebra_vxlan_if_down (struct interface *ifp)
+{
+  struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
+  zebra_vni_t *zvni;
+  vni_t vni;
+
+  zif = ifp->info;
+  assert(zif);
+
+  /* Locate VRF corresponding to interface. */
+  zvrf = vrf_info_lookup(ifp->vrf_id);
+  assert(zvrf);
+
+  vni = vni_from_intf (ifp);
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Intf %s(%u) VNI %u is DOWN",
+                ifp->vrf_id, ifp->name, ifp->ifindex, vni);
+
+  /* Locate hash entry; it is expected to exist. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      zlog_err ("Failed to locate VNI hash at DOWN, VRF %d IF %s(%u) VNI %u",
+                ifp->vrf_id, ifp->name, ifp->ifindex, vni);
+      return -1;
+    }
+
+  assert (zvni->vxlan_if == ifp);
+
+  /* Inform BGP if required. */
+  if (zvrf->advertise_vni)
+    zvni_send_del_to_client (zvrf, zvni->vni);
+
+  /* Free up all remote VTEPs, if any. */
+  zvni_vtep_del_all (zvni, 1);
+
+  return 0;
+}
+
+/*
  * Handle VxLAN interface add. Store the VNI (in hash table) and update BGP,
  * if required.
  */
@@ -559,6 +645,10 @@ zebra_vxlan_if_add (struct interface *ifp, vni_t vni)
     }
 
   zvni->vxlan_if = ifp;
+
+  /* Done if interface is not up. */
+  if (!if_is_operative (ifp))
+    return 0;
 
   /* Inform BGP if required. */
   if (!zvrf->advertise_vni)
@@ -607,7 +697,7 @@ zebra_vxlan_if_del (struct interface *ifp)
     zvni_send_del_to_client (zvrf, zvni->vni);
 
   /* Free up all remote VTEPs, if any. */
-  zvni_vtep_del_all (zvni);
+  zvni_vtep_del_all (zvni, 0);
 
   /* Delete the hash entry. */
   if (zvni_del (zvrf, zvni))
@@ -675,11 +765,22 @@ int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
                     zvrf->vrf_id, vni);
           continue;
         }
+      if (!zvni->vxlan_if)
+        {
+          zlog_err ("VNI %u hash %p doesn't have intf upon remote VTEP add",
+                    zvni->vni, zvni);
+          continue;
+        }
 
-      /* If the remote VTEP already exists, there's nothing more to do.
+
+      /* If the remote VTEP already exists, or the local VxLAN interface is
+       * not up (should be a transient event),  there's nothing more to do.
        * Otherwise, add and install the entry.
        */
       if (zvni_vtep_find (zvni, &vtep))
+        continue;
+
+      if (!if_is_operative (zvni->vxlan_if))
         continue;
 
       if (zvni_vtep_add (zvni, &vtep) == NULL)

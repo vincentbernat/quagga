@@ -8,6 +8,18 @@
 #include "zebra/zebra_vxlan.h"
 
 int
+zebra_vxlan_if_up (struct interface *ifp)
+{
+  return 0;
+}
+
+int
+zebra_vxlan_if_down (struct interface *ifp)
+{
+  return 0;
+}
+
+int
 zebra_vxlan_if_add (struct interface *ifp, vni_t vni)
 {
   return 0;
