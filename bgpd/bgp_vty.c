@@ -2708,7 +2708,7 @@ bgp_config_write_listen (struct vty *vty, struct bgp *bgp)
 
   for (ALL_LIST_ELEMENTS (bgp->group, node, nnode, group))
     {
-      for (afi = AFI_IP; afi < AFI_MAX; afi++)
+      for (afi = AFI_IP; afi < AFI_L2VPN; afi++)
         {
           for (ALL_LIST_ELEMENTS (group->listen_range[afi], rnode, nrnode, range))
             {
@@ -13889,7 +13889,7 @@ bgp_show_one_peer_group (struct vty *vty, struct peer_group *group)
     vty_out (vty, "%s", VTY_NEWLINE);
 
   /* Display listen ranges (for dynamic neighbors), if any */
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  for (afi = AFI_IP; afi < AFI_L2VPN; afi++)
     {
       if (afi == AFI_IP)
         af_str = "IPv4";

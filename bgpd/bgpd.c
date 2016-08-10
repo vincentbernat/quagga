@@ -3270,6 +3270,8 @@ bgp_free (struct bgp *bgp)
   afi_t afi;
   safi_t safi;
   struct vrf *vrf;
+  struct bgp_table *table;
+  struct bgp_node *rn;
 
   list_delete (bgp->group);
   list_delete (bgp->peer);
@@ -3283,6 +3285,15 @@ bgp_free (struct bgp *bgp)
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
+        if (safi == SAFI_EVPN)
+          {
+            for (rn = bgp_table_top(bgp->rib[afi][safi]); rn;
+                 rn = bgp_route_next (rn))
+              {
+                table = (struct bgp_table *) rn->info;
+                bgp_table_finish(&table);
+              }
+          }
 	if (bgp->route[afi][safi])
           bgp_table_finish (&bgp->route[afi][safi]);
 	if (bgp->aggregate[afi][safi])

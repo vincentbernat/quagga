@@ -393,7 +393,7 @@ bgp_show_nexthops (struct vty *vty, struct bgp *bgp, int detail)
   afi_t afi;
 
   vty_out (vty, "Current BGP nexthop cache:%s", VTY_NEWLINE);
-  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
+  for (afi = AFI_IP ; afi < AFI_L2VPN ; afi++)
     {
       for (rn = bgp_table_top (bgp->nexthop_cache_table[afi]); rn; rn = bgp_route_next (rn))
 	{

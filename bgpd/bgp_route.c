@@ -3907,12 +3907,12 @@ bgp_static_add (struct bgp *bgp)
   struct bgp_table *table;
   struct bgp_static *bgp_static;
 
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  for (afi = AFI_IP; afi < AFI_L2VPN; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       for (rn = bgp_table_top (bgp->route[afi][safi]); rn; rn = bgp_route_next (rn))
 	if (rn->info != NULL)
 	  {      
-	    if (safi == SAFI_MPLS_VPN)
+            if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP))
 	      {
 		table = rn->info;
 
@@ -3941,7 +3941,7 @@ bgp_static_delete (struct bgp *bgp)
   struct bgp_table *table;
   struct bgp_static *bgp_static;
 
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  for (afi = AFI_IP; afi < AFI_L2VPN; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       for (rn = bgp_table_top (bgp->route[afi][safi]); rn; rn = bgp_route_next (rn))
 	if (rn->info != NULL)
@@ -3983,7 +3983,7 @@ bgp_static_redo_import_check (struct bgp *bgp)
 
   /* Use this flag to force reprocessing of the route */
   bgp_flag_set(bgp, BGP_FLAG_FORCE_STATIC_PROCESS);
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  for (afi = AFI_IP; afi < AFI_L2VPN; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       for (rn = bgp_table_top (bgp->route[afi][safi]); rn; rn = bgp_route_next (rn))
 	if (rn->info != NULL)
@@ -4031,7 +4031,7 @@ bgp_purge_static_redist_routes (struct bgp *bgp)
   afi_t afi;
   safi_t safi;
 
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  for (afi = AFI_IP; afi < AFI_L2VPN; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       bgp_purge_af_static_redist_routes (bgp, afi, safi);
 }
