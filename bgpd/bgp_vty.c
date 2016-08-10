@@ -14085,12 +14085,7 @@ DEFUN (show_bgp_evpn_vni_num,
   VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
 
   if (bgp)
-    {
-      vty_out (vty, "BGP EVPN INFORMATION%s", VTY_NEWLINE);
-      vty_out (vty, "Advertise VNI flag: %s%s", 
-                    (bgp->advertise_vni)? "Enabled":"Disabled", VTY_NEWLINE);
-      bgp_evpn_show_one_vni (vty, bgp, vni);
-    }
+    bgp_evpn_show_one_vni (vty, bgp, vni);
   return CMD_SUCCESS;
 }
 /* Redistribute VTY commands.  */
