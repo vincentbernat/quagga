@@ -10724,7 +10724,7 @@ bgp_show_summary (struct vty *vty, struct bgp *bgp, int afi, int safi,
                     afi == AFI_IP ? "IPv4" : "IPv6", VTY_NEWLINE);
           else
             vty_out (vty, "No %s neighbor is configured%s",
-                     afi == AFI_IP ? "IPv4" : "IPv6", VTY_NEWLINE);
+                     (afi == AFI_IP)? "IPv4" : (afi == AFI_IP6)? "IPv6" : "L2VPN", VTY_NEWLINE);
         }
 
       if (dn_count && ! use_json)
