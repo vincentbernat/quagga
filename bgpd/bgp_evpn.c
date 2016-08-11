@@ -998,7 +998,8 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf)
   if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
     {
       snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[%d]:[%s]",p->prefix.route_type,
-                    (p->prefix.flags == IP_ADDR_V4)? IP_ADDR_V4:IP_ADDR_V6,
+                    (p->prefix.flags == IP_ADDR_V4)? 
+                    IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
                     inet_ntoa(p->prefix.ip.v4_addr));
     }
   return(buf);
