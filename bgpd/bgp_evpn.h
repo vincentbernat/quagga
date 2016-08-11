@@ -39,6 +39,8 @@ typedef enum
   BGP_EVPN_IP_PREFIX_ROUTE,       /* IP Prefix route */
 } bgp_evpn_route_type;
 
+#define EVPN_ROUTE_LEN 42
+
 extern void bgp_evpn_update_vni (struct bgp*, vni_t, int);
 extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni);
 extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
@@ -58,5 +60,6 @@ extern void bgp_evpn_init (struct bgp *);
 extern void bgp_evpn_cleanup (struct bgp *bgp);
 extern int bgp_evpn_print_prefix (struct vty *, struct prefix_evpn *);
 extern void bgp_evpn_show_one_vni (struct vty *, struct bgp *, vni_t);
+extern char *bgp_evpn_route2str (struct prefix_evpn *, char *);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

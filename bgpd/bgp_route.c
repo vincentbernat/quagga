@@ -6556,13 +6556,14 @@ route_vty_out_advertised_to (struct vty *vty, struct peer *peer, int *first,
     }
 }
 
-static void
+void
 route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p, 
 		      struct bgp_info *binfo, afi_t afi, safi_t safi,
                       json_object *json_paths)
 {
   char buf[INET6_ADDRSTRLEN];
   char buf1[BUFSIZ];
+  char buf2[EVPN_ROUTE_LEN];
   struct attr *attr;
   int sockunion_vty_out (struct vty *, union sockunion *);
 #ifdef HAVE_CLOCK_MONOTONIC
@@ -6595,7 +6596,10 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
     }
 
   attr = binfo->attr;
-
+  if (safi == SAFI_EVPN)
+    vty_out (vty, "Route %s%s",
+	          bgp_evpn_route2str((struct prefix_evpn *)p, buf2),
+	          VTY_NEWLINE);
   if (attr)
     {
       /* Line1 display AS-path, Aggregator */
@@ -7640,7 +7644,7 @@ bgp_show_all_instances_routes_vty (struct vty *vty, afi_t afi, safi_t safi,
 }
 
 /* Header of detailed BGP route information */
-static void
+void
 route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
 			     struct bgp_node *rn,
                              struct prefix_rd *prd, afi_t afi, safi_t safi,
@@ -7670,7 +7674,12 @@ route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
     }
   else
     {
-      vty_out (vty, "BGP routing table entry for %s%s%s/%d%s",
+      if (safi == SAFI_EVPN)
+        vty_out (vty, "BGP routing table entry for %s%s",
+	       prefix_rd2str (prd, buf1, RD_ADDRSTRLEN),
+	       VTY_NEWLINE);
+      else
+        vty_out (vty, "BGP routing table entry for %s%s%s/%d%s",
 	       ((safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP) ?
 	       prefix_rd2str (prd, buf1, RD_ADDRSTRLEN) : ""),
 	       safi == SAFI_MPLS_VPN ? ":" : "",

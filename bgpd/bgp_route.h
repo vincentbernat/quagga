@@ -316,5 +316,12 @@ extern int subgroup_announce_check(struct bgp_info *ri,
 
 extern void bgp_peer_clear_node_queue_drain_immediate (struct peer *peer);
 extern void bgp_process_queues_drain_immediate (void);
+extern void route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
+                                  struct bgp_info *binfo, afi_t afi, safi_t safi,
+                                  json_object *json_paths);
+extern void route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
+			     struct bgp_node *rn,
+                             struct prefix_rd *prd, afi_t afi, safi_t safi,
+                             json_object *json);
 
 #endif /* _QUAGGA_BGP_ROUTE_H */

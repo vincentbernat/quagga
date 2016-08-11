@@ -11137,65 +11137,79 @@ bgp_show_evpn_route (struct vty *vty, struct prefix_rd *prd)
 	  for (rm = bgp_table_top (table); rm; rm = bgp_route_next (rm))
 	    for (ri = rm->info; ri; ri = ri->next)
 	      {
-                total_count++;
-		if (header)
-		  {
-                    vty_out (vty, "BGP table version is 0, local router ID is %s%s",
-                             inet_ntoa (bgp->router_id), VTY_NEWLINE);
-                    vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s",
-                             VTY_NEWLINE);
-                    vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s",
-                             VTY_NEWLINE, VTY_NEWLINE);
-                    vty_out (vty, v4_header, VTY_NEWLINE);
-                    header = 0;
-		  }
+                if (!prd)
+                  {
+                    total_count++;
+		    if (header)
+		      {
+                        vty_out (vty, "BGP table version is 0, local router ID is %s%s",
+                                 inet_ntoa (bgp->router_id), VTY_NEWLINE);
+                        vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s",
+                                 VTY_NEWLINE);
+                        vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s",
+                                 VTY_NEWLINE, VTY_NEWLINE);
+                        vty_out (vty, v4_header, VTY_NEWLINE);
+                        header = 0;
+		      }
 
-		if (rd_header)
-		  {
-		    u_int16_t type;
-		    struct rd_as rd_as;
-		    struct rd_ip rd_ip;
-		    u_char *pnt;
+		    if (rd_header)
+		      {
+		        u_int16_t type;
+		        struct rd_as rd_as;
+		        struct rd_ip rd_ip;
+		        u_char *pnt;
 
-		    pnt = rn->p.u.val;
+		        pnt = rn->p.u.val;
 
-		    /* Decode RD type. */
-		    type = decode_rd_type (pnt);
+		        /* Decode RD type. */
+		        type = decode_rd_type (pnt);
 
-		    vty_out (vty, "Route Distinguisher: ");
+		        vty_out (vty, "Route Distinguisher: ");
 
-		    switch (type) 
-                    {
+		        switch (type) 
+                        {
 
-		    case RD_TYPE_AS:
-		      decode_rd_as (pnt + 2, &rd_as);
-		      vty_out (vty, "%u:%d", rd_as.as, rd_as.val);
-		      break;
+		        case RD_TYPE_AS:
+		          decode_rd_as (pnt + 2, &rd_as);
+		          vty_out (vty, "%u:%d", rd_as.as, rd_as.val);
+		          break;
 
-		    case RD_TYPE_IP:
-		      decode_rd_ip (pnt + 2, &rd_ip);
-		      vty_out (vty, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
-		      break;
+		        case RD_TYPE_IP:
+		          decode_rd_ip (pnt + 2, &rd_ip);
+		          vty_out (vty, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
+		          break;
 
-		    default:
-		      vty_out (vty, "Unknown RD type");
-		      break;
-		    }
+		        default:
+		          vty_out (vty, "Unknown RD type");
+		          break;
+		        }
 
-		    vty_out (vty, "%s", VTY_NEWLINE);		  
-		    rd_header = 0;
-		  }
-		route_vty_out (vty, &rm->p, ri, 0, SAFI_EVPN, NULL);
-                output_count++;
-	      }
+		        vty_out (vty, "%s", VTY_NEWLINE);		  
+		        rd_header = 0;
+		      }
+		    route_vty_out (vty, &rm->p, ri, 0, SAFI_EVPN, NULL);
+                    output_count++;
+	          }
+                else
+                  {
+                    if (header)
+                      {
+                        route_vty_out_detail_header (vty, bgp, rm, prd, afi, safi, NULL);
+                        header = 0;
+                      }
+                    route_vty_out_detail (vty, bgp, &rm->p, ri, afi, safi, NULL);
+                  }
+              }
         }
     }
-  if (output_count == 0)
-    vty_out (vty, "No prefixes displayed, %ld exist%s", total_count, VTY_NEWLINE);
-  else
-    vty_out (vty, "%sDisplayed %ld out of %ld total prefixes%s",
-	     VTY_NEWLINE, output_count, total_count, VTY_NEWLINE);
-
+  if (!prd)
+    {
+      if (output_count == 0)
+        vty_out (vty, "No prefixes displayed, %ld exist%s", total_count, VTY_NEWLINE);
+      else
+        vty_out (vty, "%sDisplayed %ld out of %ld total prefixes%s",
+	         VTY_NEWLINE, output_count, total_count, VTY_NEWLINE);
+    }
   return CMD_SUCCESS;
 }
 

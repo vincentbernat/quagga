@@ -992,16 +992,25 @@ bgp_evpn_update_advertise_vni (struct bgp *bgp)
     } 
 }
 
+char *
+bgp_evpn_route2str (struct prefix_evpn *p, char *buf)
+{
+  if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
+    {
+      snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[%d]:[%s]",p->prefix.route_type,
+                    (p->prefix.flags == IP_ADDR_V4)? IP_ADDR_V4:IP_ADDR_V6,
+                    inet_ntoa(p->prefix.ip.v4_addr));
+    }
+  return(buf);
+}
+
 int
 bgp_evpn_print_prefix (struct vty *vty, struct prefix_evpn *p)
 {
   int len = 0;
+  char buf[EVPN_ROUTE_LEN];
 
   if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
-    {
-      len = vty_out (vty, "[%d]:[0]:[%d]:[%s]",p->prefix.route_type,
-                     (p->prefix.flags == IP_ADDR_V4)? IP_ADDR_V4:IP_ADDR_V6,
-                     inet_ntoa(p->prefix.ip.v4_addr));
-    }
+    len = vty_out (vty, "%s", bgp_evpn_route2str(p, buf));
   return len;
 }
