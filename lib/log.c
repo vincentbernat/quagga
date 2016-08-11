@@ -934,6 +934,7 @@ static const struct zebra_desc_table command_types[] = {
   DESC_ENTRY    (ZEBRA_REMOTE_VTEP_ADD),
   DESC_ENTRY    (ZEBRA_REMOTE_VTEP_DEL),
   DESC_ENTRY    (ZEBRA_ADVERTISE_VNI),
+  DESC_ENTRY    (ZEBRA_IPMR_ROUTE_STATS),
 };
 #undef DESC_ENTRY
 

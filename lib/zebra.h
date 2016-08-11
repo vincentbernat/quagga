@@ -450,7 +450,8 @@ struct in_pktinfo
 #define ZEBRA_REMOTE_VTEP_ADD             52
 #define ZEBRA_REMOTE_VTEP_DEL             53
 #define ZEBRA_ADVERTISE_VNI               54
-#define ZEBRA_MESSAGE_MAX                 55
+#define ZEBRA_IPMR_ROUTE_STATS            55
+#define ZEBRA_MESSAGE_MAX                 56
 
 /* Marker value used in new Zserv, in the byte location corresponding
  * the command value in the old zserv header. To allow old and new

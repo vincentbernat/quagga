@@ -49,6 +49,7 @@
 #include "zebra/rtadv.h"
 #include "zebra/zebra_ptm.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_mroute.h"
 
 #include "rt_netlink.h"
 
@@ -1280,6 +1281,8 @@ netlink_route_change_read_unicast (struct sockaddr_nl *snl, struct nlmsghdr *h,
   return 0;
 }
 
+static struct mcast_route_data *mroute = NULL;
+
 static int
 netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h,
 				     ns_id_t ns_id)
@@ -1288,7 +1291,8 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
   unsigned long long lastused = 0;
   struct rtmsg *rtm;
   struct rtattr *tb[RTA_MAX + 1];
-  struct prefix_sg sg;
+  struct mcast_route_data *m;
+  struct mcast_route_data mr;
   int iif = 0;
   int count;
   int oif[256];
@@ -1296,9 +1300,12 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
   char sbuf[40];
   char gbuf[40];
   char oif_list[256] = "\0";
-  memset (&sg, 0, sizeof (sg));
-  sg.family = IANA_AFI_IPMR;
   vrf_id_t vrf = ns_id;
+
+  if (mroute)
+    m = mroute;
+  else
+    m = &mr;
 
   rtm = NLMSG_DATA (h);
 
@@ -1311,13 +1318,13 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
     iif = *(int *)RTA_DATA (tb[RTA_IIF]);
 
   if (tb[RTA_SRC])
-    sg.src = *(struct in_addr *)RTA_DATA (tb[RTA_SRC]);
+    m->sg.src = *(struct in_addr *)RTA_DATA (tb[RTA_SRC]);
 
   if (tb[RTA_DST])
-    sg.grp = *(struct in_addr *)RTA_DATA (tb[RTA_DST]);
+    m->sg.grp = *(struct in_addr *)RTA_DATA (tb[RTA_DST]);
 
   if (tb[RTA_EXPIRES])
-    lastused = *(unsigned long long *)RTA_DATA (tb[RTA_EXPIRES]);
+    m->lastused = *(unsigned long long *)RTA_DATA (tb[RTA_EXPIRES]);
 
   if (tb[RTA_MULTIPATH])
     {
@@ -1340,8 +1347,8 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
 
   if (IS_ZEBRA_DEBUG_KERNEL)
     {
-      strcpy (sbuf, inet_ntoa (sg.src));
-      strcpy (gbuf, inet_ntoa (sg.grp));
+      strcpy (sbuf, inet_ntoa (m->sg.src));
+      strcpy (gbuf, inet_ntoa (m->sg.grp));
       for (count = 0; count < oif_count; count++)
 	{
 	  struct interface *ifp = if_lookup_by_index_vrf (oif[count], vrf);
@@ -2446,6 +2453,39 @@ skip:
 
   /* Talk to netlink socket. */
   return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+}
+
+int
+netlink_get_ipmr_sg_stats (void *in)
+{
+  int suc = 0;
+  struct mcast_route_data *mr = (struct mcast_route_data *)in;
+  struct {
+      struct nlmsghdr         n;
+      struct ndmsg            ndm;
+      char                    buf[256];
+  } req;
+
+  mroute = mr;
+  struct zebra_ns *zns = zebra_ns_lookup (NS_DEFAULT);
+
+  memset(&req.n, 0, sizeof(req.n));
+  memset(&req.ndm, 0, sizeof(req.ndm));
+
+  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+  req.n.nlmsg_flags = NLM_F_REQUEST;
+  req.ndm.ndm_family = AF_INET;
+  req.n.nlmsg_type = RTM_GETROUTE;
+
+  addattr_l (&req.n, sizeof (req), RTA_IIF, &mroute->ifindex, 4);
+  addattr_l (&req.n, sizeof (req), RTA_OIF, &mroute->ifindex, 4);
+  addattr_l (&req.n, sizeof (req), RTA_SRC, &mroute->sg.src.s_addr, 4);
+  addattr_l (&req.n, sizeof (req), RTA_DST, &mroute->sg.grp.s_addr, 4);
+
+  suc = netlink_talk (netlink_route_change_read_multicast, &req.n, &zns->netlink_cmd, zns);
+
+  mroute = NULL;
+  return suc;
 }
 
 int

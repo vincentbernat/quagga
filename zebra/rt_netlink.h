@@ -47,6 +47,7 @@ extern int netlink_route_read (struct zebra_ns *zns);
 extern int netlink_vxlan_flood_list_update (struct interface *ifp,
                                             struct prefix *vtep, int cmd);
 
+extern int netlink_get_ipmr_sg_stats (void *mroute);
 #endif /* HAVE_NETLINK */
 
 #endif /* _ZEBRA_RT_NETLINK_H */
