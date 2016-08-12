@@ -499,6 +499,30 @@ zvni_print (zebra_vni_t *zvni, void *ctxt)
     }
 }
 
+/* Cleanup VNI/VTEP and update kernel */
+static void
+zvni_cleanup_all (struct hash_backet *backet, void *zvrf)
+{
+  zebra_vni_t *zvni;
+
+  zvni = (zebra_vni_t *) backet->data;
+  if (!zvni)
+    return;
+
+  /* Free up all remote VTEPs, if any. */
+  zvni_vtep_del_all (zvni, 1);
+
+  /* Delete the hash entry. */
+  zvni_del (zvrf, zvni);
+}
+
+/* Close all VNI handling */
+void
+zebra_zvni_close (struct zebra_vrf *zvrf)
+{
+  hash_iterate (zvrf->vni_table, zvni_cleanup_all, zvrf);
+}
+
 /*
  * Print a VNI hash entry.
  */

@@ -49,6 +49,7 @@
 #include "zebra/zebra_rnh.h"
 #include "zebra/interface.h"
 #include "zebra/connected.h"
+#include "zebra/zebra_vxlan.h"
 
 /* Should we allow non Quagga processes to delete our routes */
 extern int allow_delete;
@@ -4098,6 +4099,9 @@ rib_close (void)
       if (zvrf->other_table[AFI_IP6][table_id])
         rib_close_table (zvrf->other_table[AFI_IP6][table_id]);
     }
+
+  /* Cleanup Vxlan table and update kernel */
+  zebra_zvni_close (zvrf);
 }
 
 /* Routing information base initialize. */

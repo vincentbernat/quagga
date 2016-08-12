@@ -63,3 +63,8 @@ void
 zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
 {
 }
+
+void
+zebra_zvni_close (struct zebra_vrf *zvrf)
+{
+}
