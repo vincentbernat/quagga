@@ -2165,7 +2165,7 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
   addattr_l(&req.n, sizeof(req), NDA_DST, &addr, 4);
   addattr_l(&req.n, sizeof(req), NDA_LLADDR, lla, llalen);
 
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, NS_DEFAULT);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
 }
 
 /* Routing table change via netlink interface. */
@@ -2528,7 +2528,7 @@ netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int
   dst_alen = (vtep->family == AF_INET ? 4 : 16);
   addattr_l (&req.n, sizeof (req), NDA_DST, &vtep->u.prefix, dst_alen);
 
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, NS_DEFAULT);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
 }
 
 /* Interface address modification. */
