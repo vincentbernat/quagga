@@ -27,6 +27,7 @@
 #include "prefix.h"
 #include "memory.h"
 #include "stream.h"
+#include "filter.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_rd.h"

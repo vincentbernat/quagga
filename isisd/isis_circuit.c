@@ -1226,9 +1226,12 @@ isis_interface_config_write (struct vty *vty)
 struct isis_circuit *
 isis_circuit_create (struct isis_area *area, struct interface *ifp)
 {
-  struct isis_circuit *circuit;
-  circuit = isis_csm_state_change (ISIS_ENABLE, NULL, area);
-  assert (circuit->state == C_STATE_CONF || circuit->state == C_STATE_UP);
+  struct isis_circuit *circuit = circuit_scan_by_ifp (ifp);
+  if (circuit && circuit->area)
+    return NULL;
+  circuit = isis_csm_state_change (ISIS_ENABLE, circuit, area);
+  if (circuit->state != C_STATE_CONF && circuit->state != C_STATE_UP)
+    return circuit;
   isis_circuit_if_bind (circuit, ifp);
   return circuit;
 }
@@ -1238,7 +1241,7 @@ isis_circuit_af_set (struct isis_circuit *circuit, bool ip_router, bool ipv6_rou
 {
   struct isis_area *area = circuit->area;
   bool change = circuit->ip_router != ip_router || circuit->ipv6_router != ipv6_router;
-  bool was_enabled = circuit->ip_router || circuit->ipv6_router;
+  bool was_enabled = !!circuit->area;
 
   area->ip_circuits   += ip_router   - circuit->ip_router;
   area->ipv6_circuits += ipv6_router - circuit->ipv6_router;
@@ -1280,13 +1283,6 @@ isis_circuit_passive_set (struct isis_circuit *circuit, bool passive)
     }
 
   return 0;
-}
-
-void
-isis_circuit_is_type_set (struct isis_circuit *circuit, int circ_type)
-{
-  if (circuit->circ_type != circ_type)
-    isis_event_circuit_type_change (circuit, circ_type);
 }
 
 int
@@ -1356,7 +1352,6 @@ isis_circuit_circ_type_set(struct isis_circuit *circuit, int circ_type)
    * is not supported. */
   if (circ_type == CIRCUIT_T_UNKNOWN
       || circ_type == CIRCUIT_T_LOOPBACK
-      || circuit->circ_type == CIRCUIT_T_UNKNOWN
       || circuit->circ_type == CIRCUIT_T_LOOPBACK)
     {
       if (circuit->circ_type != circ_type)

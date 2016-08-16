@@ -72,17 +72,13 @@ DEFUN (ip_router_isis,
 
   /* Prevent more than one area per circuit */
   circuit = circuit_scan_by_ifp (ifp);
-  if (circuit)
+  if (circuit && circuit->area)
     {
-      if (circuit->ip_router == 1)
+      if (strcmp (circuit->area->area_tag, area_tag))
         {
-          if (strcmp (circuit->area->area_tag, area_tag))
-            {
-              vty_out (vty, "ISIS circuit is already defined on %s%s",
-                       circuit->area->area_tag, VTY_NEWLINE);
-              return CMD_ERR_NOTHING_TODO;
-            }
-          return CMD_SUCCESS;
+          vty_out (vty, "ISIS circuit is already defined on %s%s",
+                   circuit->area->area_tag, VTY_NEWLINE);
+          return CMD_ERR_NOTHING_TODO;
         }
     }
 
@@ -90,8 +86,15 @@ DEFUN (ip_router_isis,
   if (!area)
     area = isis_area_create (area_tag);
 
-  if (!circuit)
+  if (!circuit || !circuit->area) {
     circuit = isis_circuit_create (area, ifp);
+
+    if (circuit->state != C_STATE_CONF && circuit->state != C_STATE_UP)
+      {
+        vty_out(vty, "Couldn't bring up interface, please check log.%s", VTY_NEWLINE);
+        return CMD_WARNING;
+      }
+  }
 
   bool ip = circuit->ip_router, ipv6 = circuit->ipv6_router;
   if (af[2] != '\0')
@@ -259,7 +262,7 @@ DEFUN (isis_network,
   if (!circuit)
     return CMD_ERR_NO_MATCH;
 
-  if (!isis_circuit_circ_type_set(circuit, CIRCUIT_T_P2P))
+  if (isis_circuit_circ_type_set(circuit, CIRCUIT_T_P2P))
     {
       vty_out (vty, "isis network point-to-point "
                "is valid only on broadcast interfaces%s",
@@ -282,7 +285,7 @@ DEFUN (no_isis_network,
   if (!circuit)
     return CMD_ERR_NO_MATCH;
 
-  if (!isis_circuit_circ_type_set(circuit, CIRCUIT_T_BROADCAST))
+  if (isis_circuit_circ_type_set(circuit, CIRCUIT_T_BROADCAST))
     {
       vty_out (vty, "isis network point-to-point "
                "is valid only on broadcast interfaces%s",
