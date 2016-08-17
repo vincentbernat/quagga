@@ -215,11 +215,20 @@ bgp_router_id_set (struct bgp *bgp, const struct in_addr *id)
 {
   struct peer *peer;
   struct listnode *node, *nnode;
+  u_char *vnis=NULL;
 
   if (IPV4_ADDR_SAME (&bgp->router_id, id))
     return 0;
 
+  /* EVPN uses router id in RD, withdraw them */
+  if (bgp->advertise_vni)
+    vnis = bgp_evpn_handle_router_id_update (bgp, vnis, TRUE);
+
   IPV4_ADDR_COPY (&bgp->router_id, id);
+
+  /* EVPN uses router id in RD, update them */
+  if (bgp->advertise_vni)
+    vnis = bgp_evpn_handle_router_id_update (bgp, vnis, FALSE);
 
   /* Set all peer's local identifier with this value. */
   for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))

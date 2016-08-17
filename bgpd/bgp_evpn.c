@@ -679,6 +679,61 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni)
   return 0;
 }
 
+static void
+bgp_evpn_update_router_id_vni (struct hash_backet *backet, u_char *vnis)
+{
+  struct bgpevpn *vpn;
+
+  vpn = (struct bgpevpn *) backet->data;
+
+  if (!vpn)
+    {
+      zlog_warn ("%s: VNI hash entry for VNI %u not found",
+                 __FUNCTION__, vpn->vni);
+      return;
+    }
+  vnis[vpn->vni] = 1;
+  return;
+}
+
+/*
+ * bgp_evpn_handle_router_id_update
+ * - Update local VNI cache with new router id in RD
+ * - Update evpn type 3 route by removing old RD
+ *   and adding the new RD. This should send
+ *   withdraw with old RD and update with new RD to peers.
+ */
+u_char *
+bgp_evpn_handle_router_id_update (struct bgp *bgp, u_char *vnis, int withdraw) 
+{
+  int i;
+
+  if (withdraw)
+    {
+      vnis = XCALLOC (MTYPE_BGP_EVPN_VNIS, UINT16_MAX);
+      if (!vnis)
+        return (NULL);
+      memset(vnis, 0, UINT16_MAX);
+      hash_iterate (bgp->vnihash,
+                    (void (*) (struct hash_backet *, void *))
+                    bgp_evpn_update_router_id_vni,
+                    vnis);
+      for (i=1; i <= UINT16_MAX; i++)
+        if (vnis[i])
+          bgp_evpn_local_vni_del (bgp, i);
+    }
+  else
+    { 
+      if (!vnis)
+        return (NULL);
+      for (i=1; i <= UINT16_MAX; i++)
+        if (vnis[i])
+          bgp_evpn_local_vni_add (bgp, i);
+      XFREE (MTYPE_BGP_EVPN_VNIS, vnis);
+    }
+  return (vnis);
+}
+
 /*
  * Handle del of a local VNI.
  */
