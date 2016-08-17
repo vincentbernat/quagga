@@ -3775,6 +3775,17 @@ DEFUN (debug_mroute,
   return CMD_SUCCESS;
 }
 
+DEFUN (debug_mroute_detail,
+       debug_mroute_detail_cmd,
+       "debug mroute detail",
+       DEBUG_STR
+       DEBUG_MROUTE_STR
+       "detailed\n")
+{
+  PIM_DO_DEBUG_MROUTE_DETAIL;
+  return CMD_SUCCESS;
+}
+
 DEFUN (no_debug_mroute,
        no_debug_mroute_cmd,
        "no debug mroute",
@@ -3783,6 +3794,18 @@ DEFUN (no_debug_mroute,
        DEBUG_MROUTE_STR)
 {
   PIM_DONT_DEBUG_MROUTE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_mroute_detail,
+       no_debug_mroute_detail_cmd,
+       "no debug mroute detail",
+       NO_STR
+       DEBUG_STR
+       DEBUG_MROUTE_STR
+       "detailed\n")
+{
+  PIM_DONT_DEBUG_MROUTE_DETAIL;
   return CMD_SUCCESS;
 }
 
@@ -4978,7 +5001,9 @@ void pim_cmd_init()
   install_element (ENABLE_NODE, &no_debug_igmp_trace_cmd);
   install_element (ENABLE_NODE, &undebug_igmp_trace_cmd);
   install_element (ENABLE_NODE, &debug_mroute_cmd);
+  install_element (ENABLE_NODE, &debug_mroute_detail_cmd);
   install_element (ENABLE_NODE, &no_debug_mroute_cmd);
+  install_element (ENABLE_NODE, &no_debug_mroute_detail_cmd);
   install_element (ENABLE_NODE, &debug_static_cmd);
   install_element (ENABLE_NODE, &no_debug_static_cmd);
   install_element (ENABLE_NODE, &debug_pim_cmd);
@@ -5021,7 +5046,9 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &no_debug_igmp_trace_cmd);
   install_element (CONFIG_NODE, &undebug_igmp_trace_cmd);
   install_element (CONFIG_NODE, &debug_mroute_cmd);
+  install_element (CONFIG_NODE, &debug_mroute_detail_cmd);
   install_element (CONFIG_NODE, &no_debug_mroute_cmd);
+  install_element (CONFIG_NODE, &no_debug_mroute_detail_cmd);
   install_element (CONFIG_NODE, &debug_static_cmd);
   install_element (CONFIG_NODE, &no_debug_static_cmd);
   install_element (CONFIG_NODE, &debug_pim_cmd);
