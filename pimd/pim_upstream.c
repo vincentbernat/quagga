@@ -936,7 +936,7 @@ pim_upstream_register_stop_timer (struct thread *t)
     {
       zlog_debug ("%s: (S,G)=%s upstream register stop timer %s",
 		  __PRETTY_FUNCTION__, pim_str_sg_dump (&up->sg),
-                  pim_upstream_state2str(up->join_state));
+                  pim_upstream_state2str(up));
     }
 
   switch (up->join_state)
