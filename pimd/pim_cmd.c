@@ -2509,10 +2509,38 @@ DEFUN (no_ip_pim_keep_alive,
        NO_STR
        IP_STR
        "pim multicast routing\n"
-       "Keep alive Timer"
-       "Seconds")
+       "Keep alive Timer\n"
+       "Seconds\n")
 {
   qpim_keep_alive_time = PIM_KEEPALIVE_PERIOD;
+  return CMD_SUCCESS;
+}
+
+DEFUN (ip_pim_rp_keep_alive,
+       ip_pim_rp_keep_alive_cmd,
+       "ip pim rp keep-alive-timer <31-600>",
+       IP_STR
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "Keep alive Timer\n"
+       "Seconds\n")
+{
+  VTY_GET_INTEGER_RANGE ("keep-alive-timer", qpim_rp_keep_alive_time,
+			 argv[0], 31, 600);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_pim_rp_keep_alive,
+       no_ip_pim_rp_keep_alive_cmd,
+       "no ip pim rp keep-alive-timer <31-600>",
+       NO_STR
+       IP_STR
+       "pim multicast routing\n"
+       "Rendevous Point\n"
+       "Keep alive Timer\n"
+       "Seconds\n")
+{
+  qpim_rp_keep_alive_time = PIM_RP_KEEPALIVE_PERIOD;
   return CMD_SUCCESS;
 }
 
@@ -4905,6 +4933,8 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &no_ip_pim_rp_range_cmd);
   install_element (CONFIG_NODE, &ip_pim_keep_alive_cmd);
   install_element (CONFIG_NODE, &no_ip_pim_keep_alive_cmd);
+  install_element (CONFIG_NODE, &ip_pim_rp_keep_alive_cmd);
+  install_element (CONFIG_NODE, &no_ip_pim_rp_keep_alive_cmd);
   install_element (CONFIG_NODE, &ip_ssmpingd_cmd);
   install_element (CONFIG_NODE, &no_ip_ssmpingd_cmd); 
   install_element (CONFIG_NODE, &pim_interface_cmd);
