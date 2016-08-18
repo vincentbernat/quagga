@@ -79,13 +79,13 @@ static struct static_route *static_route_new(unsigned int   iif,
 
 int pim_static_add(struct interface *iif, struct interface *oif, struct in_addr group, struct in_addr source)
 {
-   struct listnode *node = NULL;
-   struct static_route *s_route = NULL;
-   struct static_route *original_s_route = NULL;
-   struct pim_interface *pim_iif = iif ? iif->info : NULL;
-   struct pim_interface *pim_oif = oif ? oif->info : NULL;
-   unsigned int iif_index = pim_iif ? pim_iif->mroute_vif_index : 0;
-   unsigned int oif_index = pim_oif ? pim_oif->mroute_vif_index : 0;
+  struct listnode *node = NULL;
+  struct static_route *s_route = NULL;
+  struct static_route *original_s_route = 0;
+  struct pim_interface *pim_iif = iif ? iif->info : NULL;
+  struct pim_interface *pim_oif = oif ? oif->info : NULL;
+  ifindex_t iif_index = pim_iif ? pim_iif->mroute_vif_index : 0;
+  ifindex_t oif_index = pim_oif ? pim_oif->mroute_vif_index : 0;
 
    if (!iif_index || !oif_index) {
       zlog_warn("%s %s: Unable to add static route: Invalid interface index(iif=%d,oif=%d)",
@@ -228,8 +228,8 @@ int pim_static_del(struct interface *iif, struct interface *oif, struct in_addr 
    struct static_route *s_route = NULL;
    struct pim_interface *pim_iif = iif ? iif->info : 0;
    struct pim_interface *pim_oif = oif ? oif->info : 0;
-   unsigned int iif_index = pim_iif ? pim_iif->mroute_vif_index : 0;
-   unsigned int oif_index = pim_oif ? pim_oif->mroute_vif_index : 0;
+   ifindex_t iif_index = pim_iif ? pim_iif->mroute_vif_index : 0;
+   ifindex_t oif_index = pim_oif ? pim_oif->mroute_vif_index : 0;
 
    if (!iif_index || !oif_index) {
       zlog_warn("%s %s: Unable to remove static route: Invalid interface index(iif=%d,oif=%d)",

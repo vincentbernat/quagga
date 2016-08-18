@@ -148,7 +148,7 @@ struct zapi_ipv4
   struct in_addr **nexthop;
 
   u_char ifindex_num;
-  unsigned int *ifindex;
+  ifindex_t *ifindex;
 
   u_char distance;
 
@@ -231,7 +231,7 @@ struct zapi_ipv6
   struct in6_addr **nexthop;
 
   u_char ifindex_num;
-  unsigned int *ifindex;
+  ifindex_t *ifindex;
 
   u_char distance;
 

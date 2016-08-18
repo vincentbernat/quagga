@@ -245,7 +245,7 @@ int pim_socket_mcast(int protocol, struct in_addr ifaddr, int ifindex, int loop)
 }
 
 int pim_socket_join(int fd, struct in_addr group,
-		    struct in_addr ifaddr, int ifindex)
+		    struct in_addr ifaddr, ifindex_t ifindex)
 {
   int ret;
 
@@ -293,7 +293,7 @@ int pim_socket_join(int fd, struct in_addr group,
   return ret;
 }
 
-int pim_socket_join_source(int fd, int ifindex,
+int pim_socket_join_source(int fd, ifindex_t ifindex,
 			   struct in_addr group_addr,
 			   struct in_addr source_addr,
 			   const char *ifname)
@@ -316,7 +316,7 @@ int pim_socket_join_source(int fd, int ifindex,
 int pim_socket_recvfromto(int fd, uint8_t *buf, size_t len,
 			  struct sockaddr_in *from, socklen_t *fromlen,
 			  struct sockaddr_in *to, socklen_t *tolen,
-			  int *ifindex)
+			  ifindex_t *ifindex)
 {
   struct msghdr msgh;
   struct cmsghdr *cmsg;
