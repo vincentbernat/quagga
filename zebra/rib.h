@@ -64,6 +64,10 @@ struct rib
   /* Metric */
   u_int32_t metric;
 
+  /* MTU */
+  u_int32_t mtu;
+  u_int32_t nexthop_mtu;
+
   /* Distance. */
   u_char distance;
 
@@ -81,6 +85,7 @@ struct rib
 #define RIB_ENTRY_REMOVED	   0x1
   /* to simplify NHT logic when NHs change, instead of doing a NH by NH cmp */
 #define RIB_ENTRY_NEXTHOPS_CHANGED 0x2
+#define RIB_ENTRY_CHANGED          0x4
 
   /* Nexthop information. */
   u_char nexthop_num;
@@ -375,7 +380,7 @@ extern int zebra_check_addr (struct prefix *p);
 extern int rib_add_ipv4 (int type, u_short instance, int flags, struct prefix_ipv4 *p,
 			 struct in_addr *gate, struct in_addr *src,
 			 ifindex_t ifindex, vrf_id_t vrf_id, u_int32_t table_id,
-			 u_int32_t, u_char, safi_t);
+			 u_int32_t, u_int32_t, u_char, safi_t);
 
 extern int rib_add_ipv4_multipath (struct prefix_ipv4 *, struct rib *, safi_t);
 
@@ -416,7 +421,8 @@ static_delete_ipv4 (safi_t safi, struct prefix *p, struct in_addr *gate, ifindex
 extern int
 rib_add_ipv6 (int type, u_short instance, int flags, struct prefix_ipv6 *p,
 	      struct in6_addr *gate, ifindex_t ifindex, vrf_id_t vrf_id,
-              u_int32_t table_id, u_int32_t metric, u_char distance, safi_t safi);
+              u_int32_t table_id, u_int32_t metric, u_int32_t mtu,
+	      u_char distance, safi_t safi);
 
 extern int
 rib_delete_ipv6 (int type, u_short instance, int flags, struct prefix_ipv6 *p,
