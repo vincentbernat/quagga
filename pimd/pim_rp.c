@@ -26,6 +26,8 @@
 #include "linklist.h"
 #include "prefix.h"
 #include "memory.h"
+#include "vty.h"
+#include "vrf.h"
 
 #include "pimd.h"
 #include "pim_vty.h"
@@ -34,6 +36,7 @@
 #include "pim_str.h"
 #include "pim_rpf.h"
 #include "pim_sock.h"
+#include "pim_iface.h"
 
 struct rp_info
 {
@@ -147,6 +150,24 @@ pim_rp_find_match_group (struct prefix *group)
   return NULL;
 }
 
+static void
+pim_rp_check_interfaces (struct rp_info *rp_info)
+{
+  struct listnode *node;
+  struct interface *ifp;
+
+  for (ALL_LIST_ELEMENTS_RO (vrf_iflist (VRF_DEFAULT), node, ifp))
+    {
+      struct pim_interface *pim_ifp = ifp->info;
+
+      if (!pim_ifp)
+        continue;
+
+      if (pim_ifp->primary_address.s_addr == rp_info->rp.rpf_addr.s_addr)
+	rp_info->i_am_rp = 1;
+    }
+}
+
 int
 pim_rp_new (const char *rp, const char *group_range)
 {
@@ -184,6 +205,7 @@ pim_rp_new (const char *rp, const char *group_range)
       XFREE (MTYPE_PIM_RP, rp_info);
       if (!pim_rp_setup ())
         return -2;
+      pim_rp_check_interfaces (rp_all);
       return 0;
     }
 
@@ -209,6 +231,7 @@ pim_rp_new (const char *rp, const char *group_range)
   if (!pim_rp_setup ())
     return -2;
 
+  pim_rp_check_interfaces (rp_info);
   return 0;
 }
 
@@ -451,4 +474,23 @@ pim_rp_check_is_my_ip_address (struct in_addr group, struct in_addr dest_addr)
     return 1;
     
   return 0;
+}
+
+void
+pim_rp_show_information (struct vty *vty)
+{
+  struct rp_info *rp_info;
+  struct listnode *node;
+
+  vty_out (vty, "RP Addr           Group   Oif    I_am_RP%s", VTY_NEWLINE);
+  for (ALL_LIST_ELEMENTS_RO (qpim_rp_list, node, rp_info))
+    {
+      char buf[48];
+      vty_out (vty, "%-10s  %-10s  %-10s%-10d%s",
+      inet_ntoa (rp_info->rp.rpf_addr),
+	       prefix2str(&rp_info->group, buf, 48),
+	       rp_info->rp.source_nexthop.interface->name,
+	       rp_info->i_am_rp, VTY_NEWLINE);
+    }
+  return;
 }

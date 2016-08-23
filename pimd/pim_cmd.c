@@ -2044,6 +2044,19 @@ DEFUN (show_ip_pim_upstream_rpf,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_ip_pim_rp,
+       show_ip_pim_rp_cmd,
+       "show ip pim rp-info ",
+       SHOW_STR
+       IP_STR
+       PIM_STR
+       "PIM RP information\n")
+{
+  pim_rp_show_information (vty);
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (show_ip_pim_rpf,
        show_ip_pim_rpf_cmd,
        "show ip pim rpf",
@@ -4992,6 +5005,7 @@ void pim_cmd_init()
   install_element (VIEW_NODE, &show_ip_pim_upstream_cmd);
   install_element (VIEW_NODE, &show_ip_pim_upstream_join_desired_cmd);
   install_element (VIEW_NODE, &show_ip_pim_upstream_rpf_cmd);
+  install_element (VIEW_NODE, &show_ip_pim_rp_cmd);
   install_element (VIEW_NODE, &show_ip_multicast_cmd);
   install_element (VIEW_NODE, &show_ip_mroute_cmd);
   install_element (VIEW_NODE, &show_ip_mroute_count_cmd);
@@ -5031,6 +5045,7 @@ void pim_cmd_init()
   install_element (ENABLE_NODE, &show_ip_pim_upstream_cmd);
   install_element (ENABLE_NODE, &show_ip_pim_upstream_join_desired_cmd);
   install_element (ENABLE_NODE, &show_ip_pim_upstream_rpf_cmd);
+  install_element (ENABLE_NODE, &show_ip_pim_rp_cmd);
   install_element (ENABLE_NODE, &show_ip_multicast_cmd);
   install_element (ENABLE_NODE, &show_ip_mroute_cmd);
   install_element (ENABLE_NODE, &show_ip_mroute_count_cmd);
