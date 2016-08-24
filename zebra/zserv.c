@@ -1299,9 +1299,10 @@ zread_ipv4_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
   int i;
   struct stream *s;
   struct zapi_ipv4 api;
-  struct in_addr nexthop, *nexthop_p;
+  struct in_addr nexthop;
+  union g_addr *nexthop_p;
   unsigned long ifindex;
-  struct prefix_ipv4 p;
+  struct prefix p;
   u_char nexthop_num;
   u_char nexthop_type;
   u_int32_t table_id;
@@ -1322,7 +1323,7 @@ zread_ipv4_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
   memset (&p, 0, sizeof (struct prefix_ipv4));
   p.family = AF_INET;
   p.prefixlen = stream_getc (s);
-  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+  stream_get (&p.u.prefix4, s, PSIZE (p.prefixlen));
 
   /* Nexthop, ifindex, distance, metric. */
   if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
@@ -1340,11 +1341,11 @@ zread_ipv4_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
 	      break;
 	    case NEXTHOP_TYPE_IPV4:
 	      nexthop.s_addr = stream_get_ipv4 (s);
-	      nexthop_p = &nexthop;
+	      nexthop_p = (union g_addr *)&nexthop;
 	      break;
 	    case NEXTHOP_TYPE_IPV4_IFINDEX:
 	      nexthop.s_addr = stream_get_ipv4 (s);
-	      nexthop_p = &nexthop;
+	      nexthop_p = (union g_addr *)&nexthop;
 	      ifindex = stream_getl (s);
 	      break;
 	    case NEXTHOP_TYPE_IPV6:
@@ -1374,8 +1375,8 @@ zread_ipv4_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
 
   table_id = zvrf->table_id;
 
-  rib_delete_ipv4 (api.type, api.instance, api.flags, &p, nexthop_p, ifindex,
-		   zvrf->vrf_id, table_id, api.safi);
+  rib_delete (AFI_IP, api.safi, zvrf->vrf_id, api.type, api.instance,
+	      api.flags, &p, nexthop_p, ifindex, table_id);
   client->v4_route_del_cnt++;
   return 0;
 }
@@ -1683,8 +1684,9 @@ zread_ipv6_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
   struct stream *s;
   struct zapi_ipv6 api;
   struct in6_addr nexthop;
+  union g_addr *pnexthop;
   unsigned long ifindex;
-  struct prefix_ipv6 p;
+  struct prefix p;
   
   s = client->ibuf;
   ifindex = 0;
@@ -1701,7 +1703,7 @@ zread_ipv6_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
   memset (&p, 0, sizeof (struct prefix_ipv6));
   p.family = AF_INET6;
   p.prefixlen = stream_getc (s);
-  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+  stream_get (&p.u.prefix6, s, PSIZE (p.prefixlen));
 
   /* Nexthop, ifindex, distance, metric. */
   if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
@@ -1717,6 +1719,7 @@ zread_ipv6_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
 	    {
 	    case NEXTHOP_TYPE_IPV6:
 	      stream_get (&nexthop, s, 16);
+	      pnexthop = (union g_addr *)&nexthop;
 	      break;
 	    case NEXTHOP_TYPE_IFINDEX:
 	      ifindex = stream_getl (s);
@@ -1744,11 +1747,11 @@ zread_ipv6_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
     api.tag = 0;
 
   if (IN6_IS_ADDR_UNSPECIFIED (&nexthop))
-    rib_delete_ipv6 (api.type, api.instance, api.flags, &p, NULL, ifindex,
-                     zvrf->vrf_id, client->rtm_table, api.safi);
+    rib_delete (AFI_IP6, api.safi, zvrf->vrf_id, api.type, api.instance,
+		api.flags, &p, NULL, ifindex, client->rtm_table);
   else
-    rib_delete_ipv6 (api.type, api.instance, api.flags, &p, &nexthop, ifindex,
-                     zvrf->vrf_id, client->rtm_table, api.safi);
+    rib_delete (AFI_IP6, api.safi, zvrf->vrf_id, api.type, api.instance,
+		api.flags, &p, pnexthop, ifindex, client->rtm_table);
 
   client->v6_route_del_cnt++;
   return 0;
