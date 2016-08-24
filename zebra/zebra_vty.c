@@ -120,7 +120,7 @@ zebra_static_ipv4 (struct vty *vty, safi_t safi, int add_cmd,
           return CMD_WARNING;
         }
       if (add_cmd)
-        static_add_ipv4 (safi, &p, NULL, ifindex, ifname, ZEBRA_FLAG_BLACKHOLE, tag, distance, zvrf);
+        static_add_route (AFI_IP, safi, type, &p, NULL, ifindex, ifname, ZEBRA_FLAG_BLACKHOLE, tag, distance, zvrf);
       else
         static_delete_route (AFI_IP, safi, type, &p, NULL, ifindex, tag, distance, zvrf);
       return CMD_SUCCESS;
@@ -145,9 +145,8 @@ zebra_static_ipv4 (struct vty *vty, safi_t safi, int add_cmd,
 
   if (gate_str == NULL)
   {
-    type = STATIC_IFINDEX;
     if (add_cmd)
-      static_add_ipv4 (safi, &p, NULL, ifindex, ifname, flag, tag, distance, zvrf);
+      static_add_route (AFI_IP, safi, type, &p, NULL, ifindex, ifname, flag, tag, distance, zvrf);
     else
       static_delete_route (AFI_IP, safi, type, &p, NULL, ifindex, tag, distance, zvrf);
 
@@ -174,7 +173,7 @@ zebra_static_ipv4 (struct vty *vty, safi_t safi, int add_cmd,
     type = STATIC_IPV4_GATEWAY;
 
   if (add_cmd)
-    static_add_ipv4 (safi, &p, ifindex ? NULL : &gate, ifindex, ifname, flag, tag, distance, zvrf);
+    static_add_route (AFI_IP, safi, type, &p, ifindex ? NULL : (union g_addr *)&gate, ifindex, ifname, flag, tag, distance, zvrf);
   else
     static_delete_route (AFI_IP, safi, type, &p, ifindex ? NULL : (union g_addr *)&gate, ifindex, tag, distance, zvrf);
 
@@ -3740,7 +3739,7 @@ static_ipv6_func (struct vty *vty, int add_cmd, const char *dest_str,
     }
 
   if (add_cmd)
-    static_add_ipv6 (&p, type, gate, ifindex, ifname, flag, tag, distance, zvrf);
+    static_add_route (AFI_IP6, SAFI_UNICAST, type, &p, (union g_addr *)gate, ifindex, ifname, flag, tag, distance, zvrf);
   else
     static_delete_route (AFI_IP6, SAFI_UNICAST, type, &p, (union g_addr *)gate, ifindex, tag, distance, zvrf);
 
