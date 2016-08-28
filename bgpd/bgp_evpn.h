@@ -61,6 +61,6 @@ extern void bgp_evpn_cleanup (struct bgp *bgp);
 extern int bgp_evpn_print_prefix (struct vty *, struct prefix_evpn *);
 extern void bgp_evpn_show_one_vni (struct vty *, struct bgp *, vni_t);
 extern char *bgp_evpn_route2str (struct prefix_evpn *, char *);
-extern u_char *bgp_evpn_handle_router_id_update (struct bgp *, u_char *, int);
+extern void bgp_evpn_handle_router_id_update (struct bgp *, int);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

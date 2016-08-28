@@ -179,7 +179,6 @@ struct memory_list memory_list_bgp[] =
   { MTYPE_BGP_DUMP_STR,         "BGP Dump String Information"   },
   { MTYPE_ENCAP_TLV,		"ENCAP TLV",			},
   { MTYPE_BGP_EVPN,             "BGP EVPN Information"          },
-  { MTYPE_BGP_EVPN_VNIS,        "BGP EVPN VNIs"                 },
   { -1, NULL }
 };
 

@@ -116,6 +116,22 @@ vni_hash_cmp (const void *p1, const void *p2)
 }
 
 /*
+ * bgp_evpn_set_auto_rd
+ *
+ * RD = Router Id:VNI
+ */
+static void
+bgp_evpn_set_auto_rd (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  char buf[100];
+
+  vpn->prd.family = AF_UNSPEC;
+  vpn->prd.prefixlen = 64;
+  sprintf (buf, "%s:%u", inet_ntoa (bgp->router_id), vpn->vni);
+  str2prefix_rd (buf, &vpn->prd);
+}
+
+/*
  * bgp_evpn_derive_rd_rt
  *
  * Function to derive RD and RT from the VNI.
@@ -680,7 +696,7 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni)
 }
 
 static void
-bgp_evpn_update_router_id_vni (struct hash_backet *backet, u_char *vnis)
+bgp_evpn_update_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
 {
   struct bgpevpn *vpn;
 
@@ -692,7 +708,35 @@ bgp_evpn_update_router_id_vni (struct hash_backet *backet, u_char *vnis)
                  __FUNCTION__, vpn->vni);
       return;
     }
-  vnis[vpn->vni] = 1;
+
+  bgp_evpn_set_auto_rd (bgp, vpn);
+
+  /* Create EVPN type-3 route and schedule for processing. */
+  bgp_evpn_create_type3_route (bgp, vpn);
+  return;
+}
+
+/*
+ * bgp_evpn_withdraw_router_id_vni
+ *
+ * Withdraw the route from peer before updating the router id in evpn cache.
+ */
+static void
+bgp_evpn_withdraw_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
+{
+  struct bgpevpn *vpn;
+
+  vpn = (struct bgpevpn *) backet->data;
+
+  if (!vpn)
+    {
+      zlog_warn ("%s: VNI hash entry for VNI %u not found",
+                 __FUNCTION__, vpn->vni);
+      return;
+    }
+
+  /* Remove EVPN type-3 route and schedule for processing. */
+  bgp_evpn_delete_type3_route (bgp, vpn);
   return;
 }
 
@@ -703,35 +747,20 @@ bgp_evpn_update_router_id_vni (struct hash_backet *backet, u_char *vnis)
  *   and adding the new RD. This should send
  *   withdraw with old RD and update with new RD to peers.
  */
-u_char *
-bgp_evpn_handle_router_id_update (struct bgp *bgp, u_char *vnis, int withdraw) 
+void
+bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw) 
 {
-  int i;
-
   if (withdraw)
-    {
-      vnis = XCALLOC (MTYPE_BGP_EVPN_VNIS, UINT16_MAX);
-      if (!vnis)
-        return (NULL);
-      memset(vnis, 0, UINT16_MAX);
-      hash_iterate (bgp->vnihash,
-                    (void (*) (struct hash_backet *, void *))
-                    bgp_evpn_update_router_id_vni,
-                    vnis);
-      for (i=1; i <= UINT16_MAX; i++)
-        if (vnis[i])
-          bgp_evpn_local_vni_del (bgp, i);
-    }
+    hash_iterate (bgp->vnihash,
+                  (void (*) (struct hash_backet *, void *))
+                  bgp_evpn_withdraw_router_id_vni,
+                  bgp);
   else
-    { 
-      if (!vnis)
-        return (NULL);
-      for (i=1; i <= UINT16_MAX; i++)
-        if (vnis[i])
-          bgp_evpn_local_vni_add (bgp, i);
-      XFREE (MTYPE_BGP_EVPN_VNIS, vnis);
-    }
-  return (vnis);
+    hash_iterate (bgp->vnihash,
+                  (void (*) (struct hash_backet *, void *))
+                  bgp_evpn_update_router_id_vni,
+                  bgp);
+  return;
 }
 
 /*
