@@ -20,7 +20,7 @@ zebra_vxlan_if_down (struct interface *ifp)
 }
 
 int
-zebra_vxlan_if_add (struct interface *ifp, vni_t vni)
+zebra_vxlan_if_add (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
 {
   return 0;
 }

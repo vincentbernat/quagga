@@ -42,7 +42,7 @@ typedef enum
 #define EVPN_ROUTE_LEN 42
 
 extern void bgp_evpn_update_vni (struct bgp*, vni_t, int);
-extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni);
+extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr);
 extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
 extern void bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty);
 extern void bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,

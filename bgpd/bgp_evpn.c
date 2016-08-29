@@ -58,6 +58,9 @@ struct bgpevpn
   /* RD for this VNI. */
   struct prefix_rd          prd;
 
+  /* Route type 3 field */
+  struct in_addr originator_ip;
+
   /* Import and Export RTs. */
   /* TODO: Only 1 each supported. */
   struct ecommunity_val     import_rt;
@@ -75,14 +78,14 @@ extern struct zclient *zclient;
  * Build EVPN type-3 prefix (for route node)
  */
 static inline void
-build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr router_id)
+build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
 {
   memset (p, 0, sizeof (struct prefix_evpn));
   p->family = AF_ETHERNET;
   p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
   SET_FLAG (p->prefix.flags, IP_ADDR_V4);
-  p->prefix.ip.v4_addr = router_id;
+  p->prefix.ip.v4_addr = originator_ip;
 }
 
 /*
@@ -165,7 +168,7 @@ bgp_evpn_derive_rd_rt (struct bgp *bgp, struct bgpevpn *vpn)
  * Create a new vpn
  */
 static struct bgpevpn *
-bgp_evpn_new (struct bgp *bgp, vni_t vni)
+bgp_evpn_new (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
 {
   struct bgpevpn *vpn;
 
@@ -182,6 +185,7 @@ bgp_evpn_new (struct bgp *bgp, vni_t vni)
 
   /* Set values - RD and RT set to defaults. */
   vpn->vni = vni;
+  vpn->originator_ip = originator_ip;
   bgp_evpn_derive_rd_rt (bgp, vpn);
 
   /* Add to hash */
@@ -257,7 +261,7 @@ bgp_evpn_create_type3_route (struct bgp *bgp, struct bgpevpn *vpn)
   /* Build prefix and create route node. EVPN routes have a 2-level
    * tree (RD-level + Prefix-level) similar to L3VPN routes.
    */
-  build_evpn_type3_prefix (&p, bgp->router_id);
+  build_evpn_type3_prefix (&p, vpn->originator_ip);
   rn = bgp_afi_node_get (bgp->rib[afi][safi], afi, safi,
                          (struct prefix *)&p, &vpn->prd);
 
@@ -313,7 +317,7 @@ bgp_evpn_delete_type3_route (struct bgp *bgp, struct bgpevpn *vpn)
   safi_t safi = SAFI_EVPN;
 
   /* Build prefix and locate route node. */
-  build_evpn_type3_prefix (&p, bgp->router_id);
+  build_evpn_type3_prefix (&p, vpn->originator_ip);
   rn = bgp_afi_node_lookup (bgp->rib[afi][safi], afi, safi,
                          (struct prefix *)&p, &vpn->prd);
 
@@ -631,7 +635,7 @@ bgp_evpn_update_vni (struct bgp *bgp, vni_t vni, int add)
     {
       if (!vpn)
         {
-          vpn = bgp_evpn_new(bgp, vni);
+          vpn = bgp_evpn_new(bgp, vni, bgp->router_id);
           if (vpn)
             hash_get(bgp->vnihash, vpn, hash_alloc_intern);
         }
@@ -648,7 +652,7 @@ bgp_evpn_update_vni (struct bgp *bgp, vni_t vni, int add)
  * TODO: Cannot handle VNI larger than UINT16_MAX
  */
 int
-bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni)
+bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
 {
   struct bgpevpn *vpn;
 
@@ -669,12 +673,23 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni)
   vpn = bgp_evpn_lookup_vpn (bgp, vni);
   if (!vpn)
     {
-      vpn = bgp_evpn_new (bgp, vni);
+      vpn = bgp_evpn_new (bgp, vni, originator_ip);
       if (!vpn)
         {
           zlog_err ("%u: Failed to allocate VNI entry for VNI %u",
                     bgp->vrf_id, vni);
           return -1;
+        }
+    }
+  else
+    {
+      if (!IPV4_ADDR_SAME (&vpn->originator_ip, &originator_ip))
+        {
+          /* If VNI was already local, withdraw route from peer */
+          if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+            /* Remove EVPN type-3 route and schedule for processing. */
+            bgp_evpn_delete_type3_route (bgp, vpn);
+          vpn->originator_ip = originator_ip;
         }
     }
 
@@ -805,6 +820,8 @@ bgp_evpn_display_vni (struct vty *vty, struct bgpevpn *vpn)
 
   vty_out (vty, "VNI: %d%s", vpn->vni, VTY_NEWLINE);
   vty_out (vty, "  RD: %s%s", prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN), 
+                VTY_NEWLINE);
+  vty_out (vty, "  Originator IP: %s%s", inet_ntoa(vpn->originator_ip),
                 VTY_NEWLINE);
   decode_rd_as((u_char *)vpn->import_rt.val+2, &rd_as);
   vty_out (vty, "  Import Route Target: %u:%d%s", rd_as.as, rd_as.val, 

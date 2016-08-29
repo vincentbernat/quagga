@@ -2137,10 +2137,12 @@ bgp_zebra_process_local_vni (int command, struct zclient *zclient,
   struct stream *s;
   vni_t vni;
   struct bgp *bgp;
+  struct in_addr vtep_ip;
 
   s = zclient->ibuf;
   vni = stream_getl (s);
-
+  if (command == ZEBRA_VNI_ADD)
+    vtep_ip.s_addr = stream_get_ipv4 (s);
   bgp = bgp_lookup_by_vrf_id (vrf_id);
   if (!bgp)
     return 0;
@@ -2150,7 +2152,7 @@ bgp_zebra_process_local_vni (int command, struct zclient *zclient,
                (command == ZEBRA_VNI_ADD) ? "add" : "del",  vrf_id, vni);
 
   if (command == ZEBRA_VNI_ADD)
-    return bgp_evpn_local_vni_add (bgp, vni);
+    return bgp_evpn_local_vni_add (bgp, vni, vtep_ip.s_addr? vtep_ip : bgp->router_id);
   else
     return bgp_evpn_local_vni_del (bgp, vni);
 }

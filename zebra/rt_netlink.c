@@ -529,10 +529,11 @@ netlink_interface_update_hw_addr (struct rtattr **tb, struct interface *ifp)
           netlink_parse_rtattr((tb), (max), RTA_DATA(rta), RTA_PAYLOAD(rta))
 
 static int
-zebra_extract_vni_from_netlink_msg (struct rtattr *link_data, vni_t *vni)
+zebra_extract_vxlan_info_from_netlink_msg (struct rtattr *link_data, vni_t *vni, struct in_addr *vtep_ip)
 {
   struct rtattr *attr[IFLA_VXLAN_MAX+1];
   vni_t vni_in_msg;
+  struct in_addr vtep_ip_in_msg;
 
   *vni = 0;
   parse_rtattr_nested(attr, IFLA_VXLAN_MAX, link_data);
@@ -545,9 +546,20 @@ zebra_extract_vni_from_netlink_msg (struct rtattr *link_data, vni_t *vni)
 
   vni_in_msg = *(vni_t *)RTA_DATA(attr[IFLA_VXLAN_ID]);
   *vni = vni_in_msg;
+  if (!attr[IFLA_VXLAN_LOCAL])
+    {
+      if (IS_ZEBRA_DEBUG_KERNEL)
+        zlog_debug ("IFLA_VXLAN_LOCAL missing from VXLAN IF message");
+    }
+  else
+    {
+      vtep_ip_in_msg = *(struct in_addr *)RTA_DATA(attr[IFLA_VXLAN_LOCAL]);
+      *vtep_ip = vtep_ip_in_msg;
+      if (IS_ZEBRA_DEBUG_KERNEL)
+        zlog_debug ("%s: VTEP IP: %s\n", __FUNCTION__, inet_ntoa(*vtep_ip));
+    }
 
   return 0;
-
 }
 
 static void
@@ -652,6 +664,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   int vrf_device = 0;
   int vxlan_if = 0;
   vni_t vni;
+  struct in_addr vtep_ip;
 
   ifi = NLMSG_DATA (h);
 
@@ -706,7 +719,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
         {
           if (linkinfo[IFLA_INFO_DATA]) // This should be true
             {
-              if (zebra_extract_vni_from_netlink_msg (linkinfo[IFLA_INFO_DATA], &vni))
+              if (zebra_extract_vxlan_info_from_netlink_msg (linkinfo[IFLA_INFO_DATA], &vni, &vtep_ip))
                 zlog_err ("Could not get VNI from msg 0x%x IF %u", h->nlmsg_type, ifi->ifi_index);
               else
                 vxlan_if = 1;
@@ -742,7 +755,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   if (vxlan_if)
     {
       /* Update VNI, create or update hash table, notify BGP, if needed. */
-      zebra_vxlan_if_add (ifp, vni);
+      zebra_vxlan_if_add (ifp, vni, vtep_ip);
     }
 
   return 0;
@@ -1455,6 +1468,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   int vrf_device = 0;
   int vxlan_if = 0;
   vni_t vni;
+  struct in_addr vtep_ip;
 
   vrf_id_t vrf_id = ns_id;
 
@@ -1517,7 +1531,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
         {
           if (linkinfo[IFLA_INFO_DATA]) // This should be true
             {
-              if (zebra_extract_vni_from_netlink_msg (linkinfo[IFLA_INFO_DATA], &vni))
+              if (zebra_extract_vxlan_info_from_netlink_msg (linkinfo[IFLA_INFO_DATA], &vni, &vtep_ip))
                 zlog_err ("Could not get VNI from msg 0x%x IF %u", h->nlmsg_type, ifi->ifi_index);
               else
                 vxlan_if = 1;
@@ -1575,7 +1589,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           if (vxlan_if)
             {
               /* Update VNI, create or update hash table, notify BGP, if needed. */
-              zebra_vxlan_if_add (ifp, vni);
+              zebra_vxlan_if_add (ifp, vni, vtep_ip);
             }
         }
       else if (ifp->vrf_id != vrf_id)
@@ -1616,6 +1630,13 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
               ifp->flags = ifi->ifi_flags & 0x0000fffff;
               if (if_is_operative (ifp))
                 if_up (ifp);
+            }
+
+          /* Vxlan interface status changed */
+          if (vxlan_if)
+            {
+              /* Update VNI, create or update hash table, notify BGP, if needed. */
+              zebra_vxlan_if_add (ifp, vni, vtep_ip);
             }
         }
     }
