@@ -30,6 +30,7 @@
 #include "zebra/zebra_vrf.h"
 #include "zebra/router-id.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_static.h"
 
 extern struct zebra_t zebrad;
 struct list *zvrf_list;

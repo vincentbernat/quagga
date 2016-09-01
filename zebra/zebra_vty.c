@@ -37,6 +37,7 @@
 #include "zebra/redistribute.h"
 #include "zebra/zebra_routemap.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_static.h"
 #include "lib/json.h"
 
 extern int allow_delete;
