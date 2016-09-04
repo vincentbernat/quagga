@@ -147,7 +147,7 @@ bgp_evpn_derive_rd_rt (struct bgp *bgp, struct bgpevpn *vpn)
 {
   char buf[100];
   u_char rt_type;
-  struct in_addr ip;
+  struct in_addr ip = { .s_addr = INADDR_ANY };
 
   vpn->prd.family = AF_UNSPEC;
   vpn->prd.prefixlen = 64;
