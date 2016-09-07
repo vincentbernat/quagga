@@ -1010,6 +1010,10 @@ zsend_ipv4_nexthop_lookup_mrib (struct zserv *client, struct in_addr addr, struc
 	      case NEXTHOP_TYPE_IFINDEX:
 		stream_putl (s, nexthop->ifindex);
 		break;
+              case NEXTHOP_TYPE_IPV6_IFINDEX:
+                stream_put (s, &nexthop->gate.ipv6, 16);
+                stream_putl (s, nexthop->ifindex);
+                break;
 	      default:
 		/* do nothing */
 		break;
