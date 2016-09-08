@@ -207,6 +207,7 @@ int main(int argc, char** argv, char** envp) {
   prefix_list_init ();
   pim_route_map_init ();
   pim_init();
+  pim_msdp_init ();
 
   /*
    * Initialize zclient "update" and "lookup" sockets
