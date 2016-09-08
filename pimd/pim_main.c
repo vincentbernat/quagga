@@ -42,6 +42,7 @@
 #include "pim_version.h"
 #include "pim_signals.h"
 #include "pim_zebra.h"
+#include "pim_msdp.h"
 
 #ifdef PIM_ZCLIENT_DEBUG
 extern int zclient_debug;
