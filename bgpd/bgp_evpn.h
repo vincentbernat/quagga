@@ -41,7 +41,7 @@ typedef enum
 
 #define EVPN_ROUTE_LEN 42
 
-extern void bgp_evpn_update_vni (struct bgp*, vni_t, int);
+extern struct bgpevpn *bgp_evpn_update_vni (struct bgp*, vni_t, int);
 extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr);
 extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
 extern void bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty);
@@ -62,5 +62,13 @@ extern int bgp_evpn_print_prefix (struct vty *, struct prefix_evpn *);
 extern void bgp_evpn_show_one_vni (struct vty *, struct bgp *, vni_t);
 extern char *bgp_evpn_route2str (struct prefix_evpn *, char *);
 extern void bgp_evpn_handle_router_id_update (struct bgp *, int);
-
+extern void bgp_evpn_update_rd (struct bgp *, struct bgpevpn *, struct prefix_rd *, int);
+extern int bgp_evpn_check_configured_rd (struct bgpevpn *, struct prefix_rd *);
+extern int bgp_evpn_check_auto_rd_flag (struct bgpevpn *);
+extern int bgp_evpn_process_rt_config (struct vty *, struct bgp *, struct bgpevpn *,
+                                       struct prefix_rd *, const char *, int, int);
+extern void bgp_evpn_show_import_rt (struct hash_backet *, struct vty *);
+extern void bgp_evpn_check_uninstall_evpn_route (struct bgp *, afi_t, safi_t,
+                                                 struct prefix_evpn *, struct bgp_info *);
+extern void bgp_evpn_config_write_vpn (struct vty *, struct bgpevpn *);
 #endif /* _QUAGGA_BGP_EVPN_H */

@@ -2209,6 +2209,7 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   const char *reason;
   char pfx_buf[BGP_PRD_PATH_STRLEN];
   int connected = 0;
+  int same_attr=0;
 
   bgp = peer->bgp;
   rn = bgp_afi_node_get (bgp->rib[afi][safi], afi, safi, p, prd);
@@ -2298,10 +2299,10 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   if (ri)
     {
       ri->uptime = bgp_clock ();
-
+      same_attr = attrhash_cmp (ri->attr, attr_new);
       /* Same attribute comes in. */
       if (!CHECK_FLAG (ri->flags, BGP_INFO_REMOVED) 
-          && attrhash_cmp (ri->attr, attr_new))
+          && same_attr)
 	{
 	  if (CHECK_FLAG (bgp->af_flags[afi][safi], BGP_CONFIG_DAMPENING)
 	      && peer->sort == BGP_PEER_EBGP
@@ -2394,6 +2395,15 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       /* Update MPLS tag.  */
       if (safi == SAFI_MPLS_VPN)
         memcpy ((bgp_info_extra_get (ri))->tag, tag, 3);
+
+      /* Handle EVPN route update */
+      if (!same_attr && safi == SAFI_EVPN)
+        {
+          zlog_debug("%s: EVPN attributes are not the same, check to remove"
+                     " the route", __FUNCTION__);
+          bgp_evpn_check_uninstall_evpn_route (bgp, afi, safi,
+                                               (struct prefix_evpn *)p, ri);
+        }
 
       /* Update bgp route dampening information.  */
       if (CHECK_FLAG (bgp->af_flags[afi][safi], BGP_CONFIG_DAMPENING)

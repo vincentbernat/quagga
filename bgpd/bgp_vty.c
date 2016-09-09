@@ -6105,13 +6105,16 @@ DEFUN (bgp_evpn_vni,
 {
   vni_t vni;
   struct bgp *bgp;
+  struct bgpevpn *vpn;
 
   VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
   bgp = vty->index;
 
   if (!bgp)
     return CMD_WARNING;
-  bgp_evpn_update_vni(bgp, vni, TRUE);
+  vpn = bgp_evpn_update_vni(bgp, vni, TRUE);
+  vty->node = BGP_EVPN_VNI_NODE;
+  vty->index_sub = vpn;
   return CMD_SUCCESS;
 }
 
@@ -6140,7 +6143,31 @@ DEFUN (bgp_evpn_vni_rd,
        "Route Distinguisher\n"
        "ASN:XX or A.B.C.D:XX\n")
 {
-  vty->node = BGP_EVPN_VNI_NODE;
+  struct prefix_rd prd;
+  struct bgp *bgp;
+  struct bgpevpn *vpn;
+  int ret;
+
+  bgp = vty->index;
+  vpn = vty->index_sub;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  if (bgp_evpn_check_configured_rd(vpn, &prd) != 0)
+    bgp_evpn_update_rd (bgp, vpn, &prd, FALSE);
+  else
+    {
+      vty_out (vty, "%%Entered RD value same as already configured%s",
+                    VTY_NEWLINE);
+      return CMD_WARNING;
+    }
   return CMD_SUCCESS;
 }
 
@@ -6151,7 +6178,50 @@ DEFUN (no_bgp_evpn_vni_rd,
        "Route Distinguisher\n"
        "ASN:XX or A.B.C.D:XX\n")
 {
-  vty->node = BGP_EVPN_VNI_NODE;
+  struct prefix_rd prd;
+  struct bgp *bgp;
+  struct bgpevpn *vpn;
+  int ret;
+
+  bgp = vty->index;
+  vpn = vty->index_sub;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  if (bgp_evpn_check_configured_rd(vpn, &prd) != 0)
+    {
+      vty_out (vty, "%% RD doesnt match the VPN RD%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  bgp_evpn_update_rd (bgp, vpn, &prd, TRUE);
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_evpn_vni_rd_auto,
+       bgp_evpn_vni_rd_auto_cmd,
+       "rd auto",
+       "Route Distinguisher\n"
+       "Auto derive RD\n")
+{
+  struct prefix_rd prd;
+  struct bgp *bgp;
+  struct bgpevpn *vpn;
+
+  bgp = vty->index;
+  vpn = vty->index_sub;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  if (!bgp_evpn_check_auto_rd_flag(vpn))
+    bgp_evpn_update_rd (bgp, vpn, &prd, TRUE);
   return CMD_SUCCESS;
 }
 
@@ -6162,20 +6232,72 @@ DEFUN (bgp_evpn_vni_rt,
        "import/export/both\n"
        "ASN:XX or A.B.C.D:XX\n")
 {
-  vty->node = BGP_EVPN_VNI_NODE;
-  return CMD_SUCCESS;
+  struct prefix_rd prd;
+  struct bgp *bgp;
+  struct bgpevpn *vpn;
+  int ret;
+
+  bgp = vty->index;
+  vpn = vty->index_sub;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  ret = str2prefix_rd (argv[1], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Target%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], TRUE, FALSE));
 }
 
 DEFUN (no_bgp_evpn_vni_rt,
        no_bgp_evpn_vni_rt_cmd,
-       "no rt WORD ASN:nn_or_IP-address:nn",
+       "no route-target WORD ASN:nn_or_IP-address:nn",
        NO_STR
        "Route Target\n"
        "import/export/both\n"
        "ASN:XX or A.B.C.D:XX\n")
 {
-  vty->node = BGP_EVPN_VNI_NODE;
-  return CMD_SUCCESS;
+  struct prefix_rd prd;
+  struct bgp *bgp;
+  struct bgpevpn *vpn;
+  int ret;
+
+  bgp = vty->index;
+  vpn = vty->index_sub;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  ret = str2prefix_rd (argv[1], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Target%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], FALSE, FALSE));
+}
+
+DEFUN (bgp_evpn_vni_rt_auto,
+       bgp_evpn_vni_rt_auto_cmd,
+       "route-target WORD auto",
+       "Route Target\n"
+       "import/export/both\n"
+       "Auto derive RT\n")
+{
+  struct bgp *bgp;
+  struct bgpevpn *vpn;
+  struct prefix_rd prd;
+
+  bgp = vty->index;
+  vpn = vty->index_sub;
+
+  if (!bgp || !vpn) 
+    return CMD_WARNING;
+
+  return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], TRUE, TRUE));
 }
 
 DEFUN (bgp_evpn_advertise_vni,
@@ -6211,6 +6333,13 @@ DEFUN (no_bgp_evpn_advertise_vni,
   return CMD_SUCCESS;
 }
 
+static void
+bgp_config_write_vxlan_info (struct hash_backet *backet, struct vty *vty)
+{
+  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
+  bgp_evpn_config_write_vpn (vty, vpn);
+}
+
 void
 bgp_config_write_advertise_vni (struct vty *vty, struct bgp *bgp, afi_t afi,
                                 safi_t safi, int *write)
@@ -6220,6 +6349,24 @@ bgp_config_write_advertise_vni (struct vty *vty, struct bgp *bgp, afi_t afi,
       bgp_config_write_family_header (vty, afi, safi, write);
       vty_out (vty, "  advertise-vni%s", VTY_NEWLINE);
     }
+  if (bgp->vnihash)
+    {
+      bgp_config_write_family_header (vty, afi, safi, write);
+      hash_iterate (bgp->vnihash,
+                    (void (*) (struct hash_backet *, void *))
+                    bgp_config_write_vxlan_info,
+                    vty);
+    }
+}
+
+DEFUN (exit_vni,
+       exit_vni_cmd,
+       "exit-vni",
+       "Exit from VNI mode\n")
+{
+  if (vty->node == BGP_EVPN_VNI_NODE)
+    vty->node = BGP_EVPN_NODE;
+  return CMD_SUCCESS;
 }
 
 DEFUN (exit_address_family,
@@ -14040,6 +14187,30 @@ DEFUN (show_bgp_evpn_vni_num,
     bgp_evpn_show_one_vni (vty, bgp, vni);
   return CMD_SUCCESS;
 }
+
+DEFUN (show_bgp_evpn_import_rt,
+       show_bgp_evpn_import_rt_cmd,
+       "show bgp evpn import-rt",
+       SHOW_STR
+       BGP_STR
+       "Address family modifier\n"
+       "Show import route target\n")
+{
+  struct bgp *bgp;
+  bgp = bgp_get_default ();
+
+  if (bgp)
+    {
+      vty_out (vty, "BGP EVPN IMPORT RT LIST%s", VTY_NEWLINE);
+      vty_out (vty, "Import Route Target        VNI%s", VTY_NEWLINE);
+      hash_iterate (bgp->import_rt_hash,
+                    (void (*) (struct hash_backet *, void *))
+                    bgp_evpn_show_import_rt,
+                    vty);
+    }
+  return CMD_SUCCESS;
+}
+
 /* Redistribute VTY commands.  */
 
 DEFUN (bgp_redistribute_ipv4,
@@ -15907,13 +16078,15 @@ bgp_vty_init (void)
   install_element (BGP_ENCAP_NODE, &exit_address_family_cmd);
   install_element (BGP_ENCAPV6_NODE, &exit_address_family_cmd);
   install_element (BGP_EVPN_NODE, &exit_address_family_cmd);
-  install_element (BGP_EVPN_VNI_NODE, &exit_address_family_cmd);
 
   /* EVPN commands */
-  /*install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);*/
+  install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
   install_element (BGP_EVPN_NODE, &bgp_evpn_advertise_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_auto_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_auto_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &exit_vni_cmd);
 
   /* "no" EVPN commands */
   /*install_element (BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);*/
@@ -16257,9 +16430,6 @@ bgp_vty_init (void)
   install_element (VIEW_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (VIEW_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
-  install_element (VIEW_NODE, &show_bgp_evpn_summary_cmd);
-  install_element (VIEW_NODE, &show_bgp_evpn_route_cmd);
-  install_element (VIEW_NODE, &show_bgp_evpn_route_rd_cmd);
   install_element (RESTRICTED_NODE, &show_ip_bgp_summary_cmd);
   install_element (RESTRICTED_NODE, &show_ip_bgp_updgrps_cmd);
   install_element (RESTRICTED_NODE, &show_ip_bgp_instance_updgrps_cmd);
@@ -16300,9 +16470,6 @@ bgp_vty_init (void)
   install_element (RESTRICTED_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (RESTRICTED_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
-  install_element (RESTRICTED_NODE, &show_bgp_evpn_summary_cmd);
-  install_element (RESTRICTED_NODE, &show_bgp_evpn_route_cmd);
-  install_element (RESTRICTED_NODE, &show_bgp_evpn_route_rd_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_summary_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_updgrps_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_instance_updgrps_cmd);
@@ -16343,9 +16510,6 @@ bgp_vty_init (void)
   install_element (ENABLE_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (ENABLE_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
-  install_element (ENABLE_NODE, &show_bgp_evpn_summary_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_route_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_route_rd_cmd);
 
   /* "show ip bgp neighbors" commands. */
   install_element (VIEW_NODE, &show_ip_bgp_neighbors_cmd);
@@ -16505,10 +16669,22 @@ bgp_vty_init (void)
   /* "show bgp evpn" commands. */
   install_element (VIEW_NODE, &show_bgp_evpn_vni_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_vni_num_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_summary_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_rd_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_import_rt_cmd);
   install_element (RESTRICTED_NODE, &show_bgp_evpn_vni_cmd);
   install_element (RESTRICTED_NODE, &show_bgp_evpn_vni_num_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_summary_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_route_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_route_rd_cmd);
+  install_element (RESTRICTED_NODE, &show_bgp_evpn_import_rt_cmd);
   install_element (ENABLE_NODE, &show_bgp_evpn_vni_cmd);
   install_element (ENABLE_NODE, &show_bgp_evpn_vni_num_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_summary_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_route_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_route_rd_cmd);
+  install_element (ENABLE_NODE, &show_bgp_evpn_import_rt_cmd);
 
   /* Community-list. */
   community_list_vty ();

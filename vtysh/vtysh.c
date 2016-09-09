@@ -1506,9 +1506,18 @@ DEFUNSH (VTYSH_BGPD,
       || vty->node == BGP_ENCAPV6_NODE
       || vty->node == BGP_IPV6_NODE
       || vty->node == BGP_IPV6M_NODE
-      || vty->node == BGP_EVPN_NODE
-      || vty->node == BGP_EVPN_VNI_NODE)
+      || vty->node == BGP_EVPN_NODE)
     vty->node = BGP_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUN (exit_vni,
+       exit_vni_cmd,
+       "exit-vni",
+       "Exit from VNI mode\n")
+{
+  if (vty->node == BGP_EVPN_VNI_NODE)
+    vty->node = BGP_EVPN_NODE;
   return CMD_SUCCESS;
 }
 
@@ -3069,16 +3078,16 @@ vtysh_init_vty (void)
   install_element (BGP_NODE, &address_family_ipv6_multicast_cmd);
 #endif
   /* EVPN commands */
-  /*install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);*/
+  install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &exit_vni_cmd);
 
   install_element (BGP_VPNV4_NODE, &exit_address_family_cmd);
   install_element (BGP_VPNV6_NODE, &exit_address_family_cmd);
   install_element (BGP_ENCAP_NODE, &exit_address_family_cmd);
   install_element (BGP_ENCAPV6_NODE, &exit_address_family_cmd);
   install_element (BGP_EVPN_NODE, &exit_address_family_cmd);
-  install_element (BGP_EVPN_VNI_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV4_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV4M_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV6_NODE, &exit_address_family_cmd);
