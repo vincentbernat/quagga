@@ -90,6 +90,7 @@ static void pim_free()
      list_free(qpim_static_route_list);
 
   pim_rp_free ();
+  pim_route_map_terminate();
 }
 
 void pim_init()
