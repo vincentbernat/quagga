@@ -849,7 +849,7 @@ bgp_evpn_install_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,
   /*
    * Make sure this RT matches the import RT.
    */
-  if (!bgp_evpn_lookup_import_rt (bgp, attr->extra->ecommunity->val))
+  if ((bgp->as == ri->peer->as) && !bgp_evpn_lookup_import_rt (bgp, attr->extra->ecommunity->val))
     {
       zlog_err ("%u: route RT doesnt match import RT", bgp->vrf_id);
       return -1;
