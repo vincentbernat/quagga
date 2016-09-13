@@ -291,6 +291,7 @@ struct memory_list memory_list_pim[] =
   { MTYPE_PIM_STATIC_ROUTE,      "PIM Static Route"               },
   { MTYPE_PIM_BR,                "PIM Bridge Router info"         },
   { MTYPE_PIM_RP,                "PIM RP info"                    },
+  { MTYPE_PIM_FILTER_NAME,       "PIM Filter Name"                },
   { -1, NULL },
 };
 
