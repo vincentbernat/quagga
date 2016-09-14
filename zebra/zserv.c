@@ -720,11 +720,9 @@ zsend_write_nexthop (struct stream *s, struct nexthop *nexthop)
   stream_putc (s, nexthop->type);
   switch (nexthop->type)
     {
-      /*
-       * If NEXTHOP_TYPE_IPV4 has a ifindex pass it on for
-       * the other side to use.
-       */
     case NEXTHOP_TYPE_IPV4:
+      stream_put_in_addr (s, &nexthop->gate.ipv4);
+      break;
     case NEXTHOP_TYPE_IPV4_IFINDEX:
       stream_put_in_addr (s, &nexthop->gate.ipv4);
       stream_putl (s, nexthop->ifindex);
