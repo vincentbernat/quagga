@@ -6333,32 +6333,6 @@ DEFUN (no_bgp_evpn_advertise_vni,
   return CMD_SUCCESS;
 }
 
-static void
-bgp_config_write_vxlan_info (struct hash_backet *backet, struct vty *vty)
-{
-  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
-  bgp_evpn_config_write_vpn (vty, vpn);
-}
-
-void
-bgp_config_write_advertise_vni (struct vty *vty, struct bgp *bgp, afi_t afi,
-                                safi_t safi, int *write)
-{
-  if (bgp->advertise_vni)
-    {
-      bgp_config_write_family_header (vty, afi, safi, write);
-      vty_out (vty, "  advertise-vni%s", VTY_NEWLINE);
-    }
-  if (bgp->vnihash)
-    {
-      bgp_config_write_family_header (vty, afi, safi, write);
-      hash_iterate (bgp->vnihash,
-                    (void (*) (struct hash_backet *, void *))
-                    bgp_config_write_vxlan_info,
-                    vty);
-    }
-}
-
 DEFUN (exit_vni,
        exit_vni_cmd,
        "exit-vni",

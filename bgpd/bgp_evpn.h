@@ -70,5 +70,6 @@ extern int bgp_evpn_process_rt_config (struct vty *, struct bgp *, struct bgpevp
 extern void bgp_evpn_show_import_rt (struct hash_backet *, struct vty *);
 extern void bgp_evpn_check_uninstall_evpn_route (struct bgp *, afi_t, safi_t,
                                                  struct prefix_evpn *, struct bgp_info *);
-extern void bgp_evpn_config_write_vpn (struct vty *, struct bgpevpn *);
+extern void bgp_config_write_advertise_vni (struct vty *, struct bgp *, afi_t, 
+                                            safi_t, int *);
 #endif /* _QUAGGA_BGP_EVPN_H */

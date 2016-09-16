@@ -78,6 +78,12 @@ struct import_rt_node
   struct bgpevpn *vpn;
 };
 
+struct evpn_config_write
+{
+  int write;
+  struct vty *vty;
+};
+
 extern struct zclient *zclient;
 
 /*
@@ -1316,6 +1322,47 @@ bgp_evpn_display_rt (struct vty *vty, struct ecommunity_val rt,
 }
 
 /*
+ * bgp_evpn_config_write_vpn
+ *
+ * Write bgp evpn config in 'show running-config'
+ */
+static void
+bgp_evpn_config_write_vpn (struct vty *vty, struct bgpevpn *vpn, int *write)
+{
+  char buf1[INET6_ADDRSTRLEN];
+  struct listnode *node, *nnode;
+  struct import_rt_node *irt;
+  afi_t afi = AFI_L2VPN;
+  safi_t safi = SAFI_EVPN;
+
+  if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED) ||
+      !bgp_evpn_check_auto_rd_flag (vpn) ||
+      !bgp_evpn_check_auto_rt_import_flag (vpn) ||
+      !bgp_evpn_check_auto_rt_export_flag (vpn))
+    {
+      bgp_config_write_family_header (vty, afi, safi, write);
+      vty_out (vty, "  vni %d%s", vpn->vni, VTY_NEWLINE);
+      if (!bgp_evpn_check_auto_rd_flag (vpn))
+          vty_out (vty, "   rd %s%s",
+                        prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN),
+                        VTY_NEWLINE);
+      if (!bgp_evpn_check_auto_rt_import_flag (vpn))
+        for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, irt))
+          bgp_evpn_display_rt (vty, irt->import_rt, vpn->vni, FALSE, TRUE, TRUE);
+      if (!bgp_evpn_check_auto_rt_export_flag (vpn))
+        bgp_evpn_display_rt (vty, vpn->export_rt, vpn->vni, FALSE, TRUE, FALSE);
+      vty_out (vty, "  exit-vni%s", VTY_NEWLINE);
+    }
+}
+
+static void
+bgp_config_write_vxlan_info (struct hash_backet *backet, struct evpn_config_write *cfg)
+{
+  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
+  bgp_evpn_config_write_vpn (cfg->vty, vpn, &cfg->write);
+}
+
+/*
  * Public functions.
  */
 
@@ -2029,33 +2076,25 @@ bgp_evpn_check_uninstall_evpn_route (struct bgp *bgp, afi_t afi, safi_t safi,
     bgp_evpn_uninstall_type3_route (bgp, afi, safi, evp, ri);
 }
 
-/*
- * bgp_evpn_config_write_vpn
- *
- * Write bgp evpn config in 'show running-config'
- */
 void
-bgp_evpn_config_write_vpn (struct vty *vty, struct bgpevpn *vpn)
+bgp_config_write_advertise_vni (struct vty *vty, struct bgp *bgp, afi_t afi,
+                                safi_t safi, int *write)
 {
-  char buf1[INET6_ADDRSTRLEN];
-  struct listnode *node, *nnode;
-  struct import_rt_node *irt;
+  struct evpn_config_write cfg;
 
-  if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED) ||
-      !bgp_evpn_check_auto_rd_flag (vpn) ||
-      !bgp_evpn_check_auto_rt_import_flag (vpn) ||
-      !bgp_evpn_check_auto_rt_export_flag (vpn))
+  if (bgp->advertise_vni)
     {
-      vty_out (vty, "  vni %d%s", vpn->vni, VTY_NEWLINE);
-      if (!bgp_evpn_check_auto_rd_flag (vpn))
-          vty_out (vty, "   rd %s%s",
-                        prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN),
-                        VTY_NEWLINE);
-      if (!bgp_evpn_check_auto_rt_import_flag (vpn))
-        for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, irt))
-          bgp_evpn_display_rt (vty, irt->import_rt, vpn->vni, FALSE, TRUE, TRUE);
-      if (!bgp_evpn_check_auto_rt_export_flag (vpn))
-        bgp_evpn_display_rt (vty, vpn->export_rt, vpn->vni, FALSE, TRUE, FALSE);
-      vty_out (vty, "  exit-vni%s", VTY_NEWLINE);
+      bgp_config_write_family_header (vty, afi, safi, write);
+      vty_out (vty, "  advertise-vni%s", VTY_NEWLINE);
     }
+  cfg.write = *write;
+  cfg.vty = vty;
+  if (bgp->vnihash)
+    {
+      hash_iterate (bgp->vnihash,
+                    (void (*) (struct hash_backet *, void *))
+                    bgp_config_write_vxlan_info,
+                    &cfg);
+    }
+  *write = cfg.write;
 }
