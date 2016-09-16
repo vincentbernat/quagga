@@ -16021,6 +16021,10 @@ bgp_vty_init (void)
   install_element (BGP_ENCAPV6_NODE, &neighbor_allowas_in_cmd);
   install_element (BGP_ENCAPV6_NODE, &neighbor_allowas_in_arg_cmd);
   install_element (BGP_ENCAPV6_NODE, &no_neighbor_allowas_in_cmd);
+  install_element (BGP_EVPN_NODE, &neighbor_allowas_in_cmd);
+  install_element (BGP_EVPN_NODE, &neighbor_allowas_in_arg_cmd);
+  install_element (BGP_EVPN_NODE, &no_neighbor_allowas_in_cmd);
+  install_element (BGP_EVPN_NODE, &no_neighbor_allowas_in_val_cmd);
 
   /* address-family commands. */
   install_element (BGP_NODE, &address_family_ipv4_cmd);
