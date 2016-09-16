@@ -86,6 +86,10 @@ struct evpn_config_write
 
 extern struct zclient *zclient;
 
+static int
+bgp_evpn_uninstall_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                              struct prefix_evpn *evp, struct bgp_info *ri);
+
 /*
  * Private functions.
  */
@@ -273,21 +277,6 @@ bgp_evpn_lookup_import_rt (struct bgp *bgp, u_char *import_rt)
   memcpy(tmp.import_rt.val, import_rt, ECOMMUNITY_SIZE);
   irt = hash_lookup(bgp->import_rt_hash, &tmp);
   return(irt);
-}
-
-/*
- * bgp_evpn_free_all_import_rt_iterator
- *
- * Iterate through the hash and free import RTs.
- */
-static void
-bgp_evpn_free_all_import_rt_iterator (struct hash_backet *backet, struct bgp *bgp)
-{
-  struct import_rt_node *irt;
-
-  irt = (struct import_rt_node *) backet->data;
-  bgp_evpn_import_rt_free(bgp, irt);
-  return;
 }
 
 /*
@@ -482,6 +471,83 @@ bgp_evpn_new (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
   return(vpn);
 }
 
+static int
+bgp_evpn_check_config_rt_with_route_rt (struct attr *attr, struct ecommunity_val val)
+{
+  struct attr_extra *attre = attr->extra;
+
+  assert (attre);
+  assert (attre->ecommunity);
+  assert (attre->ecommunity->val);
+  return(!memcmp(attre->ecommunity->val, &val, ECOMMUNITY_SIZE));
+}
+
+/*
+ * bgp_evpn_uninstall_existing_type3_routes
+ *
+ * Uninstall any existing type-3 routes (remote VTEPs) that match the RT.
+ */
+static int
+bgp_evpn_uninstall_existing_type3_routes (struct bgp *bgp, struct bgpevpn *vpn,
+                                          struct ecommunity_val val)
+{
+  afi_t afi;
+  safi_t safi;
+  struct bgp_node *rd_rn, *rn;
+  struct bgp_table *table;
+  struct bgp_info *ri;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+
+  /* TODO: We're walking entire table, this should be optimized later. */
+  /* EVPN routes are a 2-level table. */
+  for (rd_rn = bgp_table_top(bgp->rib[afi][safi]); rd_rn; rd_rn = bgp_route_next (rd_rn))
+    {
+      table = (struct bgp_table *)(rd_rn->info);
+      if (table)
+        {
+          for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
+            {
+              struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+              if (evp->prefix.route_type != BGP_EVPN_IMET_ROUTE)
+                continue;
+
+              for (ri = rn->info; ri; ri = ri->next)
+                if (bgp_evpn_check_config_rt_with_route_rt (ri->attr, val))
+                  bgp_evpn_uninstall_type3_route (bgp, afi, safi, evp, ri);
+            }
+        }
+    }
+
+  return 0;
+}
+
+/*
+ * bgp_evpn_cleanup_config_rt_import
+ *
+ * Cleanup all the user/admin configured import RT.
+ */
+static void
+bgp_evpn_cleanup_config_rt_import (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  struct listnode *node, *nnode;
+  struct import_rt_node *irt;
+
+  for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, irt))
+    {
+      /*
+       * If there are existing routes that match this RT,
+       * delete them from Zebra.
+       */
+      if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+        bgp_evpn_uninstall_existing_type3_routes (bgp, vpn, irt->import_rt);
+      bgp_evpn_import_rt_free (bgp, irt);
+    }
+  return;
+}
+
 /*
  * bgp_evpn_free
  *
@@ -492,6 +558,7 @@ bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn)
 {
   if (vpn)
   {
+    bgp_evpn_cleanup_config_rt_import (bgp, vpn);
     list_free(vpn->import_rtl);
     hash_release(bgp->vnihash, vpn);
     XFREE(MTYPE_BGP_EVPN, vpn);
@@ -740,17 +807,6 @@ bgp_evpn_process_type3_route (struct peer *peer, afi_t afi, safi_t safi,
 }
 
 static int
-bgp_evpn_check_config_rt_with_route_rt (struct attr *attr, struct ecommunity_val val)
-{
-  struct attr_extra *attre = attr->extra;
-
-  assert (attre);
-  assert (attre->ecommunity);
-  assert (attre->ecommunity->val);
-  return(!memcmp(attre->ecommunity->val, &val, ECOMMUNITY_SIZE));
-}
-
-static int
 bgp_evpn_extract_vni_from_rt (struct attr *attr, vni_t *vni)
 {
   struct attr_extra *attre = attr->extra;
@@ -969,64 +1025,6 @@ bgp_evpn_install_existing_type3_routes (struct bgp *bgp, struct bgpevpn *vpn)
 }
 
 /*
- * bgp_evpn_uninstall_existing_type3_routes
- *
- * Uninstall any existing type-3 routes (remote VTEPs) that match the RT.
- */
-static int
-bgp_evpn_uninstall_existing_type3_routes (struct bgp *bgp, struct bgpevpn *vpn,
-                                          struct ecommunity_val val)
-{
-  afi_t afi;
-  safi_t safi;
-  struct bgp_node *rd_rn, *rn;
-  struct bgp_table *table;
-  struct bgp_info *ri;
-
-  afi = AFI_L2VPN;
-  safi = SAFI_EVPN;
-
-  /* TODO: We're walking entire table, this should be optimized later. */
-  /* EVPN routes are a 2-level table. */
-  for (rd_rn = bgp_table_top(bgp->rib[afi][safi]); rd_rn; rd_rn = bgp_route_next (rd_rn))
-    {
-      table = (struct bgp_table *)(rd_rn->info);
-      if (table)
-        {
-          for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
-            {
-              struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
-
-              if (evp->prefix.route_type != BGP_EVPN_IMET_ROUTE)
-                continue;
-
-              for (ri = rn->info; ri; ri = ri->next)
-                if (bgp_evpn_check_config_rt_with_route_rt (ri->attr, val))
-                  bgp_evpn_uninstall_type3_route (bgp, afi, safi, evp, ri);
-            }
-        }
-    }
-
-  return 0;
-}
-
-/*
- * bgp_evpn_import_rt_cleanup
- *
- * Cleanup all import_rt cache.
- */
-static void
-bgp_evpn_import_rt_cleanup (struct bgp *bgp)
-{
-  hash_iterate (bgp->import_rt_hash,
-                (void (*) (struct hash_backet *, void *))
-                bgp_evpn_free_all_import_rt_iterator,
-                bgp);
-  hash_free(bgp->import_rt_hash);
-  bgp->import_rt_hash = NULL;
-}
-
-/*
  * bgp_evpn_update_vni_config_flag
  *
  * If VNI_FLAG_CONFIGURED was set (say admin just configured vni x)
@@ -1044,29 +1042,6 @@ bgp_evpn_update_vni_config_flag (struct bgpevpn *vpn)
         bgp_evpn_check_auto_rt_import_flag (vpn) &&
         bgp_evpn_check_auto_rt_export_flag (vpn))
       UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
-  return;
-}
-
-/*
- * bgp_evpn_cleanup_other_config_rt_import
- *
- * Cleanup all the user/admin configured import RT.
- */
-static void
-bgp_evpn_cleanup_other_config_rt_import (struct bgp *bgp, struct bgpevpn *vpn)
-{
-  struct listnode *node, *nnode;
-  struct import_rt_node *irt;
-
-  for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, irt))
-    {
-      /*
-       * If there are existing routes that match this RT,
-       * delete them from Zebra.
-       */
-      bgp_evpn_uninstall_existing_type3_routes (bgp, vpn, irt->import_rt);
-      bgp_evpn_import_rt_free (bgp, irt);
-    }
   return;
 }
 
@@ -1093,7 +1068,7 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
             {
               if (!bgp_evpn_check_auto_rt_import_flag (vpn))
                 {
-                  bgp_evpn_cleanup_other_config_rt_import (bgp, vpn);
+                  bgp_evpn_cleanup_config_rt_import (bgp, vpn);
                   bgp_evpn_set_auto_rt_import (bgp, vpn);
 
                   /*
@@ -1385,8 +1360,6 @@ bgp_evpn_update_vni (struct bgp *bgp, vni_t vni, int add)
       if (!vpn)
         {
           vpn = bgp_evpn_new(bgp, vni, bgp->router_id);
-          if (vpn)
-            hash_get(bgp->vnihash, vpn, hash_alloc_intern);
           SET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
         }
     }
@@ -1827,11 +1800,12 @@ bgp_evpn_init (struct bgp *bgp)
 void
 bgp_evpn_cleanup (struct bgp *bgp)
 {
-  bgp_evpn_import_rt_cleanup (bgp);
   hash_iterate (bgp->vnihash,
                 (void (*) (struct hash_backet *, void *))
                 bgp_evpn_free_all_vni_iterator,
                 bgp);
+  hash_free(bgp->import_rt_hash);
+  bgp->import_rt_hash = NULL;
   hash_free(bgp->vnihash);
   bgp->vnihash = NULL;
 }
