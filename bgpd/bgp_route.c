@@ -6696,9 +6696,11 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
 	  
       /* Line2 display Next-hop, Neighbor, Router-id */
       /* Display the nexthop */
-      if (p->family == AF_INET &&
+      if ((p->family == AF_INET ||
+           p->family == AF_ETHERNET) &&
           (safi == SAFI_MPLS_VPN ||
            safi == SAFI_ENCAP ||
+           safi == SAFI_EVPN ||
            !BGP_ATTR_NEXTHOP_AFI_IP6(attr)))
 	{
           if (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP)
