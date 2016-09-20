@@ -515,7 +515,7 @@ static struct pim_upstream *pim_upstream_new(struct prefix_sg *sg,
   if (rpf_result == PIM_RPF_FAILURE) {
     if (PIM_DEBUG_PIM_TRACE)
       zlog_debug ("%s: Attempting to create upstream(%s), Unable to RPF for source", __PRETTY_FUNCTION__,
-                  pim_str_sg_dump (&up->sg))
+                  pim_str_sg_dump (&up->sg));
     XFREE(MTYPE_PIM_UPSTREAM, up);
     return NULL;
   }
