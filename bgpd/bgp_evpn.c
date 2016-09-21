@@ -1030,18 +1030,22 @@ bgp_evpn_install_existing_type3_routes (struct bgp *bgp, struct bgpevpn *vpn)
  * If VNI_FLAG_CONFIGURED was set (say admin just configured vni x)
  * and none of the import/export were configured and VNI_FLAG_LOCAL
  * is set (means learnt from zebra) then clear the VNI_FLAG_CONFIGURED.
+ * If the (non-default) RD/RT is configured then set the VNI_FLAG_CONFIGURED
+ * if not already set.
  */
 static void
 bgp_evpn_update_vni_config_flag (struct bgpevpn *vpn)
 {
-  if (!vpn || !CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
+  if (!vpn)
     return;
 
-  if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
-    if (bgp_evpn_check_auto_rd_flag (vpn) &&
-        bgp_evpn_check_auto_rt_import_flag (vpn) &&
-        bgp_evpn_check_auto_rt_export_flag (vpn))
-      UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
+  if (bgp_evpn_check_auto_rd_flag (vpn) &&
+      bgp_evpn_check_auto_rt_import_flag (vpn) &&
+      bgp_evpn_check_auto_rt_export_flag (vpn) &&
+      CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+    UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
+  else 
+    SET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
   return;
 }
 
@@ -1070,12 +1074,6 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
                 {
                   bgp_evpn_cleanup_config_rt_import (bgp, vpn);
                   bgp_evpn_set_auto_rt_import (bgp, vpn);
-
-                  /*
-                   * If there are no configured RD/RT and the VNI config
-                   * flag is set (due to config file read).
-                   */
-                  bgp_evpn_update_vni_config_flag (vpn);
 
                   if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
                     {
@@ -1110,7 +1108,6 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
           if (bgp_evpn_check_auto_rt_import_flag (vpn))
             {
               bgp_evpn_get_auto_rt (bgp, vpn, &import_rt);
-              bgp_evpn_update_vni_config_flag (vpn);
 
               if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
                 {
@@ -1151,7 +1148,6 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
           if (!listnode_head(vpn->import_rtl))
             {
               bgp_evpn_set_auto_rt_import (bgp, vpn);
-              bgp_evpn_update_vni_config_flag (vpn);
 
               if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
                 {
@@ -1185,7 +1181,6 @@ bgp_evpn_update_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
           if (!bgp_evpn_check_auto_rt_export_flag(vpn))
             {
               bgp_evpn_set_auto_rt_export (bgp, vpn);
-              bgp_evpn_update_vni_config_flag (vpn);
 
               if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
                 {
@@ -1202,7 +1197,6 @@ bgp_evpn_update_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
   else
     {
       bgp_evpn_set_auto_rt_export (bgp, vpn);
-      bgp_evpn_update_vni_config_flag (vpn);
       export_rt_changed = TRUE;
     }
 
@@ -1567,7 +1561,7 @@ bgp_evpn_display_vni (struct vty *vty, struct bgpevpn *vpn)
   vty_out (vty, "  Export Route Target:%s", VTY_NEWLINE);
   bgp_evpn_display_rt(vty, vpn->export_rt, 0, FALSE, FALSE, FALSE);
   if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
-    vty_out (vty, "  VNI is CLI configured%s", VTY_NEWLINE);
+    vty_out (vty, "  VNI information is CLI configured%s", VTY_NEWLINE);
 }
 
 /*
@@ -1927,13 +1921,11 @@ bgp_evpn_update_rd (struct bgp *bgp, struct bgpevpn *vpn, struct prefix_rd *rd,
   if (auto_rd)
     {
       bgp_evpn_set_auto_rd (bgp, vpn);
-      bgp_evpn_update_vni_config_flag (vpn);
     }
   else
     {
       memcpy(&vpn->prd, rd, sizeof (struct prefix_rd));
       bgp_evpn_unset_auto_rd_flag(vpn);
-      bgp_evpn_update_vni_config_flag (vpn);
     }
 
   if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
@@ -1943,6 +1935,7 @@ bgp_evpn_update_rd (struct bgp *bgp, struct bgpevpn *vpn, struct prefix_rd *rd,
         zlog_err ("%u: Type3 route creation failure for VNI %u",
                   bgp->vrf_id, vpn->vni);
     }
+  bgp_evpn_update_vni_config_flag (vpn);
 }
 
 /*
@@ -2018,6 +2011,12 @@ bgp_evpn_process_rt_config (struct vty *vty, struct bgp *bgp, struct bgpevpn *vp
       vty_out (vty, "Enter valid option (import/export/both)");
       return CMD_WARNING;
     }
+
+  /*
+   * Update VNI_FLAG_CONFIGURED based on RD/RT configs.
+   */
+  bgp_evpn_update_vni_config_flag (vpn);
+
   return CMD_SUCCESS;
 }
 
