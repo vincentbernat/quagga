@@ -521,7 +521,6 @@ struct cmd_token
 #define AREA_TAG_STR "[area tag]\n"
 #define COMMUNITY_AANN_STR "Community number where AA and NN are <0-65535>\n"
 #define COMMUNITY_VAL_STR  "Community number in AA:NN format (where AA and NN are <0-65535>) or local-AS|no-advertise|no-export|internet or additive\n"
-#define L2ROUTE_STR "Layer-2 (VxLAN) information\n"
 
 #define CONF_BACKUP_EXT ".sav"
 

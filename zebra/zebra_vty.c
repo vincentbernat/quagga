@@ -5722,12 +5722,12 @@ DEFUN (show_vrf,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_l2route_topology,
-       show_l2route_topology_cmd,
-       "show l2route topology",
+DEFUN (show_evpn_vni,
+       show_evpn_vni_cmd,
+       "show evpn vni",
        SHOW_STR
-       L2ROUTE_STR
-       "VxLAN topology\n")
+       "EVPN\n"
+       "VxLAN information\n")
 {
   struct zebra_vrf *zvrf;
 
@@ -5736,12 +5736,12 @@ DEFUN (show_l2route_topology,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_l2route_topology_vni,
-       show_l2route_topology_vni_cmd,
-       "show l2route topology " CMD_VNI_RANGE,
+DEFUN (show_evpn_vni_vni,
+       show_evpn_vni_vni_cmd,
+       "show evpn vni " CMD_VNI_RANGE,
        SHOW_STR
-       L2ROUTE_STR
-       "VxLAN topology\n"
+       "EVPN\n"
+       "VxLAN information\n"
        "VNI number\n")
 {
   struct zebra_vrf *zvrf;
@@ -6272,8 +6272,8 @@ zebra_vty_init (void)
   install_element (ENABLE_NODE, &show_ipv6_mroute_vrf_all_cmd);
 #endif /* HAVE_IPV6 */
 
-  install_element (VIEW_NODE, &show_l2route_topology_cmd);
-  install_element (ENABLE_NODE, &show_l2route_topology_cmd);
-  install_element (VIEW_NODE, &show_l2route_topology_vni_cmd);
-  install_element (ENABLE_NODE, &show_l2route_topology_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_vni_cmd);
+  install_element (ENABLE_NODE, &show_evpn_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_vni_vni_cmd);
+  install_element (ENABLE_NODE, &show_evpn_vni_vni_cmd);
 }
