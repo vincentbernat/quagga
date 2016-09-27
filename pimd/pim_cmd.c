@@ -1777,15 +1777,21 @@ static void pim_show_rpf(struct vty *vty, u_char uj)
   }
 }
 
-static void igmp_show_groups(struct vty *vty)
+static void igmp_show_groups(struct vty *vty, u_char uj)
 {
   struct listnode  *ifnode;
   struct interface *ifp;
   time_t            now;
+  json_object *json = NULL;
+  json_object *json_iface = NULL;
+  json_object *json_row = NULL;
 
   now = pim_time_monotonic_sec();
 
-  vty_out(vty, "Interface Address         Group           Mode Timer    Srcs V Uptime  %s", VTY_NEWLINE);
+  if (uj)
+    json = json_object_new_object();
+  else
+    vty_out(vty, "Interface Address         Group           Mode Timer    Srcs V Uptime  %s", VTY_NEWLINE);
 
   /* scan interfaces */
   for (ALL_LIST_ELEMENTS_RO (vrf_iflist (VRF_DEFAULT), ifnode, ifp)) {
@@ -1814,20 +1820,45 @@ static void igmp_show_groups(struct vty *vty)
 	pim_time_timer_to_hhmmss(hhmmss, sizeof(hhmmss), grp->t_group_timer);
 	pim_time_uptime(uptime, sizeof(uptime), now - grp->group_creation);
 
-	vty_out(vty, "%-9s %-15s %-15s %4s %8s %4d %d %8s%s",
-		ifp->name,
-		ifaddr_str,
-		group_str,
-		grp->group_filtermode_isexcl ? "EXCL" : "INCL",
-		hhmmss,
-		grp->group_source_list ? listcount(grp->group_source_list) : 0,
-		igmp_group_compat_mode(igmp, grp),
-		uptime,
-		VTY_NEWLINE);
+        if (uj) {
+            json_object_object_get_ex(json, ifp->name, &json_iface);
 
+            if (!json_iface) {
+              json_iface = json_object_new_object();
+              json_object_pim_ifp_add(json_iface, ifp);
+              json_object_object_add(json, ifp->name, json_iface);
+            }
+
+            json_row = json_object_new_object();
+            json_object_string_add(json_row, "source", ifaddr_str);
+            json_object_string_add(json_row, "group", group_str);
+            json_object_string_add(json_row, "mode", grp->group_filtermode_isexcl ? "EXCLUDE" : "INCLUDE");
+            json_object_string_add(json_row, "timer", hhmmss);
+            json_object_int_add(json_row, "sourcesCount", grp->group_source_list ? listcount(grp->group_source_list) : 0);
+            json_object_int_add(json_row, "version", igmp_group_compat_mode(igmp, grp));
+            json_object_string_add(json_row, "uptime", uptime);
+            json_object_object_add(json_iface, group_str, json_row);
+
+        } else {
+          vty_out(vty, "%-9s %-15s %-15s %4s %8s %4d %d %8s%s",
+                  ifp->name,
+                  ifaddr_str,
+                  group_str,
+                  grp->group_filtermode_isexcl ? "EXCL" : "INCL",
+                  hhmmss,
+                  grp->group_source_list ? listcount(grp->group_source_list) : 0,
+                  igmp_group_compat_mode(igmp, grp),
+                  uptime,
+                  VTY_NEWLINE);
+        }
       } /* scan igmp groups */
     } /* scan igmp sockets */
   } /* scan interfaces */
+
+  if (uj) {
+    vty_out (vty, "%s%s", json_object_to_json_string(json), VTY_NEWLINE);
+    json_object_free(json);
+  }
 }
 
 static void igmp_show_group_retransmission(struct vty *vty)
@@ -2262,13 +2293,15 @@ DEFUN (show_ip_igmp_join,
 
 DEFUN (show_ip_igmp_groups,
        show_ip_igmp_groups_cmd,
-       "show ip igmp groups",
+       "show ip igmp groups {json}",
        SHOW_STR
        IP_STR
        IGMP_STR
-       IGMP_GROUP_STR)
+       IGMP_GROUP_STR
+       "JavaScript Object Notation\n")
 {
-  igmp_show_groups(vty);
+  u_char uj = use_json(argc, argv);
+  igmp_show_groups(vty, uj);
 
   return CMD_SUCCESS;
 }
