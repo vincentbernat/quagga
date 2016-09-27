@@ -1552,6 +1552,9 @@ int
 bgp_config_write_maxpaths (struct vty *vty, struct bgp *bgp, afi_t afi,
 			   safi_t safi, int *write)
 {
+  if (afi == AFI_L2VPN && safi == SAFI_EVPN)
+    return 0;
+
   if (bgp->maxpaths[afi][safi].maxpaths_ebgp != MULTIPATH_NUM)
     {
       bgp_config_write_family_header (vty, afi, safi, write);

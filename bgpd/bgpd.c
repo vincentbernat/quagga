@@ -2928,13 +2928,17 @@ bgp_create (as_t *as, const char *name, enum bgp_instance_type inst_type)
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
+        u_int16_t maxpaths;
+
 	bgp->route[afi][safi] = bgp_table_init (afi, safi);
 	bgp->aggregate[afi][safi] = bgp_table_init (afi, safi);
 	bgp->rib[afi][safi] = bgp_table_init (afi, safi);
 
-        /* Enable maximum-paths */
-        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_EBGP, MULTIPATH_NUM, 0);
-        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_IBGP, MULTIPATH_NUM, 0);
+        /* Enable maximum-paths  - based on (AFI,SAFI) */
+        maxpaths = (afi == AFI_L2VPN && safi == SAFI_EVPN) ?
+                   0 : MULTIPATH_NUM;
+        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_EBGP, maxpaths, 0);
+        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_IBGP, maxpaths, 0);
       }
 
   bgp->v_update_delay = BGP_UPDATE_DELAY_DEF;
