@@ -1,6 +1,9 @@
 quagga (0.99.24+cl3eau4) RELEASED; urgency=medium
 
-  * PLACEHOLDER FOR NEXT EA RELEASE INFO 
+  * New Enabled: PIM-SM Unnumbered functionality
+  * New Enabled: PIM-SM RP Prefix-lists
+  * New Enabled: PIM-SM CLI improvements
+  * New Enabled: EVPN functionality
 
  -- dev-support <dev-support@cumulusnetworks.com>  Mon, 19 Sep 2016 16:17:52 -0700
 
