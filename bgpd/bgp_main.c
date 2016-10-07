@@ -27,6 +27,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "thread.h"
 #include <lib/version.h>
 #include "memory.h"
+#include "memory_vty.h"
 #include "prefix.h"
 #include "log.h"
 #include "privs.h"
@@ -53,6 +54,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_filter.h"
 #include "bgpd/bgp_zebra.h"
 
+#ifdef ENABLE_BGP_VNC
+#include "bgpd/rfapi/rfapi_backend.h"
+#endif
+
 /* bgpd options, we use GNU getopt library. */
 static const struct option longopts[] = 
 {
@@ -68,6 +73,7 @@ static const struct option longopts[] =
   { "no_kernel",   no_argument,       NULL, 'n'},
   { "user",        required_argument, NULL, 'u'},
   { "group",       required_argument, NULL, 'g'},
+  { "skip_runas",  no_argument,       NULL, 'S'},
   { "version",     no_argument,       NULL, 'v'},
   { "dryrun",      no_argument,       NULL, 'C'},
   { "help",        no_argument,       NULL, 'h'},
@@ -163,6 +169,7 @@ redistribution between different routing protocols.\n\n\
 -n, --no_kernel    Do not install route to kernel.\n\
 -u, --user         User to run as\n\
 -g, --group        Group to run as\n\
+-S, --skip_runas   Skip user and group run as\n\
 -v, --version      Print program version\n\
 -C, --dryrun       Check configuration for validity and exit\n\
 -h, --help         Display this help and exit\n\
@@ -200,9 +207,12 @@ sigint (void)
   zlog_notice ("Terminating on signal");
 
   if (! retain_mode)
-    bgp_terminate ();
+    {
+      bgp_terminate ();
+      if (bgpd_privs.user)      /* NULL if skip_runas flag set */
+        zprivs_terminate (&bgpd_privs);
+    }
 
-  zprivs_terminate (&bgpd_privs);
   bgp_exit (0);
 
   exit (0);
@@ -227,7 +237,6 @@ bgp_exit (int status)
 {
   struct bgp *bgp;
   struct listnode *node, *nnode;
-  extern struct zclient *zclient;
 
   /* it only makes sense for this to be called on a clean exit */
   assert (status == 0);
@@ -277,8 +286,10 @@ bgp_exit (int status)
   bgp_vrf_terminate ();
   cmd_terminate ();
   vty_terminate ();
-  if (zclient)
-    zclient_free (zclient);
+#if ENABLE_BGP_VNC
+  vnc_zebra_destroy();
+#endif
+  bgp_zebra_destroy();
   if (bgp_nexthop_buf)
     stream_free (bgp_nexthop_buf);
   if (bgp_ifindices_buf)
@@ -291,6 +302,8 @@ bgp_exit (int status)
   if (zlog_default)
     closezlog (zlog_default);
 
+  if (bgp_debug_count())
+    log_memstats_stderr ("bgpd");
   exit (status);
 }
 
@@ -409,6 +422,7 @@ main (int argc, char **argv)
   char *progname;
   struct thread thread;
   int tmp_port;
+  int skip_runas = 0;
 
   /* Set umask before anything for security */
   umask (0027);
@@ -416,20 +430,13 @@ main (int argc, char **argv)
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_BGP, 0,
-			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
-  zprivs_init (&bgpd_privs);
-#if defined(HAVE_CUMULUS)
-  zlog_set_level (NULL, ZLOG_DEST_SYSLOG, zlog_default->default_lvl);
-#endif
-
   /* BGP master init. */
   bgp_master_init ();
 
   /* Command line argument treatment. */
   while (1) 
     {
-      opt = getopt_long (argc, argv, "df:i:z:hp:l:A:P:rnu:g:vC", longopts, 0);
+      opt = getopt_long (argc, argv, "df:i:z:hp:l:A:P:rnu:g:vCS", longopts, 0);
     
       if (opt == EOF)
 	break;
@@ -487,6 +494,9 @@ main (int argc, char **argv)
 	case 'g':
 	  bgpd_privs.group = optarg;
 	  break;
+	case 'S':   /* skip run as = override bgpd_privs */
+          skip_runas = 1;
+	  break;
 	case 'v':
 	  print_version (progname);
 	  exit (0);
@@ -503,6 +513,16 @@ main (int argc, char **argv)
 	}
     }
 
+  zlog_default = openzlog (progname, ZLOG_BGP, 0,
+			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
+
+  if (skip_runas)
+    memset (&bgpd_privs, 0, sizeof (bgpd_privs));
+  zprivs_init (&bgpd_privs);
+
+#if defined(HAVE_CUMULUS)
+  zlog_set_level (NULL, ZLOG_DEST_SYSLOG, zlog_default->default_lvl);
+#endif
 
   /* Initializations. */
   srandom (time (NULL));

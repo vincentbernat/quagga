@@ -58,6 +58,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_vty.h"
 #include "bgpd/bgp_debug.h"
 
+#if ENABLE_BGP_VNC
+# include "bgpd/rfapi/bgp_rfapi_cfg.h"
+#endif
 
 /* Memo of route-map commands.
 
@@ -2215,8 +2218,14 @@ route_set_ipv6_nexthop_prefer_global (void *rule, struct prefix *prefix,
           /* Set next hop preference to global */
           bgp_info->attr->extra->mp_nexthop_prefer_global = TRUE;
           SET_FLAG(bgp_info->attr->rmap_change_flags,
-                   BATTR_RMAP_IPV6_GLOBAL_NHOP_CHANGED);
+                   BATTR_RMAP_IPV6_PREFER_GLOBAL_CHANGED);
 	}
+      else
+        {
+          bgp_info->attr->extra->mp_nexthop_prefer_global = FALSE;
+          SET_FLAG(bgp_info->attr->rmap_change_flags,
+                   BATTR_RMAP_IPV6_PREFER_GLOBAL_CHANGED);
+        }
     }
  return RMAP_OKAY;
 }
@@ -2919,6 +2928,10 @@ bgp_route_map_process_update_cb (char *rmap_name)
   for (ALL_LIST_ELEMENTS (bm->bgp, node, nnode, bgp))
     bgp_route_map_process_update(bgp, rmap_name, 1);
 
+#if ENABLE_BGP_VNC
+  zlog_debug("%s: calling vnc_routemap_update", __func__);
+  vnc_routemap_update(bgp, __func__);
+#endif
   return 0;
 }
 
@@ -2955,6 +2968,10 @@ bgp_route_map_mark_update (const char *rmap_name)
         {
           for (ALL_LIST_ELEMENTS (bm->bgp, node, nnode, bgp))
             bgp_route_map_process_update(bgp, rmap_name, 0);
+ #if ENABLE_BGP_VNC
+          zlog_debug("%s: calling vnc_routemap_update", __func__);
+          vnc_routemap_update(bgp, __func__);
+#endif
         }
     }
 }
@@ -2992,8 +3009,8 @@ DEFUN (match_peer,
        "match peer (A.B.C.D|X:X::X:X)",
        MATCH_STR
        "Match peer address\n"
-       "IPv6 address of peer\n"
-       "IP address of peer\n")
+       "IP address of peer\n"
+       "IPv6 address of peer\n")
 {
   return bgp_route_match_add (vty, vty->index, "peer", argv[0],
 			      RMAP_EVENT_MATCH_ADDED);
@@ -3031,8 +3048,8 @@ ALIAS (no_match_peer,
        NO_STR
        MATCH_STR
        "Match peer address\n"
-       "IPv6 address of peer\n"
-       "IP address of peer\n")
+       "IP address of peer\n"
+       "IPv6 address of peer\n")
 
 ALIAS (no_match_peer,
        no_match_peer_local_cmd,

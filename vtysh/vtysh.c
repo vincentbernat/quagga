@@ -41,7 +41,10 @@
 #include "vtysh/vtysh.h"
 #include "log.h"
 #include "bgpd/bgp_vty.h"
+#include "ns.h"
 #include "vrf.h"
+
+DEFINE_MTYPE_STATIC(MVTYSH, VTYSH_CMD, "Vtysh cmd copy")
 
 /* Struct VTY. */
 struct vty *vty;
@@ -66,6 +69,7 @@ struct vtysh_client vtysh_client[] =
   { .fd = -1, .name = "ripngd", .flag = VTYSH_RIPNGD, .path = RIPNG_VTYSH_PATH, .next = NULL},
   { .fd = -1, .name = "ospfd", .flag = VTYSH_OSPFD, .path = OSPF_VTYSH_PATH, .next = NULL},
   { .fd = -1, .name = "ospf6d", .flag = VTYSH_OSPF6D, .path = OSPF6_VTYSH_PATH, .next = NULL},
+  { .fd = -1, .name = "ldpd", .flag = VTYSH_LDPD, .path = LDP_VTYSH_PATH, .next = NULL},
   { .fd = -1, .name = "bgpd", .flag = VTYSH_BGPD, .path = BGP_VTYSH_PATH, .next = NULL},
   { .fd = -1, .name = "isisd", .flag = VTYSH_ISISD, .path = ISIS_VTYSH_PATH, .next = NULL},
   { .fd = -1, .name = "pimd", .flag = VTYSH_PIMD, .path = PIM_VTYSH_PATH, .next = NULL},
@@ -366,6 +370,12 @@ vtysh_execute_func (const char *line, int pager)
 	{
 	  vtysh_execute("exit-address-family");
 	}
+      else if ((saved_node == BGP_VNC_DEFAULTS_NODE
+           || saved_node == BGP_VNC_NVE_GROUP_NODE
+           || saved_node == BGP_VNC_L2_GROUP_NODE) && (tried == 1))
+	{
+	  vtysh_execute("exit-vnc");
+	}
       else if ((saved_node == KEYCHAIN_KEY_NODE) && (tried == 1))
 	{
 	  vtysh_execute("exit");
@@ -555,7 +565,7 @@ vtysh_mark_file (const char *filename)
 
   vtysh_execute_no_pager ("enable");
   vtysh_execute_no_pager ("configure terminal");
-  vty_buf_copy = XCALLOC (MTYPE_VTY, VTY_BUFSIZ);
+  vty_buf_copy = XCALLOC (MTYPE_VTYSH_CMD, VTY_BUFSIZ);
 
   while (fgets (vty->buf, VTY_BUFSIZ, confp))
     {
@@ -636,25 +646,25 @@ vtysh_mark_file (const char *filename)
 	    fprintf (stderr,"line %d: Warning...: %s\n", lineno, vty->buf);
 	  fclose(confp);
 	  vty_close(vty);
-          XFREE(MTYPE_VTY, vty_buf_copy);
+          XFREE(MTYPE_VTYSH_CMD, vty_buf_copy);
 	  return CMD_WARNING;
 	case CMD_ERR_AMBIGUOUS:
 	  fprintf (stderr,"line %d: %% Ambiguous command: %s\n", lineno, vty->buf);
 	  fclose(confp);
 	  vty_close(vty);
-          XFREE(MTYPE_VTY, vty_buf_copy);
+          XFREE(MTYPE_VTYSH_CMD, vty_buf_copy);
 	  return CMD_ERR_AMBIGUOUS;
 	case CMD_ERR_NO_MATCH:
 	  fprintf (stderr,"line %d: %% Unknown command: %s\n", lineno, vty->buf);
 	  fclose(confp);
 	  vty_close(vty);
-          XFREE(MTYPE_VTY, vty_buf_copy);
+          XFREE(MTYPE_VTYSH_CMD, vty_buf_copy);
 	  return CMD_ERR_NO_MATCH;
 	case CMD_ERR_INCOMPLETE:
 	  fprintf (stderr,"line %d: %% Command incomplete: %s\n", lineno, vty->buf);
 	  fclose(confp);
 	  vty_close(vty);
-          XFREE(MTYPE_VTY, vty_buf_copy);
+          XFREE(MTYPE_VTYSH_CMD, vty_buf_copy);
 	  return CMD_ERR_INCOMPLETE;
 	case CMD_SUCCESS:
 	  fprintf(stdout, "%s", vty->buf);
@@ -686,7 +696,7 @@ vtysh_mark_file (const char *filename)
   /* This is the end */
   fprintf(stdout, "end\n");
   vty_close(vty);
-  XFREE(MTYPE_VTY, vty_buf_copy);
+  XFREE(MTYPE_VTYSH_CMD, vty_buf_copy);
 
   if (confp != stdin)
     fclose(confp);
@@ -880,7 +890,10 @@ command_generator (const char *text, int state)
       if (rl_end && isspace ((int) rl_line_buffer[rl_end - 1]))
 	vector_set (vline, NULL);
 
+      if (matched)
+        XFREE (MTYPE_TMP, matched);
       matched = cmd_complete_command (vline, vty, &complete_status);
+      cmd_free_strvec (vline);
     }
 
   if (matched && matched[index])
@@ -930,6 +943,12 @@ static struct cmd_node interface_node =
 {
   INTERFACE_NODE,
   "%s(config-if)# ",
+};
+
+static struct cmd_node ns_node =
+{
+  NS_NODE,
+  "%s(config-logical-router)# ",
 };
 
 static struct cmd_node vrf_node =
@@ -1010,6 +1029,24 @@ static struct cmd_node bgp_ipv6m_node =
   "%s(config-router-af)# "
 };
 
+static struct cmd_node bgp_vnc_defaults_node =
+{
+  BGP_VNC_DEFAULTS_NODE,
+  "%s(config-router-vnc-defaults)# "
+};
+
+static struct cmd_node bgp_vnc_nve_group_node =
+{
+  BGP_VNC_NVE_GROUP_NODE,
+  "%s(config-router-vnc-nve-group)# "
+};
+
+static struct cmd_node bgp_vnc_l2_group_node =
+{
+  BGP_VNC_L2_GROUP_NODE,
+  "%s(config-router-vnc-l2-group)# "
+};
+
 static struct cmd_node ospf_node =
 {
   OSPF_NODE,
@@ -1028,6 +1065,48 @@ static struct cmd_node ospf6_node =
   "%s(config-ospf6)# "
 };
 
+static struct cmd_node ldp_node =
+{
+  LDP_NODE,
+  "%s(config-ldp)# "
+};
+
+static struct cmd_node ldp_ipv4_node =
+{
+  LDP_IPV4_NODE,
+  "%s(config-ldp-af)# "
+};
+
+static struct cmd_node ldp_ipv6_node =
+{
+  LDP_IPV6_NODE,
+  "%s(config-ldp-af)# "
+};
+
+static struct cmd_node ldp_ipv4_iface_node =
+{
+  LDP_IPV4_IFACE_NODE,
+  "%s(config-ldp-af-if)# "
+};
+
+static struct cmd_node ldp_ipv6_iface_node =
+{
+  LDP_IPV6_IFACE_NODE,
+  "%s(config-ldp-af-if)# "
+};
+
+static struct cmd_node ldp_l2vpn_node =
+{
+  LDP_L2VPN_NODE,
+  "%s(config-l2vpn)# "
+};
+
+static struct cmd_node ldp_pseudowire_node =
+{
+  LDP_PSEUDOWIRE_NODE,
+  "%s(config-l2vpn-pw)# "
+};
+
 static struct cmd_node keychain_node =
 {
   KEYCHAIN_NODE,
@@ -1038,6 +1117,12 @@ static struct cmd_node keychain_key_node =
 {
   KEYCHAIN_KEY_NODE,
   "%s(config-keychain-key)# "
+};
+
+struct cmd_node link_params_node =
+{
+  LINK_PARAMS_NODE,
+  "%s(config-link-params)# ",
 };
 
 /* Defined in lib/vty.c */
@@ -1237,48 +1322,83 @@ DEFUNSH (VTYSH_BGPD,
 }
 
 DEFUNSH (VTYSH_BGPD,
-       address_family_evpn,
-       address_family_evpn_cmd,
-       "address-family evpn",
-       "Enter Address Family command mode\n"
-	   "Address family\n"
-	   "Address Family Modifier\n")
+	 address_family_evpn,
+	 address_family_evpn_cmd,
+	 "address-family evpn",
+	 "Enter Address Family command mode\n"
+	 "Address family\n"
+	 "Address Family Modifier\n")
 {
   vty->node = BGP_EVPN_NODE;
   return CMD_SUCCESS;
 }
 
 DEFUNSH (VTYSH_BGPD,
-       bgp_evpn_vni,
-       bgp_evpn_vni_cmd,
-       "vni " CMD_VNI_RANGE,
-       "VXLAN Network Identifier\n"
-       "VNI number\n")
+         vnc_defaults,
+         vnc_defaults_cmd,
+         "vnc defaults",
+         "VNC/RFP related configuration\n"
+         "Configure default NVE group\n")
+{
+  vty->node = BGP_VNC_DEFAULTS_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
+	 bgp_evpn_vni,
+	 bgp_evpn_vni_cmd,
+	 "vni " CMD_VNI_RANGE,
+	 "VXLAN Network Identifier\n"
+	 "VNI number\n")
 {
   vty->node = BGP_EVPN_VNI_NODE;
   return CMD_SUCCESS;
 }
 
 DEFUNSH (VTYSH_BGPD,
-       bgp_evpn_vni_rd,
-       bgp_evpn_vni_rd_cmd,
-       "rd ASN:nn_or_IP-address:nn",
-       "Route Distinguisher\n"
-       "ASN:XX or A.B.C.D:XX\n")
+         vnc_nve_group,
+         vnc_nve_group_cmd,
+         "vnc nve-group NAME",
+         "VNC/RFP related configuration\n"
+         "Configure a NVE group\n"
+         "Group name\n")
+{
+  vty->node = BGP_VNC_NVE_GROUP_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
+	 bgp_evpn_vni_rd,
+	 bgp_evpn_vni_rd_cmd,
+	 "rd ASN:nn_or_IP-address:nn",
+	 "Route Distinguisher\n"
+	 "ASN:XX or A.B.C.D:XX\n")
 {
   vty->node = BGP_EVPN_VNI_NODE;
   return CMD_SUCCESS;
 }
 
 DEFUNSH (VTYSH_BGPD,
-       bgp_evpn_vni_rt,
-       bgp_evpn_vni_rt_cmd,
-       "route-target WORD ASN:nn_or_IP-address:nn",
-       "Route Target\n"
-       "import/export/both\n"
-       "ASN:XX or A.B.C.D:XX\n")
+	 bgp_evpn_vni_rt,
+	 bgp_evpn_vni_rt_cmd,
+	 "route-target WORD ASN:nn_or_IP-address:nn",
+	 "Route Target\n"
+	 "import/export/both\n"
+	 "ASN:XX or A.B.C.D:XX\n")
 {
   vty->node = BGP_EVPN_VNI_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
+         vnc_l2_group,
+         vnc_l2_group_cmd,
+         "vnc l2-group NAME",
+         "VNC/RFP related configuration\n"
+         "Configure a L2 group\n"
+         "Group name\n")
+{
+  vty->node = BGP_VNC_L2_GROUP_NODE;
   return CMD_SUCCESS;
 }
 
@@ -1354,6 +1474,86 @@ DEFUNSH (VTYSH_OSPF6D,
 	 OSPF6_STR)
 {
   vty->node = OSPF6_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_LDPD,
+	 ldp_mpls_ldp,
+	 ldp_mpls_ldp_cmd,
+	 "mpls ldp",
+	 "Global MPLS configuration subcommands\n"
+	 "Label Distribution Protocol\n")
+{
+  vty->node = LDP_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_LDPD,
+	 ldp_address_family_ipv4,
+	 ldp_address_family_ipv4_cmd,
+	 "address-family ipv4",
+	 "Configure Address Family and its parameters\n"
+	 "IPv4\n")
+{
+  vty->node = LDP_IPV4_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_LDPD,
+	 ldp_address_family_ipv6,
+	 ldp_address_family_ipv6_cmd,
+	 "address-family ipv6",
+	 "Configure Address Family and its parameters\n"
+	 "IPv6\n")
+{
+  vty->node = LDP_IPV6_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_LDPD,
+	 ldp_interface_ifname,
+	 ldp_interface_ifname_cmd,
+	 "interface IFNAME",
+	 "Enable LDP on an interface and enter interface submode\n"
+	 "Interface's name\n")
+{
+  switch (vty->node)
+    {
+      case LDP_IPV4_NODE:
+	vty->node = LDP_IPV4_IFACE_NODE;
+	break;
+      case LDP_IPV6_NODE:
+	vty->node = LDP_IPV6_IFACE_NODE;
+	break;
+      default:
+	break;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_LDPD,
+	 ldp_l2vpn_word_type_vpls,
+	 ldp_l2vpn_word_type_vpls_cmd,
+	 "l2vpn WORD type vpls",
+	 "Configure l2vpn commands\n"
+	 "L2VPN name\n"
+	 "L2VPN type\n"
+	 "Virtual Private LAN Service\n")
+{
+  vty->node = LDP_L2VPN_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_LDPD,
+	 ldp_member_pseudowire_ifname,
+	 ldp_member_pseudowire_ifname_cmd,
+	 "member pseudowire IFNAME",
+	 "L2VPN member configuration\n"
+	 "Pseudowire interface\n"
+	 "Interface's name\n")
+{
+  vty->node = LDP_PSEUDOWIRE_NODE;
   return CMD_SUCCESS;
 }
 
@@ -1439,6 +1639,7 @@ vtysh_exit (struct vty *vty)
       vty->node = ENABLE_NODE;
       break;
     case INTERFACE_NODE:
+    case NS_NODE:
     case VRF_NODE:
     case ZEBRA_NODE:
     case BGP_NODE:
@@ -1446,6 +1647,8 @@ vtysh_exit (struct vty *vty)
     case RIPNG_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case LDP_NODE:
+    case LDP_L2VPN_NODE:
     case ISIS_NODE:
     case MASC_NODE:
     case RMAP_NODE:
@@ -1468,9 +1671,29 @@ vtysh_exit (struct vty *vty)
       break;
     case BGP_EVPN_VNI_NODE:
       vty->node = BGP_EVPN_NODE;
+    case BGP_VNC_DEFAULTS_NODE:
+    case BGP_VNC_NVE_GROUP_NODE:
+    case BGP_VNC_L2_GROUP_NODE:
+      vty->node = BGP_NODE;
+      break;
+    case LDP_IPV4_NODE:
+    case LDP_IPV6_NODE:
+      vty->node = LDP_NODE;
+      break;
+    case LDP_IPV4_IFACE_NODE:
+      vty->node = LDP_IPV4_NODE;
+      break;
+    case LDP_IPV6_IFACE_NODE:
+      vty->node = LDP_IPV6_NODE;
+      break;
+    case LDP_PSEUDOWIRE_NODE:
+      vty->node = LDP_L2VPN_NODE;
       break;
     case KEYCHAIN_KEY_NODE:
       vty->node = KEYCHAIN_NODE;
+      break;
+    case LINK_PARAMS_NODE:
+      vty->node = INTERFACE_NODE;
       break;
     default:
       break;
@@ -1518,6 +1741,19 @@ DEFUN (exit_vni,
 {
   if (vty->node == BGP_EVPN_VNI_NODE)
     vty->node = BGP_EVPN_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
+	 exit_vnc_config,
+	 exit_vnc_config_cmd,
+	 "exit-vnc",
+	 "Exit from VNC configuration mode\n")
+{
+  if (vty->node == BGP_VNC_DEFAULTS_NODE
+      || vty->node == BGP_VNC_NVE_GROUP_NODE
+      || vty->node == BGP_VNC_L2_GROUP_NODE)
+    vty->node = BGP_NODE;
   return CMD_SUCCESS;
 }
 
@@ -1619,6 +1855,20 @@ ALIAS (vtysh_exit_ospf6d,
        "quit",
        "Exit current mode and down to previous mode\n")
 
+DEFUNSH (VTYSH_LDPD,
+	 vtysh_exit_ldpd,
+	 vtysh_exit_ldpd_cmd,
+	 "exit",
+	 "Exit current mode and down to previous mode\n")
+{
+  return vtysh_exit (vty);
+}
+
+ALIAS (vtysh_exit_ldpd,
+       vtysh_quit_ldpd_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+
 DEFUNSH (VTYSH_ISISD,
 	 vtysh_exit_isisd,
 	 vtysh_exit_isisd_cmd,
@@ -1667,7 +1917,7 @@ ALIAS_SH (VTYSH_ZEBRA,
          VRF_CMD_HELP_STR)
 
 /* TODO Implement "no interface command in isisd. */
-DEFSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D,
+DEFSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_LDPD,
        vtysh_no_interface_cmd,
        "no interface IFNAME",
        NO_STR
@@ -1681,6 +1931,19 @@ DEFSH (VTYSH_ZEBRA,
        "Delete a pseudo interface's configuration\n"
        "Interface's name\n"
        VRF_CMD_HELP_STR)
+
+DEFUNSH (VTYSH_NS,
+         vtysh_ns,
+         vtysh_ns_cmd,
+         "logical-router <1-65535 ns NAME",
+	 "Enable a logical-router\n"
+         "Specify the logical-router indentifier\n"
+         "The Name Space\n"
+         "The file name in " NS_RUN_DIR ", or a full pathname\n")
+{
+  vty->node = NS_NODE;
+  return CMD_SUCCESS;
+}
 
 DEFUNSH (VTYSH_VRF,
 	 vtysh_vrf,
@@ -1700,6 +1963,20 @@ DEFSH (VTYSH_ZEBRA,
        "Delete a pseudo vrf's configuration\n"
        "VRF's name\n")
 
+DEFUNSH (VTYSH_NS,
+         vtysh_exit_ns,
+         vtysh_exit_ns_cmd,
+         "exit",
+         "Exit current mode and down to previous mode\n")
+{
+  return vtysh_exit (vty);
+}
+
+ALIAS (vtysh_exit_ns,
+       vtysh_quit_ns_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+
 DEFUNSH (VTYSH_VRF,
 	 vtysh_exit_vrf,
 	 vtysh_exit_vrf_cmd,
@@ -1716,7 +1993,7 @@ ALIAS (vtysh_exit_vrf,
 
 /* TODO Implement interface description commands in ripngd, ospf6d
  * and isisd. */
-DEFSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_OSPFD,
+DEFSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_OSPFD|VTYSH_LDPD,
        interface_desc_cmd,
        "description .LINE",
        "Interface specific description\n"
@@ -1813,6 +2090,17 @@ DEFUN (vtysh_show_work_queues_daemon,
   ret = vtysh_client_execute(&vtysh_client[i], "show work-queues\n", stdout);
 
   return ret;
+}
+
+DEFUNSH (VTYSH_ZEBRA,
+         vtysh_link_params,
+         vtysh_link_params_cmd,
+         "link-params",
+         LINK_PARAMS_STR
+         )
+{
+  vty->node = LINK_PARAMS_NODE;
+  return CMD_SUCCESS;
 }
 
 /* Memory */
@@ -2231,7 +2519,7 @@ DEFUN (vtysh_write_terminal,
 
 DEFUN (vtysh_write_terminal_daemon,
        vtysh_write_terminal_daemon_cmd,
-       "write terminal (zebra|ripd|ripngd|ospfd|ospf6d|bgpd|isisd|pimd)",
+       "write terminal (zebra|ripd|ripngd|ospfd|ospf6d|ldpd|bgpd|isisd|pimd)",
        "Write running configuration to memory, network, or terminal\n"
        "Write to terminal\n"
        "For the zebra daemon\n"
@@ -2239,6 +2527,7 @@ DEFUN (vtysh_write_terminal_daemon,
        "For the ripng daemon\n"
        "For the ospf daemon\n"
        "For the ospfv6 daemon\n"
+       "For the ldp daemon\n"
        "For the bgp daemon\n"
        "For the isis daemon\n"
        "For the pim daemon\n")
@@ -2428,7 +2717,7 @@ ALIAS (vtysh_write_terminal,
 
 ALIAS (vtysh_write_terminal,
        vtysh_show_running_config_daemon_cmd,
-       "show running-config (zebra|ripd|ripngd|ospfd|ospf6d|bgpd|isisd|pimd)",
+       "show running-config (zebra|ripd|ripngd|ospfd|ospf6d|ldpd|bgpd|isisd|pimd)",
        SHOW_STR
        "Current operating configuration\n"
        "For the zebra daemon\n"
@@ -2436,6 +2725,7 @@ ALIAS (vtysh_write_terminal,
        "For the ripng daemon\n"
        "For the ospf daemon\n"
        "For the ospfv6 daemon\n"
+       "For the ldp daemon\n"
        "For the bgp daemon\n"
        "For the isis daemon\n"
        "For the pim daemon\n")
@@ -2912,6 +3202,8 @@ vtysh_init_vty (void)
   install_node (&bgp_node, NULL);
   install_node (&rip_node, NULL);
   install_node (&interface_node, NULL);
+  install_node (&link_params_node, NULL);
+  install_node (&ns_node, NULL);
   install_node (&vrf_node, NULL);
   install_node (&rmap_node, NULL);
   install_node (&zebra_node, NULL);
@@ -2927,11 +3219,23 @@ vtysh_init_vty (void)
   install_node (&bgp_ipv6_node, NULL);
   install_node (&bgp_ipv6m_node, NULL);
 /* #endif */
+/*#if ENABLE_BGP_VNC                */
+  install_node (&bgp_vnc_defaults_node, NULL);
+  install_node (&bgp_vnc_nve_group_node, NULL);
+  install_node (&bgp_vnc_l2_group_node, NULL);
+/* #endif */
   install_node (&ospf_node, NULL);
 /* #ifdef HAVE_IPV6 */
   install_node (&ripng_node, NULL);
   install_node (&ospf6_node, NULL);
 /* #endif */
+  install_node (&ldp_node, NULL);
+  install_node (&ldp_ipv4_node, NULL);
+  install_node (&ldp_ipv6_node, NULL);
+  install_node (&ldp_ipv4_iface_node, NULL);
+  install_node (&ldp_ipv6_iface_node, NULL);
+  install_node (&ldp_l2vpn_node, NULL);
+  install_node (&ldp_pseudowire_node, NULL);
   install_node (&keychain_node, NULL);
   install_node (&keychain_key_node, NULL);
   install_node (&isis_node, NULL);
@@ -2943,6 +3247,8 @@ vtysh_init_vty (void)
   vtysh_install_default (BGP_NODE);
   vtysh_install_default (RIP_NODE);
   vtysh_install_default (INTERFACE_NODE);
+  vtysh_install_default (LINK_PARAMS_NODE);
+  vtysh_install_default (NS_NODE);
   vtysh_install_default (VRF_NODE);
   vtysh_install_default (RMAP_NODE);
   vtysh_install_default (ZEBRA_NODE);
@@ -2956,9 +3262,21 @@ vtysh_init_vty (void)
   vtysh_install_default (BGP_IPV6M_NODE);
   vtysh_install_default (BGP_EVPN_NODE);
   vtysh_install_default (BGP_EVPN_VNI_NODE);
+  /* #if ENABLE_BGP_VNC */
+  vtysh_install_default (BGP_VNC_DEFAULTS_NODE);
+  vtysh_install_default (BGP_VNC_NVE_GROUP_NODE);
+  vtysh_install_default (BGP_VNC_L2_GROUP_NODE);
+  /* #endif */
   vtysh_install_default (OSPF_NODE);
   vtysh_install_default (RIPNG_NODE);
   vtysh_install_default (OSPF6_NODE);
+  vtysh_install_default (LDP_NODE);
+  vtysh_install_default (LDP_IPV4_NODE);
+  vtysh_install_default (LDP_IPV6_NODE);
+  vtysh_install_default (LDP_IPV4_IFACE_NODE);
+  vtysh_install_default (LDP_IPV6_IFACE_NODE);
+  vtysh_install_default (LDP_L2VPN_NODE);
+  vtysh_install_default (LDP_PSEUDOWIRE_NODE);
   vtysh_install_default (ISIS_NODE);
   vtysh_install_default (KEYCHAIN_NODE);
   vtysh_install_default (KEYCHAIN_KEY_NODE);
@@ -2983,6 +3301,20 @@ vtysh_init_vty (void)
   install_element (OSPF_NODE, &vtysh_quit_ospfd_cmd);
   install_element (OSPF6_NODE, &vtysh_exit_ospf6d_cmd);
   install_element (OSPF6_NODE, &vtysh_quit_ospf6d_cmd);
+  install_element (LDP_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_NODE, &vtysh_quit_ldpd_cmd);
+  install_element (LDP_IPV4_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_IPV4_NODE, &vtysh_quit_ldpd_cmd);
+  install_element (LDP_IPV6_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_IPV6_NODE, &vtysh_quit_ldpd_cmd);
+  install_element (LDP_IPV4_IFACE_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_IPV4_IFACE_NODE, &vtysh_quit_ldpd_cmd);
+  install_element (LDP_IPV6_IFACE_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_IPV6_IFACE_NODE, &vtysh_quit_ldpd_cmd);
+  install_element (LDP_L2VPN_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_L2VPN_NODE, &vtysh_quit_ldpd_cmd);
+  install_element (LDP_PSEUDOWIRE_NODE, &vtysh_exit_ldpd_cmd);
+  install_element (LDP_PSEUDOWIRE_NODE, &vtysh_quit_ldpd_cmd);
   install_element (BGP_NODE, &vtysh_exit_bgpd_cmd);
   install_element (BGP_NODE, &vtysh_quit_bgpd_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_exit_bgpd_cmd);
@@ -3005,6 +3337,12 @@ vtysh_init_vty (void)
   install_element (BGP_IPV6_NODE, &vtysh_quit_bgpd_cmd);
   install_element (BGP_IPV6M_NODE, &vtysh_exit_bgpd_cmd);
   install_element (BGP_IPV6M_NODE, &vtysh_quit_bgpd_cmd);
+  install_element (BGP_VNC_DEFAULTS_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_VNC_DEFAULTS_NODE, &vtysh_quit_bgpd_cmd);
+  install_element (BGP_VNC_NVE_GROUP_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_VNC_NVE_GROUP_NODE, &vtysh_quit_bgpd_cmd);
+  install_element (BGP_VNC_L2_GROUP_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_VNC_L2_GROUP_NODE, &vtysh_quit_bgpd_cmd);
   install_element (ISIS_NODE, &vtysh_exit_isisd_cmd);
   install_element (ISIS_NODE, &vtysh_quit_isisd_cmd);
   install_element (KEYCHAIN_NODE, &vtysh_exit_ripd_cmd);
@@ -3023,6 +3361,13 @@ vtysh_init_vty (void)
   install_element (RIPNG_NODE, &vtysh_end_all_cmd);
   install_element (OSPF_NODE, &vtysh_end_all_cmd);
   install_element (OSPF6_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_IPV4_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_IPV6_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_IPV4_IFACE_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_IPV6_IFACE_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_L2VPN_NODE, &vtysh_end_all_cmd);
+  install_element (LDP_PSEUDOWIRE_NODE, &vtysh_end_all_cmd);
   install_element (BGP_NODE, &vtysh_end_all_cmd);
   install_element (BGP_IPV4_NODE, &vtysh_end_all_cmd);
   install_element (BGP_IPV4M_NODE, &vtysh_end_all_cmd);
@@ -3034,6 +3379,9 @@ vtysh_init_vty (void)
   install_element (BGP_EVPN_VNI_NODE, &vtysh_end_all_cmd);
   install_element (BGP_IPV6_NODE, &vtysh_end_all_cmd);
   install_element (BGP_IPV6M_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_VNC_DEFAULTS_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_VNC_NVE_GROUP_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_VNC_L2_GROUP_NODE, &vtysh_end_all_cmd);
   install_element (ISIS_NODE, &vtysh_end_all_cmd);
   install_element (KEYCHAIN_NODE, &vtysh_end_all_cmd);
   install_element (KEYCHAIN_KEY_NODE, &vtysh_end_all_cmd);
@@ -3044,7 +3392,13 @@ vtysh_init_vty (void)
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
   install_element (INTERFACE_NODE, &vtysh_end_all_cmd);
   install_element (INTERFACE_NODE, &vtysh_exit_interface_cmd);
+  install_element (LINK_PARAMS_NODE, &vtysh_end_all_cmd);
+  install_element (LINK_PARAMS_NODE, &vtysh_exit_interface_cmd);
   install_element (INTERFACE_NODE, &vtysh_quit_interface_cmd);
+
+  install_element (NS_NODE, &vtysh_end_all_cmd);
+  install_element (NS_NODE, &vtysh_exit_ns_cmd);
+  install_element (NS_NODE, &vtysh_quit_ns_cmd);
 
   install_element (VRF_NODE, &vtysh_end_all_cmd);
   install_element (VRF_NODE, &vtysh_exit_vrf_cmd);
@@ -3059,6 +3413,13 @@ vtysh_init_vty (void)
 #ifdef HAVE_IPV6
   install_element (CONFIG_NODE, &router_ospf6_cmd);
 #endif
+  install_element (CONFIG_NODE, &ldp_mpls_ldp_cmd);
+  install_element (LDP_NODE, &ldp_address_family_ipv4_cmd);
+  install_element (LDP_NODE, &ldp_address_family_ipv6_cmd);
+  install_element (LDP_IPV4_NODE, &ldp_interface_ifname_cmd);
+  install_element (LDP_IPV6_NODE, &ldp_interface_ifname_cmd);
+  install_element (CONFIG_NODE, &ldp_l2vpn_word_type_vpls_cmd);
+  install_element (LDP_L2VPN_NODE, &ldp_member_pseudowire_ifname_cmd);
   install_element (CONFIG_NODE, &router_isis_cmd);
   install_element (CONFIG_NODE, &router_bgp_cmd);
   install_element (CONFIG_NODE, &router_bgp_asn_cmd);
@@ -3070,6 +3431,8 @@ vtysh_init_vty (void)
   install_element (BGP_NODE, &address_family_encap_cmd);
   install_element (BGP_NODE, &address_family_encapv6_cmd);
   install_element (BGP_NODE, &address_family_evpn_cmd);
+  install_element (BGP_NODE, &vnc_defaults_cmd);
+  install_element (BGP_NODE, &vnc_nve_group_cmd);
   install_element (BGP_NODE, &address_family_ipv4_unicast_cmd);
   install_element (BGP_NODE, &address_family_ipv4_multicast_cmd);
 #ifdef HAVE_IPV6
@@ -3092,6 +3455,11 @@ vtysh_init_vty (void)
   install_element (BGP_IPV4M_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV6_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV6M_NODE, &exit_address_family_cmd);
+
+  install_element (BGP_VNC_DEFAULTS_NODE, &exit_vnc_config_cmd);
+  install_element (BGP_VNC_NVE_GROUP_NODE, &exit_vnc_config_cmd);
+  install_element (BGP_VNC_L2_GROUP_NODE, &exit_vnc_config_cmd);
+
   install_element (CONFIG_NODE, &key_chain_cmd);
   install_element (CONFIG_NODE, &route_map_cmd);
   install_element (CONFIG_NODE, &vtysh_line_vty_cmd);
@@ -3102,6 +3470,7 @@ vtysh_init_vty (void)
   install_element (CONFIG_NODE, &vtysh_no_interface_cmd);
   install_element (CONFIG_NODE, &vtysh_interface_vrf_cmd);
   install_element (CONFIG_NODE, &vtysh_no_interface_vrf_cmd);
+  install_element (INTERFACE_NODE, &vtysh_link_params_cmd);
   install_element (ENABLE_NODE, &vtysh_show_running_config_cmd);
   install_element (ENABLE_NODE, &vtysh_show_running_config_daemon_cmd);
   install_element (ENABLE_NODE, &vtysh_copy_runningconfig_startupconfig_cmd);

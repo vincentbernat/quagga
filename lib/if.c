@@ -37,6 +37,12 @@
 #include "str.h"
 #include "log.h"
 
+DEFINE_MTYPE(       LIB, IF,              "Interface")
+DEFINE_MTYPE_STATIC(LIB, CONNECTED,       "Connected")
+DEFINE_MTYPE_STATIC(LIB, NBR_CONNECTED,   "Neighbor Connected")
+DEFINE_MTYPE(       LIB, CONNECTED_LABEL, "Connected interface label")
+DEFINE_MTYPE_STATIC(LIB, IF_LINK_PARAMS,  "Informational Link Parameters")
+
 /* List of interfaces in only the default VRF */
 int ptm_enable = 0;
 
@@ -204,6 +210,8 @@ if_delete (struct interface *ifp)
 
   list_free (ifp->connected);
   list_free (ifp->nbr_connected);
+
+  if_link_params_free (ifp);
 
   XFREE (MTYPE_IF, ifp);
 }
@@ -1303,4 +1311,106 @@ if_terminate (struct list **intf_list)
 
   list_delete (*intf_list);
   *intf_list = NULL;
+}
+
+const char *
+if_link_type_str (enum zebra_link_type llt)
+{
+  switch (llt)
+    {
+#define llts(T,S) case (T): return (S)
+      llts(ZEBRA_LLT_UNKNOWN,               "Unknown");
+      llts(ZEBRA_LLT_ETHER,                 "Ethernet");
+      llts(ZEBRA_LLT_EETHER,                "Experimental Ethernet");
+      llts(ZEBRA_LLT_AX25,                  "AX.25 Level 2");
+      llts(ZEBRA_LLT_PRONET,                "PROnet token ring");
+      llts(ZEBRA_LLT_IEEE802,               "IEEE 802.2 Ethernet/TR/TB");
+      llts(ZEBRA_LLT_ARCNET,                "ARCnet");
+      llts(ZEBRA_LLT_APPLETLK,              "AppleTalk");
+      llts(ZEBRA_LLT_DLCI,                  "Frame Relay DLCI");
+      llts(ZEBRA_LLT_ATM,                   "ATM");
+      llts(ZEBRA_LLT_METRICOM,              "Metricom STRIP");
+      llts(ZEBRA_LLT_IEEE1394,              "IEEE 1394 IPv4");
+      llts(ZEBRA_LLT_EUI64,                 "EUI-64");
+      llts(ZEBRA_LLT_INFINIBAND,            "InfiniBand");
+      llts(ZEBRA_LLT_SLIP,                  "SLIP");
+      llts(ZEBRA_LLT_CSLIP,                 "Compressed SLIP");
+      llts(ZEBRA_LLT_SLIP6,                 "SLIPv6");
+      llts(ZEBRA_LLT_CSLIP6,                "Compressed SLIPv6");
+      llts(ZEBRA_LLT_ROSE,                  "ROSE packet radio");
+      llts(ZEBRA_LLT_X25,                   "CCITT X.25");
+      llts(ZEBRA_LLT_PPP,                   "PPP");
+      llts(ZEBRA_LLT_CHDLC,                 "Cisco HDLC");
+      llts(ZEBRA_LLT_RAWHDLC,               "Raw HDLC");
+      llts(ZEBRA_LLT_LAPB,                  "LAPB");
+      llts(ZEBRA_LLT_IPIP,                  "IPIP Tunnel");
+      llts(ZEBRA_LLT_IPIP6,                 "IPIP6 Tunnel");
+      llts(ZEBRA_LLT_FRAD,                  "FRAD");
+      llts(ZEBRA_LLT_SKIP,                  "SKIP vif");
+      llts(ZEBRA_LLT_LOOPBACK,              "Loopback");
+      llts(ZEBRA_LLT_LOCALTLK,              "Localtalk");
+      llts(ZEBRA_LLT_FDDI,                  "FDDI");
+      llts(ZEBRA_LLT_SIT,                   "IPv6-in-IPv4 SIT");
+      llts(ZEBRA_LLT_IPDDP,                 "IP-in-DDP tunnel");
+      llts(ZEBRA_LLT_IPGRE,                 "GRE over IP");
+      llts(ZEBRA_LLT_PIMREG,                "PIMSM registration");
+      llts(ZEBRA_LLT_HIPPI,                 "HiPPI");
+      llts(ZEBRA_LLT_IRDA,                  "IrDA");
+      llts(ZEBRA_LLT_FCPP,                  "Fibre-Channel PtP");
+      llts(ZEBRA_LLT_FCAL,                  "Fibre-Channel Arbitrated Loop");
+      llts(ZEBRA_LLT_FCPL,                  "Fibre-Channel Public Loop");
+      llts(ZEBRA_LLT_FCFABRIC,              "Fibre-Channel Fabric");
+      llts(ZEBRA_LLT_IEEE802_TR,            "IEEE 802.2 Token Ring");
+      llts(ZEBRA_LLT_IEEE80211,             "IEEE 802.11");
+      llts(ZEBRA_LLT_IEEE80211_RADIOTAP,    "IEEE 802.11 Radiotap");
+      llts(ZEBRA_LLT_IEEE802154,            "IEEE 802.15.4");
+      llts(ZEBRA_LLT_IEEE802154_PHY,        "IEEE 802.15.4 Phy");
+      default:
+        zlog_warn ("Unknown value %d", llt);
+        return "Unknown type!";
+#undef llts
+    }
+  return NULL;
+}
+
+struct if_link_params *
+if_link_params_get (struct interface *ifp)
+{
+  int i;
+
+  if (ifp->link_params != NULL)
+    return ifp->link_params;
+
+  struct if_link_params *iflp = XCALLOC(MTYPE_IF_LINK_PARAMS,
+                                      sizeof (struct if_link_params));
+  if (iflp == NULL) return NULL;
+
+  /* Set TE metric == standard metric */
+  iflp->te_metric = ifp->metric;
+
+  /* Compute default bandwidth based on interface */
+  int bw = (float)((ifp->bandwidth ? ifp->bandwidth : DEFAULT_BANDWIDTH)
+                   * TE_KILO_BIT / TE_BYTE);
+
+  /* Set Max, Reservable and Unreserved Bandwidth */
+  iflp->max_bw = bw;
+  iflp->max_rsv_bw = bw;
+  for (i = 0; i < MAX_CLASS_TYPE; i++)
+    iflp->unrsv_bw[i] = bw;
+
+  /* Update Link parameters status */
+  iflp->lp_status = LP_TE | LP_MAX_BW | LP_MAX_RSV_BW | LP_UNRSV_BW;
+
+  /* Finally attach newly created Link Parameters */
+  ifp->link_params = iflp;
+
+  return iflp;
+}
+
+void
+if_link_params_free (struct interface *ifp)
+{
+  if (ifp->link_params == NULL) return;
+  XFREE(MTYPE_IF_LINK_PARAMS, ifp->link_params);
+  ifp->link_params = NULL;
 }

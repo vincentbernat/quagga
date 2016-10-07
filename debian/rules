@@ -55,6 +55,7 @@ override_dh_auto_configure:
 		--enable-evpn=yes \
 		--enable-cumulus=yes \
 		--enable-pimd=yes \
+		--enable-bgp-vnc=no \
 		--enable-dependency-tracking; \
 	fi
 

@@ -132,6 +132,9 @@ struct zebra_t
   /* rib work queue */
   struct work_queue *ribq;
   struct meta_queue *mq;
+
+  /* LSP work queue */
+  struct work_queue *lsp_process_q;
 };
 extern struct zebra_t zebrad;
 
@@ -166,6 +169,8 @@ extern int zsend_router_id_update (struct zserv *, struct prefix *,
                                    vrf_id_t);
 extern int zsend_interface_vrf_update (struct zserv *, struct interface *,
                                        vrf_id_t);
+
+extern int zsend_interface_link_params (struct zserv *, struct interface *);
 
 extern pid_t pid;
 

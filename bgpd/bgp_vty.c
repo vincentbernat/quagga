@@ -30,6 +30,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "thread.h"
 #include "log.h"
 #include "memory.h"
+#include "memory_vty.h"
 #include "hash.h"
 #include "queue.h"
 #include "if.h"
@@ -68,14 +69,23 @@ listen_range_exists (struct bgp *bgp, struct prefix *range, int exact);
 afi_t
 bgp_node_afi (struct vty *vty)
 {
-  if (vty->node == BGP_IPV6_NODE ||
-      vty->node == BGP_IPV6M_NODE ||
-      vty->node == BGP_VPNV6_NODE ||
-      vty->node == BGP_ENCAPV6_NODE)
-    return AFI_IP6;
-  if (vty->node == BGP_EVPN_NODE)
-    return AFI_L2VPN;
-  return AFI_IP;
+  afi_t afi;
+  switch (vty->node)
+    {
+    case BGP_IPV6_NODE:
+    case BGP_IPV6M_NODE:
+    case BGP_VPNV6_NODE:
+    case BGP_ENCAPV6_NODE:
+      afi = AFI_IP6;
+      break;
+    case BGP_EVPN_NODE:
+      afi = AFI_L2VPN;
+      break;
+    default:
+      afi = AFI_IP;
+      break;
+    }
+  return afi;
 }
 
 /* Utility function to get subsequent address family from current
@@ -83,15 +93,29 @@ bgp_node_afi (struct vty *vty)
 safi_t
 bgp_node_safi (struct vty *vty)
 {
-  if (vty->node == BGP_VPNV4_NODE || vty->node == BGP_VPNV6_NODE)
-    return SAFI_MPLS_VPN;
-  if (vty->node == BGP_ENCAP_NODE || vty->node == BGP_ENCAPV6_NODE)
-    return SAFI_ENCAP;
-  if (vty->node == BGP_IPV4M_NODE || vty->node == BGP_IPV6M_NODE)
-    return SAFI_MULTICAST;
-  if (vty->node == BGP_EVPN_NODE)
-    return SAFI_EVPN;
-  return SAFI_UNICAST;
+  safi_t safi;
+  switch (vty->node)
+    {
+    case BGP_ENCAP_NODE:
+    case BGP_ENCAPV6_NODE:
+      safi = SAFI_ENCAP;
+      break;
+    case BGP_VPNV4_NODE:
+    case BGP_VPNV6_NODE:
+      safi = SAFI_MPLS_VPN;
+      break;
+    case BGP_IPV4M_NODE:
+    case BGP_IPV6M_NODE:
+      safi = SAFI_MULTICAST;
+      break;
+    case BGP_EVPN_NODE:
+      safi = SAFI_EVPN;
+      break;
+    default:
+      safi = SAFI_UNICAST;
+      break;
+  }
+  return safi;
 }
 
 int
@@ -1815,6 +1839,26 @@ DEFUN (bgp_graceful_restart_stalepath_time,
   return CMD_SUCCESS;
 }
 
+DEFUN (bgp_graceful_restart_restart_time,
+       bgp_graceful_restart_restart_time_cmd,
+       "bgp graceful-restart restart-time <1-3600>",
+       "BGP specific commands\n"
+       "Graceful restart capability parameters\n"
+       "Set the time to wait to delete stale routes before a BGP open message is received\n"
+       "Delay value (seconds)\n")
+{
+  struct bgp *bgp;
+  u_int32_t restart;
+
+  bgp = vty->index;
+  if (! bgp)
+    return CMD_WARNING;
+
+  VTY_GET_INTEGER_RANGE ("restart-time", restart, argv[0], 1, 3600);
+  bgp->restart_time = restart;
+  return CMD_SUCCESS;
+}
+
 DEFUN (no_bgp_graceful_restart_stalepath_time,
        no_bgp_graceful_restart_stalepath_time_cmd,
        "no bgp graceful-restart stalepath-time",
@@ -1833,6 +1877,24 @@ DEFUN (no_bgp_graceful_restart_stalepath_time,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_bgp_graceful_restart_restart_time,
+       no_bgp_graceful_restart_restart_time_cmd,
+       "no bgp graceful-restart restart-time",
+       NO_STR
+       "BGP specific commands\n"
+       "Graceful restart capability parameters\n"
+       "Set the time to wait to delete stale routes before a BGP open message is received\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  if (! bgp)
+    return CMD_WARNING;
+
+  bgp->restart_time = BGP_DEFAULT_RESTART_TIME;
+  return CMD_SUCCESS;
+}
+
 ALIAS (no_bgp_graceful_restart_stalepath_time,
        no_bgp_graceful_restart_stalepath_time_val_cmd,
        "no bgp graceful-restart stalepath-time <1-3600>",
@@ -1840,6 +1902,15 @@ ALIAS (no_bgp_graceful_restart_stalepath_time,
        "BGP specific commands\n"
        "Graceful restart capability parameters\n"
        "Set the max time to hold onto restarting peer's stale paths\n"
+       "Delay value (seconds)\n")
+
+ALIAS (no_bgp_graceful_restart_restart_time,
+       no_bgp_graceful_restart_restart_time_val_cmd,
+       "no bgp graceful-restart restart-time <1-3600>",
+       NO_STR
+       "BGP specific commands\n"
+       "Graceful restart capability parameters\n"
+       "Set the time to wait to delete stale routes before a BGP open message is received\n"
        "Delay value (seconds)\n")
 
 /* "bgp fast-external-failover" configuration. */
@@ -10327,7 +10398,7 @@ DEFUN (show_bgp_vrfs,
 
       json_object_int_add(json, "totalVrfs", count);
 
-      vty_out (vty, "%s%s", json_object_to_json_string(json), VTY_NEWLINE);
+      vty_out (vty, "%s%s", json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY), VTY_NEWLINE);
       json_object_free(json);
     }
   else
@@ -10457,7 +10528,7 @@ DEFUN (show_bgp_memory,
                          count * sizeof (struct peer)),
            VTY_NEWLINE);
   
-  if ((count = mtype_stats_alloc (MTYPE_BGP_PEER_GROUP)))
+  if ((count = mtype_stats_alloc (MTYPE_PEER_GROUP)))
     vty_out (vty, "%ld peer groups, using %s of memory%s", count,
              mtype_memstr (memstrbuf, sizeof (memstrbuf),
                            count * sizeof (struct peer_group)),
@@ -10771,7 +10842,7 @@ bgp_show_summary (struct vty *vty, struct bgp *bgp, int afi, int safi,
       json_object_int_add(json, "totalPeers", count);
       json_object_int_add(json, "dynamicPeers", dn_count);
 
-      vty_out (vty, "%s%s", json_object_to_json_string(json), VTY_NEWLINE);
+      vty_out (vty, "%s%s", json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY), VTY_NEWLINE);
       json_object_free(json);
     }
   else
@@ -10949,6 +11020,33 @@ ALIAS (show_ip_bgp_ipv4_summary,
        "Address Family modifier\n"
        "Address Family modifier\n"
        "Summary of BGP neighbor status\n")
+
+DEFUN (show_bgp_ipv4_vpn_summary,
+       show_bgp_ipv4_vpn_summary_cmd,
+       "show bgp ipv4 vpn summary {json}",
+       SHOW_STR
+       BGP_STR
+       "IPv4\n"
+       "Display VPN NLRI specific information\n"
+       "Summary of BGP neighbor status\n"
+       JSON_STR)
+{
+  return bgp_show_summary_vty (vty, NULL, AFI_IP, SAFI_MPLS_VPN, use_json (argc, argv));
+}
+
+/* `show ip bgp summary' commands. */
+DEFUN (show_bgp_ipv6_vpn_summary,
+       show_bgp_ipv6_vpn_summary_cmd,
+       "show bgp ipv6 vpn summary {json}",
+       SHOW_STR
+       BGP_STR
+       "IPv6\n"
+       "Display VPN NLRI specific information\n"
+       "Summary of BGP neighbor status\n"
+       JSON_STR)
+{
+  return bgp_show_summary_vty (vty, NULL, AFI_IP6, SAFI_MPLS_VPN, use_json (argc, argv));
+}
 
 DEFUN (show_ip_bgp_instance_ipv4_summary,
        show_ip_bgp_instance_ipv4_summary_cmd,
@@ -11416,8 +11514,6 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi,
     {
       json_addr = json_object_new_object();
       json_af = json_object_new_object();
-      json_prefA = json_object_new_object();
-      json_prefB = json_object_new_object();
       filter = &p->filter[afi][safi];
 
       if (peer_group_active(p))
@@ -11437,6 +11533,7 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi,
           || CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
         {
           json_object_int_add(json_af, "orfType", ORF_TYPE_PREFIX);
+          json_prefA = json_object_new_object();
           bgp_show_peer_afi_orf_cap (vty, p, afi, safi,
 				     PEER_CAP_ORF_PREFIX_SM_ADV,
 				     PEER_CAP_ORF_PREFIX_RM_ADV,
@@ -11451,6 +11548,7 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi,
           || CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_OLD_RCV))
         {
           json_object_int_add(json_af, "orfOldType", ORF_TYPE_PREFIX_OLD);
+          json_prefB = json_object_new_object();
           bgp_show_peer_afi_orf_cap (vty, p, afi, safi,
 				     PEER_CAP_ORF_PREFIX_SM_ADV,
 				     PEER_CAP_ORF_PREFIX_RM_ADV,
@@ -11466,6 +11564,8 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi,
           || CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV)
           || CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_OLD_RCV))
         json_object_object_add(json_addr, "afDependentCap", json_af);
+      else
+        json_object_free(json_af);
 
       sprintf (orf_pfx_name, "%s.%d.%d", p->host, afi, safi);
       orf_pfx_count =  prefix_bgp_show_prefix_list (NULL, afi, orf_pfx_name, use_json);
@@ -12188,6 +12288,8 @@ bgp_show_peer (struct vty *vty, struct peer *p, u_char use_json, json_object *js
                             CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_ADV) ||
                             CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_RCV))
                           json_object_object_add(json_add, print_store, json_sub);
+                        else
+                          json_object_free(json_sub);
                       }
 
                   json_object_object_add(json_cap, "addPath", json_add);
@@ -12212,7 +12314,6 @@ bgp_show_peer (struct vty *vty, struct peer *p, u_char use_json, json_object *js
 	          json_object *json_nxt = NULL;
                   const char *print_store;
 
-                  json_nxt = json_object_new_object();
 
 	          if (CHECK_FLAG (p->cap, PEER_CAP_ENHE_ADV) && CHECK_FLAG (p->cap, PEER_CAP_ENHE_RCV))
 		    json_object_string_add(json_cap, "extendedNexthop", "advertisedAndReceived");
@@ -12223,6 +12324,8 @@ bgp_show_peer (struct vty *vty, struct peer *p, u_char use_json, json_object *js
 
                   if (CHECK_FLAG (p->cap, PEER_CAP_ENHE_RCV))
 		    {
+                      json_nxt = json_object_new_object();
+
                       for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
                         {
                           if (CHECK_FLAG (p->af_cap[AFI_IP][safi], PEER_CAP_ENHE_AF_RCV))
@@ -12320,7 +12423,10 @@ bgp_show_peer (struct vty *vty, struct peer *p, u_char use_json, json_object *js
                             }
                         }
 		      if (! restart_af_count)
-		        json_object_string_add(json_cap, "addressFamiliesByPeer", "none");
+                        {
+                          json_object_string_add(json_cap, "addressFamiliesByPeer", "none");
+                          json_object_free(json_restart);
+                        }
                       else
                         json_object_object_add(json_cap, "addressFamiliesByPeer", json_restart);
                     }
@@ -13022,7 +13128,7 @@ bgp_show_neighbor (struct vty *vty, struct bgp *bgp, enum show_type type,
 
   if (use_json)
     {
-      vty_out (vty, "%s%s", json_object_to_json_string(json), VTY_NEWLINE);
+      vty_out (vty, "%s%s", json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY), VTY_NEWLINE);
       json_object_free(json);
     }
   else
@@ -13053,7 +13159,7 @@ bgp_show_neighbor_vty (struct vty *vty, const char *name,
           if (use_json)
             {
               json_object_boolean_true_add(json, "bgpNoSuchInstance");
-              vty_out (vty, "%s%s", json_object_to_json_string(json), VTY_NEWLINE);
+              vty_out (vty, "%s%s", json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY), VTY_NEWLINE);
               json_object_free(json);
             }
           else
@@ -13457,7 +13563,7 @@ DEFUN (show_ip_bgp_attr_info,
 
 static int bgp_show_update_groups(struct vty *vty, const char *name,
                                   int afi, int safi,
-                                  u_int64_t subgrp_id)
+                                  uint64_t subgrp_id)
 {
   struct bgp *bgp;
 
@@ -13584,7 +13690,7 @@ DEFUN (show_ip_bgp_updgrps_s,
        "Detailed info about dynamic update groups\n"
        "Specific subgroup to display detailed info for\n")
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[0]);
   return (bgp_show_update_groups(vty, NULL, AFI_IP, SAFI_UNICAST, subgrp_id));
@@ -13600,7 +13706,7 @@ DEFUN (show_ip_bgp_instance_updgrps_s,
        "Detailed info about dynamic update groups\n"
        "Specific subgroup to display detailed info for\n")
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[2]);
   return (bgp_show_update_groups(vty, argv[1], AFI_IP, SAFI_UNICAST, subgrp_id));
@@ -13614,7 +13720,7 @@ DEFUN (show_bgp_ipv6_updgrps_s,
        "Detailed info about v6 dynamic update groups\n"
        "Specific subgroup to display detailed info for\n")
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[0]);
   return(bgp_show_update_groups(vty, NULL, AFI_IP6, SAFI_UNICAST, subgrp_id));
@@ -13628,7 +13734,7 @@ DEFUN (show_bgp_instance_ipv6_updgrps_s,
        "Detailed info about v6 dynamic update groups\n"
        "Specific subgroup to display detailed info for\n")
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[2]);
   return(bgp_show_update_groups(vty, argv[1], AFI_IP6, SAFI_UNICAST, subgrp_id));
@@ -13648,7 +13754,7 @@ DEFUN (show_bgp_updgrps_s,
 {
   afi_t afi;
   safi_t safi;
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   afi = (strcmp(argv[0], "ipv4") == 0) ? AFI_IP : AFI_IP6;
   safi = (strncmp (argv[1], "m", 1) == 0) ? SAFI_MULTICAST : SAFI_UNICAST;
@@ -13695,7 +13801,7 @@ DEFUN (show_bgp_instance_updgrps_stats,
 static void
 show_bgp_updgrps_adj_info_aux (struct vty *vty, const char *name,
                                afi_t afi, safi_t safi,
-			       const char *what, u_int64_t subgrp_id)
+			       const char *what, uint64_t subgrp_id)
 {
   struct bgp *bgp;
 
@@ -13814,7 +13920,7 @@ DEFUN (show_ip_bgp_updgrps_adj_s,
        "Packet queue\n")
 
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[0]);
 
@@ -13836,7 +13942,7 @@ DEFUN (show_ip_bgp_instance_updgrps_adj_s,
        "Packet queue\n")
 
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[2]);
 
@@ -13862,7 +13968,7 @@ DEFUN (show_bgp_updgrps_afi_adj_s,
 {
   afi_t afi;
   safi_t safi;
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   afi = (strcmp(argv[0], "ipv4") == 0) ? AFI_IP : AFI_IP6;
   safi = (strncmp (argv[1], "m", 1) == 0) ? SAFI_MULTICAST : SAFI_UNICAST;
@@ -13883,7 +13989,7 @@ DEFUN (show_bgp_updgrps_adj_s,
        "Announced routes\n"
        "Packet queue\n")
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[0]);
 
@@ -13903,7 +14009,7 @@ DEFUN (show_bgp_instance_updgrps_adj_s,
        "Announced routes\n"
        "Packet queue\n")
 {
-  u_int64_t subgrp_id;
+  uint64_t subgrp_id;
 
   VTY_GET_ULL("subgroup-id", subgrp_id, argv[2]);
 
@@ -15041,6 +15147,9 @@ bgp_vty_init (void)
   install_element (BGP_NODE, &bgp_graceful_restart_stalepath_time_cmd);
   install_element (BGP_NODE, &no_bgp_graceful_restart_stalepath_time_cmd);
   install_element (BGP_NODE, &no_bgp_graceful_restart_stalepath_time_val_cmd);
+  install_element (BGP_NODE, &bgp_graceful_restart_restart_time_cmd);
+  install_element (BGP_NODE, &no_bgp_graceful_restart_restart_time_cmd);
+  install_element (BGP_NODE, &no_bgp_graceful_restart_restart_time_val_cmd);
  
   /* "bgp fast-external-failover" commands */
   install_element (BGP_NODE, &bgp_fast_external_failover_cmd);
@@ -16491,6 +16600,12 @@ bgp_vty_init (void)
   install_element (ENABLE_NODE, &show_bgp_instance_ipv6_summary_cmd);
   install_element (ENABLE_NODE, &show_bgp_instance_ipv6_safi_summary_cmd);
 #endif /* HAVE_IPV6 */
+
+  install_element (VIEW_NODE, &show_bgp_ipv4_vpn_summary_cmd);
+  install_element (ENABLE_NODE, &show_bgp_ipv4_vpn_summary_cmd);
+
+  install_element (VIEW_NODE, &show_bgp_ipv6_vpn_summary_cmd);
+  install_element (ENABLE_NODE, &show_bgp_ipv6_vpn_summary_cmd);
 
   /* "show ip bgp neighbors" commands. */
   install_element (VIEW_NODE, &show_ip_bgp_neighbors_cmd);

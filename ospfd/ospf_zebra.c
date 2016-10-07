@@ -53,6 +53,7 @@
 #ifdef HAVE_SNMP
 #include "ospfd/ospf_snmp.h"
 #endif /* HAVE_SNMP */
+#include "ospfd/ospf_te.h"
 
 /* Zebra structure to hold current status. */
 struct zclient *zclient = NULL;
@@ -331,12 +332,30 @@ ospf_interface_address_delete (int command, struct zclient *zclient,
   return 0;
 }
 
+static int
+ospf_interface_link_params (int command, struct zclient *zclient,
+                        zebra_size_t length)
+{
+  struct interface *ifp;
+
+  ifp = zebra_interface_link_params_read (zclient->ibuf);
+
+  if (ifp == NULL)
+    return 0;
+
+  /* Update TE TLV */
+  ospf_mpls_te_update_if (ifp);
+
+  return 0;
+}
+
+
 void
 ospf_zebra_add (struct prefix_ipv4 *p, struct ospf_route *or)
 {
   u_char message;
   u_char distance;
-  u_char flags;
+  u_int32_t flags;
   int psize;
   struct stream *s;
   struct ospf_path *path;
@@ -374,7 +393,7 @@ ospf_zebra_add (struct prefix_ipv4 *p, struct ospf_route *or)
       zclient_create_header (s, ZEBRA_IPV4_ROUTE_ADD, VRF_DEFAULT);
       stream_putc (s, ZEBRA_ROUTE_OSPF);
       stream_putw (s, ospf->instance);
-      stream_putc (s, flags);
+      stream_putl (s, flags);
       stream_putc (s, message);
       stream_putw (s, SAFI_UNICAST);
 
@@ -473,7 +492,7 @@ ospf_zebra_delete (struct prefix_ipv4 *p, struct ospf_route *or)
 {
   u_char message;
   u_char distance;
-  u_char flags;
+  u_int32_t flags;
   int psize;
   struct stream *s;
   struct ospf_path *path;
@@ -497,7 +516,7 @@ ospf_zebra_delete (struct prefix_ipv4 *p, struct ospf_route *or)
       zclient_create_header (s, ZEBRA_IPV4_ROUTE_DELETE, VRF_DEFAULT);
       stream_putc (s, ZEBRA_ROUTE_OSPF);
       stream_putw (s, ospf->instance);
-      stream_putc (s, flags);
+      stream_putl (s, flags);
       stream_putc (s, message);
       stream_putw (s, SAFI_UNICAST);
 
@@ -1045,13 +1064,13 @@ ospf_zebra_read_ipv4 (int command, struct zclient *zclient,
   /* Type, flags, message. */
   api.type = stream_getc (s);
   api.instance = stream_getw (s);
-  api.flags = stream_getc (s);
+  api.flags = stream_getl (s);
   api.message = stream_getc (s);
 
   /* IPv4 prefix. */
   memset (&p, 0, sizeof (struct prefix_ipv4));
   p.family = AF_INET;
-  p.prefixlen = stream_getc (s);
+  p.prefixlen = MIN(IPV4_MAX_PREFIXLEN, stream_getc (s));
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
   if (IPV4_NET127(ntohl(p.prefix.s_addr)))
@@ -1580,8 +1599,8 @@ ospf_zebra_init (struct thread_master *master, u_short instance)
   zclient->interface_down = ospf_interface_state_down;
   zclient->interface_address_add = ospf_interface_address_add;
   zclient->interface_address_delete = ospf_interface_address_delete;
-  zclient->ipv4_route_add = ospf_zebra_read_ipv4;
-  zclient->ipv4_route_delete = ospf_zebra_read_ipv4;
+  zclient->interface_link_params = ospf_interface_link_params;
+
   zclient->redistribute_route_ipv4_add = ospf_zebra_read_ipv4;
   zclient->redistribute_route_ipv4_del = ospf_zebra_read_ipv4;
 

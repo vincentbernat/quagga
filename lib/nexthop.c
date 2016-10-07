@@ -32,6 +32,10 @@
 #include "thread.h"
 #include "prefix.h"
 #include "nexthop.h"
+#include "mpls.h"
+
+DEFINE_MTYPE_STATIC(LIB, NEXTHOP,	"Nexthop")
+DEFINE_MTYPE_STATIC(LIB, NH_LABEL,	"Nexthop label")
 
 /* check if nexthops are same, non-recursive */
 int
@@ -125,6 +129,9 @@ copy_nexthops (struct nexthop **tnh, struct nexthop *nh)
       nexthop->ifindex = nh->ifindex;
       memcpy(&(nexthop->gate), &(nh->gate), sizeof(union g_addr));
       memcpy(&(nexthop->src), &(nh->src), sizeof(union g_addr));
+      if (nh->nh_label)
+        nexthop_add_labels (nexthop, nh->nh_label_type,
+			    nh->nh_label->num_labels, &nh->nh_label->label[0]);
       nexthop_add(tnh, nexthop);
 
       if (CHECK_FLAG(nh1->flags, NEXTHOP_FLAG_RECURSIVE))
@@ -136,6 +143,7 @@ copy_nexthops (struct nexthop **tnh, struct nexthop *nh)
 void
 nexthop_free (struct nexthop *nexthop)
 {
+  nexthop_del_labels (nexthop);
   if (nexthop->resolved)
     nexthops_free(nexthop->resolved);
   XFREE (MTYPE_NEXTHOP, nexthop);
@@ -152,4 +160,65 @@ nexthops_free (struct nexthop *nexthop)
       next = nh->next;
       nexthop_free (nh);
     }
+}
+
+/* Update nexthop with label information. */
+void
+nexthop_add_labels (struct nexthop *nexthop, enum lsp_types_t type,
+		    u_int8_t num_labels, mpls_label_t *label)
+{
+  struct nexthop_label *nh_label;
+  int i;
+
+  nexthop->nh_label_type = type;
+  nh_label = XCALLOC (MTYPE_NH_LABEL, sizeof (struct nexthop_label) +
+		      num_labels * sizeof (mpls_label_t));
+  nh_label->num_labels = num_labels;
+  for (i = 0; i < num_labels; i++)
+    nh_label->label[i] = *(label + i);
+  nexthop->nh_label = nh_label;
+}
+
+/* Free label information of nexthop, if present. */
+void
+nexthop_del_labels (struct nexthop *nexthop)
+{
+  if (nexthop->nh_label)
+    {
+      XFREE (MTYPE_NH_LABEL, nexthop->nh_label);
+      nexthop->nh_label_type = ZEBRA_LSP_NONE;
+    }
+}
+
+const char *
+nexthop2str (struct nexthop *nexthop, char *str, int size)
+{
+  switch (nexthop->type)
+    {
+      case NEXTHOP_TYPE_IFINDEX:
+        snprintf (str, size, "if %u", nexthop->ifindex);
+        break;
+      case NEXTHOP_TYPE_IPV4:
+        snprintf (str, size, "%s", inet_ntoa (nexthop->gate.ipv4));
+        break;
+      case NEXTHOP_TYPE_IPV4_IFINDEX:
+        snprintf (str, size, "%s if %u",
+                  inet_ntoa (nexthop->gate.ipv4), nexthop->ifindex);
+        break;
+      case NEXTHOP_TYPE_IPV6:
+        snprintf (str, size, "%s", inet6_ntoa (nexthop->gate.ipv6));
+        break;
+      case NEXTHOP_TYPE_IPV6_IFINDEX:
+        snprintf (str, size, "%s if %u",
+                  inet6_ntoa (nexthop->gate.ipv6), nexthop->ifindex);
+        break;
+      case NEXTHOP_TYPE_BLACKHOLE:
+        snprintf (str, size, "blackhole");
+        break;
+      default:
+        snprintf (str, size, "unknown");
+        break;
+    }
+
+  return str;
 }

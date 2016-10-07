@@ -34,6 +34,11 @@
 
 #include "plist_int.h"
 
+DEFINE_MTYPE_STATIC(LIB, PREFIX_LIST,       "Prefix List")
+DEFINE_MTYPE_STATIC(LIB, MPREFIX_LIST_STR,  "Prefix List Str")
+DEFINE_MTYPE_STATIC(LIB, PREFIX_LIST_ENTRY, "Prefix List Entry")
+DEFINE_MTYPE_STATIC(LIB, PREFIX_LIST_TRIE,  "Prefix List Trie Table")
+
 /* not currently changeable, code assumes bytes further down */
 #define PLC_BITS	8
 #define PLC_LEN		(1 << PLC_BITS)
@@ -236,7 +241,7 @@ prefix_list_insert (afi_t afi, int orf, const char *name)
 
   /* Allocate new prefix_list and copy given name. */
   plist = prefix_list_new ();
-  plist->name = XSTRDUP (MTYPE_PREFIX_LIST_STR, name);
+  plist->name = XSTRDUP (MTYPE_MPREFIX_LIST_STR, name);
   plist->master = master;
   plist->trie = XCALLOC (MTYPE_PREFIX_LIST_TRIE, sizeof (struct pltrie_table));
 
@@ -370,7 +375,7 @@ prefix_list_delete (struct prefix_list *plist)
     (*master->delete_hook) (plist);
 
   if (plist->name)
-    XFREE (MTYPE_PREFIX_LIST_STR, plist->name);
+    XFREE (MTYPE_MPREFIX_LIST_STR, plist->name);
 
   XFREE (MTYPE_PREFIX_LIST_TRIE, plist->trie);
 
@@ -894,7 +899,7 @@ vty_prefix_list_install (struct vty *vty, afi_t afi, const char *name,
   struct prefix_list *plist;
   struct prefix_list_entry *pentry;
   struct prefix_list_entry *dup;
-  struct prefix p;
+  struct prefix p, p_tmp;
   int any = 0;
   int seqnum = -1;
   int lenum = 0;
@@ -940,6 +945,11 @@ vty_prefix_list_install (struct vty *vty, afi_t afi, const char *name,
 	  vty_out (vty, "%% Malformed IPv4 prefix%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
+
+      /* make a copy to verify prefix matches mask length */
+      prefix_copy (&p_tmp, &p);
+      apply_mask_ipv4 ((struct prefix_ipv4 *) &p_tmp);
+
       break;
     case AFI_IP6:
       if (strncmp ("any", prefix, strlen (prefix)) == 0)
@@ -957,11 +967,32 @@ vty_prefix_list_install (struct vty *vty, afi_t afi, const char *name,
 	  vty_out (vty, "%% Malformed IPv6 prefix%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
+
+      /* make a copy to verify prefix matches mask length */
+      prefix_copy (&p_tmp, &p);
+      apply_mask_ipv6 ((struct prefix_ipv6 *) &p_tmp);
+
       break;
     case AFI_L2VPN:
     case AFI_IPMR:
     case AFI_MAX:
       break;
+    default:
+      vty_out (vty, "%% Unrecognized AFI (%d)%s", afi, VTY_NEWLINE);
+      return CMD_WARNING;
+      break;
+    }
+
+  /* If prefix has bits not under the mask, adjust it to fit */
+  if (!prefix_same (&p_tmp, &p))
+    {
+      char buf[PREFIX2STR_BUFFER];
+      char buf_tmp[PREFIX2STR_BUFFER];
+      prefix2str(&p, buf, sizeof(buf));
+      prefix2str(&p_tmp, buf_tmp, sizeof(buf_tmp));
+      zlog_warn ("Prefix-list %s prefix changed from %s to %s to match length",
+                 name, buf, buf_tmp);
+      p = p_tmp;
     }
 
   /* ge and le check. */
@@ -989,14 +1020,6 @@ vty_prefix_list_install (struct vty *vty, afi_t afi, const char *name,
   if (dup)
     {
       prefix_list_entry_free (pentry);
-      vty_out (vty, "%% Insertion failed - prefix-list entry exists:%s",
-	       VTY_NEWLINE);
-      vty_out (vty, "   seq %u %s %s", dup->seq, typestr, prefix);
-      if (! any && genum)
-	vty_out (vty, " ge %d", genum);
-      if (! any && lenum)
-	vty_out (vty, " le %d", lenum);
-      vty_out (vty, "%s", VTY_NEWLINE);
       return CMD_SUCCESS;
     }
 
@@ -2833,7 +2856,7 @@ prefix_bgp_show_prefix_list (struct vty *vty, afi_t afi, char *name, u_char use_
       else
         json_object_object_add(json, "ipv6PrefixList", json_prefix);
 
-      vty_out (vty, "%s%s", json_object_to_json_string(json), VTY_NEWLINE);
+      vty_out (vty, "%s%s", json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY), VTY_NEWLINE);
       json_object_free(json);
     }
   else

@@ -46,6 +46,7 @@ struct rd_ip
 };
 
 extern u_int16_t decode_rd_type (u_char *pnt);
+extern void encode_rd_type (u_int16_t, u_char *);
 extern void decode_rd_as (u_char *pnt, struct rd_as *rd_as);
 extern void decode_rd_as4 (u_char *pnt, struct rd_as *rd_as);
 extern void decode_rd_ip (u_char *pnt, struct rd_ip *rd_ip);

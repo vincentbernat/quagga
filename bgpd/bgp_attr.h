@@ -63,6 +63,21 @@ struct bgp_attr_encap_subtlv {
     uint8_t				value[1];	/* will be extended */
 };
 
+#if ENABLE_BGP_VNC
+/*
+ * old rfp<->rfapi representation
+ */
+struct bgp_tea_options {
+    struct bgp_tea_options *next;
+    uint8_t               options_count;
+    uint16_t              options_length; /* each TLV may be 256 in length */
+    uint8_t               type;
+    uint8_t               length;
+    void                 *value; /* pointer to data */
+};
+
+#endif
+
 /* Additional/uncommon BGP attributes.
  * lazily allocated as and when a struct attr
  * requires it.
@@ -107,6 +122,10 @@ struct attr_extra
 
   uint16_t			encap_tunneltype;	/* grr */
   struct bgp_attr_encap_subtlv *encap_subtlvs;		/* rfc5512 */
+
+#if ENABLE_BGP_VNC
+  struct bgp_attr_encap_subtlv *vnc_subtlvs;		/* VNC-specific */
+#endif
 };
 
 /* BGP core attribute structure. */
@@ -148,6 +167,7 @@ struct attr
 #define BATTR_RMAP_NEXTHOP_UNCHANGED (1 << 3)
 #define BATTR_RMAP_IPV6_GLOBAL_NHOP_CHANGED (1 << 4)
 #define BATTR_RMAP_IPV6_LL_NHOP_CHANGED (1 << 5)
+#define BATTR_RMAP_IPV6_PREFER_GLOBAL_CHANGED (1 << 6)
 
 /* Router Reflector related structure. */
 struct cluster_list
@@ -277,6 +297,7 @@ bgp_rmap_nhop_changed(u_int32_t out_rmap_flags, u_int32_t in_rmap_flags)
            CHECK_FLAG(out_rmap_flags, BATTR_RMAP_NEXTHOP_UNCHANGED) ||
            CHECK_FLAG(out_rmap_flags, BATTR_RMAP_IPV4_NHOP_CHANGED) ||
            CHECK_FLAG(out_rmap_flags, BATTR_RMAP_IPV6_GLOBAL_NHOP_CHANGED) ||
+           CHECK_FLAG(out_rmap_flags, BATTR_RMAP_IPV6_PREFER_GLOBAL_CHANGED) ||
            CHECK_FLAG(out_rmap_flags, BATTR_RMAP_IPV6_LL_NHOP_CHANGED) ||
            CHECK_FLAG(in_rmap_flags, BATTR_RMAP_NEXTHOP_UNCHANGED)) ? 1 : 0);
 }

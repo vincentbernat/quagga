@@ -47,6 +47,11 @@ Boston, MA 02111-1307, USA.  */
 #include "bgpd/bgp_nexthop.h"
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_evpn.h"
+#include "bgpd/bgp_bfd.h"
+#if ENABLE_BGP_VNC
+# include "bgpd/rfapi/rfapi_backend.h"
+# include "bgpd/rfapi/vnc_export_bgp.h"
+#endif
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -424,7 +429,16 @@ bgp_interface_down (int command, struct zclient *zclient, zebra_size_t length,
 
     for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))
       {
+#if defined(HAVE_CUMULUS)
+        /* Take down directly connected EBGP peers as well as 1-hop BFD
+         * tracked (directly connected) IBGP peers.
+         */
+        if ((peer->ttl != 1) && (peer->gtsm_hops != 1) &&
+            (!peer->bfd_info || bgp_bfd_is_peer_multihop(peer)))
+#else
+        /* Take down directly connected EBGP peers */
         if ((peer->ttl != 1) && (peer->gtsm_hops != 1))
+#endif
           continue;
 
         if (ifp == peer->nexthop.ifp)
@@ -656,13 +670,13 @@ zebra_read_ipv4 (int command, struct zclient *zclient, zebra_size_t length,
   /* Type, flags, message. */
   api.type = stream_getc (s);
   api.instance = stream_getw (s);
-  api.flags = stream_getc (s);
+  api.flags = stream_getl (s);
   api.message = stream_getc (s);
 
   /* IPv4 prefix. */
   memset (&p, 0, sizeof (struct prefix_ipv4));
   p.family = AF_INET;
-  p.prefixlen = stream_getc (s);
+  p.prefixlen = MIN(IPV4_MAX_PREFIXLEN, stream_getc (s));
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
   /* Nexthop, ifindex, distance, metric. */
@@ -771,13 +785,13 @@ zebra_read_ipv6 (int command, struct zclient *zclient, zebra_size_t length,
   /* Type, flags, message. */
   api.type = stream_getc (s);
   api.instance = stream_getw (s);
-  api.flags = stream_getc (s);
+  api.flags = stream_getl (s);
   api.message = stream_getc (s);
 
   /* IPv6 prefix. */
   memset (&p, 0, sizeof (struct prefix_ipv6));
   p.family = AF_INET6;
-  p.prefixlen = stream_getc (s);
+  p.prefixlen = MIN(IPV6_MAX_PREFIXLEN, stream_getc (s));
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
   /* Nexthop, ifindex, distance, metric. */
@@ -1254,7 +1268,7 @@ int
 bgp_zebra_announce (struct bgp *bgp, afi_t afi, safi_t safi,
                     struct prefix *p, struct bgp_info *info)
 {
-  int flags;
+  u_int32_t flags;
   u_char distance;
   struct peer *peer;
   struct bgp_info *mpinfo;
@@ -1653,7 +1667,7 @@ int
 bgp_zebra_withdraw (struct bgp *bgp, afi_t afi, safi_t safi,
                     struct prefix *p, struct bgp_info *info)
 {
-  int flags;
+  u_int32_t flags;
   struct peer *peer;
 
   peer = info->peer;
@@ -1839,6 +1853,13 @@ bgp_redistribute_set (struct bgp *bgp, afi_t afi, int type, u_short instance)
       if (vrf_bitmap_check (zclient->redist[afi][type], bgp->vrf_id))
         return CMD_WARNING;
 
+#if ENABLE_BGP_VNC
+      if (bgp->vrf_id == VRF_DEFAULT &&
+          type == ZEBRA_ROUTE_VNC_DIRECT) {
+        vnc_export_bgp_enable(bgp, afi);	/* only enables if mode bits cfg'd */
+      }
+#endif
+
       vrf_bitmap_set (zclient->redist[afi][type], bgp->vrf_id);
     }
 
@@ -1965,6 +1986,13 @@ bgp_redistribute_unreg (struct bgp *bgp, afi_t afi, int type, u_short instance)
         return CMD_WARNING;
       vrf_bitmap_unset (zclient->redist[afi][type], bgp->vrf_id);
     }
+
+#if ENABLE_BGP_VNC
+  if (bgp->vrf_id == VRF_DEFAULT &&
+      type == ZEBRA_ROUTE_VNC_DIRECT) {
+    vnc_export_bgp_disable(bgp, afi);
+  }
+#endif
 
   if (bgp_install_info_to_zebra (bgp))
     {
@@ -2172,14 +2200,10 @@ bgp_zebra_init (struct thread_master *master)
   zclient->interface_nbr_address_add = bgp_interface_nbr_address_add;
   zclient->interface_nbr_address_delete = bgp_interface_nbr_address_delete;
   zclient->interface_vrf_update = bgp_interface_vrf_update;
-  zclient->ipv4_route_add = zebra_read_ipv4;
-  zclient->ipv4_route_delete = zebra_read_ipv4;
   zclient->redistribute_route_ipv4_add = zebra_read_ipv4;
   zclient->redistribute_route_ipv4_del = zebra_read_ipv4;
   zclient->interface_up = bgp_interface_up;
   zclient->interface_down = bgp_interface_down;
-  zclient->ipv6_route_add = zebra_read_ipv6;
-  zclient->ipv6_route_delete = zebra_read_ipv6;
   zclient->redistribute_route_ipv6_add = zebra_read_ipv6;
   zclient->redistribute_route_ipv6_del = zebra_read_ipv6;
   zclient->nexthop_update = bgp_read_nexthop_update;

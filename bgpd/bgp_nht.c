@@ -371,8 +371,8 @@ bgp_parse_nexthop_update (int command, vrf_id_t vrf_id)
     {
       char buf[PREFIX2STR_BUFFER];
       prefix2str(&p, buf, sizeof (buf));
-      zlog_debug("parse nexthop update(%s): metric=%d, #nexthop=%d", buf,
-		 metric, nexthop_num);
+      zlog_debug("%d: NH update for %s - metric %d (cur %d) #nhops %d (cur %d)",
+                 vrf_id, buf, metric, bnc->metric, nexthop_num, bnc->nexthop_num);
     }
 
   if (metric != bnc->metric)
@@ -418,6 +418,13 @@ bgp_parse_nexthop_update (int command, vrf_id_t vrf_id)
               /* do nothing */
               break;
 	    }
+
+          if (BGP_DEBUG(nht, NHT))
+            {
+              char buf[NEXTHOP_STRLEN];
+              zlog_debug("    nhop via %s",
+                         nexthop2str (nexthop, buf, sizeof (buf)));
+            }
 
 	  if (nhlist_tail)
 	    {
@@ -641,6 +648,14 @@ evaluate_paths (struct bgp_nexthop_cache *bnc)
   int afi;
   struct peer *peer = (struct peer *)bnc->nht_info;
 
+  if (BGP_DEBUG(nht, NHT))
+    {
+      char buf[PREFIX2STR_BUFFER];
+      bnc_str(bnc, buf, PREFIX2STR_BUFFER);
+      zlog_debug("NH update for %s - flags 0x%x chgflags 0x%x - evaluate paths",
+                 buf, bnc->flags, bnc->change_flags);
+    }
+
   LIST_FOREACH(path, &(bnc->paths), nh_thread)
     {
       if (!(path->type == ZEBRA_ROUTE_BGP &&
@@ -680,8 +695,6 @@ evaluate_paths (struct bgp_nexthop_cache *bnc)
       if (CHECK_FLAG(bnc->change_flags, BGP_NEXTHOP_METRIC_CHANGED) ||
 	  CHECK_FLAG(bnc->change_flags, BGP_NEXTHOP_CHANGED))
 	SET_FLAG(path->flags, BGP_INFO_IGP_CHANGED);
-      else
-        UNSET_FLAG (path->flags, BGP_INFO_IGP_CHANGED);
 
       bgp_process(bgp, rn, afi, SAFI_UNICAST);
     }

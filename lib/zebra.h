@@ -318,26 +318,6 @@ struct in_pktinfo
 #endif
 
 /* 
- * OSPF Fragmentation / fragmented writes
- *
- * ospfd can support writing fragmented packets, for cases where
- * kernel will not fragment IP_HDRINCL and/or multicast destined
- * packets (ie TTBOMK all kernels, BSD, SunOS, Linux). However,
- * SunOS, probably BSD too, clobber the user supplied IP ID and IP
- * flags fields, hence user-space fragmentation will not work.
- * Only Linux is known to leave IP header unmolested.
- * Further, fragmentation really should be done the kernel, which already
- * supports it, and which avoids nasty IP ID state problems.
- *
- * Fragmentation of OSPF packets can be required on networks with router
- * with many many interfaces active in one area, or on networks with links
- * with low MTUs.
- */
-#ifdef GNU_LINUX
-#define WANT_OSPF_WRITE_FRAGMENT
-#endif
-
-/* 
  * IP_HDRINCL / struct ip byte order
  *
  * Linux: network byte order
@@ -372,18 +352,21 @@ struct in_pktinfo
 #endif /* ndef BYTE_ORDER */
 
 /* MAX / MIN are not commonly defined, but useful */
-#ifndef MAX
+/* note: glibc sys/param.h has #define MIN(a,b) (((a)<(b))?(a):(b)) */
+#ifdef MAX
+#undef MAX
+#endif
 #define MAX(a, b) \
 	({ typeof (a) _a = (a); \
 	   typeof (b) _b = (b); \
 	   _a > _b ? _a : _b; })
+#ifdef MIN
+#undef MIN
 #endif
-#ifndef MIN
 #define MIN(a, b) \
 	({ typeof (a) _a = (a); \
 	   typeof (b) _b = (b); \
 	   _a < _b ? _a : _b; })
-#endif
 
 #define ZEBRA_NUM_OF(x) (sizeof (x) / sizeof (x[0]))
 
@@ -448,6 +431,13 @@ typedef enum {
   ZEBRA_REMOTE_VTEP_DEL,
   ZEBRA_ADVERTISE_VNI,
   ZEBRA_IPMR_ROUTE_STATS,
+  ZEBRA_INTERFACE_LINK_PARAMS,
+  ZEBRA_MPLS_LABELS_ADD,
+  ZEBRA_MPLS_LABELS_DELETE,
+  ZEBRA_IPV4_NEXTHOP_ADD,
+  ZEBRA_IPV4_NEXTHOP_DELETE,
+  ZEBRA_IPV6_NEXTHOP_ADD,
+  ZEBRA_IPV6_NEXTHOP_DELETE,
 } zebra_message_types_t;
 
 /* Marker value used in new Zserv, in the byte location corresponding
@@ -495,6 +485,7 @@ extern const char *zserv_command_string (unsigned int command);
 #define ZEBRA_FLAG_STATIC             0x40
 #define ZEBRA_FLAG_REJECT             0x80
 #define ZEBRA_FLAG_SCOPE_LINK         0x100
+#define ZEBRA_FLAG_FIB_OVERRIDE       0x200
 
 #ifndef INADDR_LOOPBACK
 #define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */
@@ -570,45 +561,6 @@ typedef u_int16_t zebra_command_t;
 
 /* VRF ID type. */
 typedef u_int16_t vrf_id_t;
-
-/* FIFO -- first in first out structure and macros.  */
-struct fifo
-{
-  struct fifo *next;
-  struct fifo *prev;
-};
-
-#define FIFO_INIT(F)                                  \
-  do {                                                \
-    struct fifo *Xfifo = (struct fifo *)(F);          \
-    Xfifo->next = Xfifo->prev = Xfifo;                \
-  } while (0)
-
-#define FIFO_ADD(F,N)                                 \
-  do {                                                \
-    struct fifo *Xfifo = (struct fifo *)(F);          \
-    struct fifo *Xnode = (struct fifo *)(N);          \
-    Xnode->next = Xfifo;                              \
-    Xnode->prev = Xfifo->prev;                        \
-    Xfifo->prev = Xfifo->prev->next = Xnode;          \
-  } while (0)
-
-#define FIFO_DEL(N)                                   \
-  do {                                                \
-    struct fifo *Xnode = (struct fifo *)(N);          \
-    Xnode->prev->next = Xnode->next;                  \
-    Xnode->next->prev = Xnode->prev;                  \
-  } while (0)
-
-#define FIFO_HEAD(F)                                  \
-  ((((struct fifo *)(F))->next == (struct fifo *)(F)) \
-  ? NULL : (F)->next)
-
-#define FIFO_EMPTY(F)                                 \
-  (((struct fifo *)(F))->next == (struct fifo *)(F))
-
-#define FIFO_TOP(F)                                   \
-  (FIFO_EMPTY(F) ? NULL : ((struct fifo *)(F))->next)
 
 static inline afi_t afi_iana2int (iana_afi_t iana_afi)
 {

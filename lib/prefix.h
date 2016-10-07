@@ -23,12 +23,15 @@
 #ifndef _ZEBRA_PREFIX_H
 #define _ZEBRA_PREFIX_H
 
-#ifdef GNU_LINUX
-#include <net/ethernet.h>
+#ifdef SUNOS_5
+# include <sys/ethernet.h>
 #else
-#include <netinet/if_ether.h>
+# ifdef GNU_LINUX
+#  include <net/ethernet.h>
+# else
+#  include <netinet/if_ether.h>
+# endif
 #endif
-
 #include "sockunion.h"
 
 #ifndef ETHER_ADDR_LEN
@@ -44,11 +47,13 @@
 #endif
 #endif
 
-/* MAC address. */
-struct eth_addr
-{
-  u_char octet[ETHER_ADDR_LEN];
-} __attribute__ ((packed));
+/*
+ * there isn't a portable ethernet address type. We define our
+ * own to simplify internal handling
+ */
+struct ethaddr {
+    u_char octet[ETHER_ADDR_LEN];
+} __packed;
 
 /* EVPN address (RFC 7432) */
 struct evpn_addr
@@ -58,7 +63,7 @@ struct evpn_addr
 #define IP_ADDR_NONE      0x0
 #define IP_ADDR_V4        0x1
 #define IP_ADDR_V6        0x2
-  struct eth_addr mac;
+  struct ethaddr mac;
   union
   {
     u_char addr;
@@ -85,6 +90,15 @@ struct prefix_evpn
  * interface.
  */
 
+/* different OSes use different names */
+#if defined(AF_PACKET)
+#define AF_ETHERNET AF_PACKET
+#else
+#if defined(AF_LINK)
+#define AF_ETHERNET AF_LINK
+#endif
+#endif
+
 /* IPv4 and IPv6 unified prefix structure. */
 struct prefix
 {
@@ -100,6 +114,7 @@ struct prefix
       struct in_addr id;
       struct in_addr adv_router;
     } lp;
+    struct ethaddr prefix_eth;
     u_char val[8];
     uintptr_t ptr;
     struct evpn_addr prefix_evpn;
@@ -136,6 +151,14 @@ struct prefix_rd
   u_char family;
   u_char prefixlen;
   u_char val[8] __attribute__ ((aligned (8)));
+};
+
+/* Prefix for ethernet. */
+struct prefix_eth
+{
+  u_char family;
+  u_char prefixlen;
+  struct ethaddr eth_addr __attribute__ ((aligned (8))); /* AF_ETHERNET */
 };
 
 /* Prefix for a generic pointer */
@@ -231,6 +254,7 @@ extern int str2family(const char *);
 extern int afi2family (afi_t);
 extern afi_t family2afi (int);
 extern const char *safi2str(safi_t safi);
+extern const char *afi2str(afi_t afi);
 
 /* Check bit of the prefix. */
 extern unsigned int prefix_bit (const u_char *prefix, const u_char prefixlen);
@@ -256,6 +280,8 @@ extern struct prefix *sockunion2prefix (const union sockunion *dest,
                                         const union sockunion *mask);
 extern struct prefix *sockunion2hostprefix (const union sockunion *, struct prefix *p);
 extern void prefix2sockunion (const struct prefix *, union sockunion *);
+
+extern int str2prefix_eth (const char *, struct prefix_eth *);
 
 extern struct prefix_ipv4 *prefix_ipv4_new (void);
 extern void prefix_ipv4_free (struct prefix_ipv4 *);

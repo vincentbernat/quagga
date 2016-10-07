@@ -26,6 +26,12 @@
 #include "vector.h"
 #include "vty.h"
 #include "lib/route_types.h"
+#include "memory.h"
+
+DECLARE_MTYPE(HOST)
+
+/* for test-commands.c */
+DECLARE_MTYPE(STRVEC)
 
 /* Host configuration variable */
 struct host
@@ -71,9 +77,11 @@ enum node_type
   SERVICE_NODE, 		/* Service node. */
   DEBUG_NODE,			/* Debug node. */
   VRF_DEBUG_NODE,               /* Vrf Debug node. */
+  DEBUG_VNC_NODE,		/* Debug VNC node. */
   AAA_NODE,			/* AAA node. */
   KEYCHAIN_NODE,		/* Key-chain node. */
   KEYCHAIN_KEY_NODE,		/* Key-chain key node. */
+  NS_NODE,			/* Logical-Router node. */
   VRF_NODE,		        /* VRF mode node. */
   INTERFACE_NODE,		/* Interface mode node. */
   ZEBRA_NODE,			/* zebra connection node. */
@@ -91,8 +99,19 @@ enum node_type
   BGP_ENCAPV6_NODE,		/* BGP ENCAP SAFI */
   BGP_EVPN_NODE,		/* BGP EVPN SAFI */
   BGP_EVPN_VNI_NODE,	/* BGP EVPN VNI */
+  BGP_VNC_DEFAULTS_NODE,	/* BGP VNC nve defaults */
+  BGP_VNC_NVE_GROUP_NODE,	/* BGP VNC nve group */
+  BGP_VNC_L2_GROUP_NODE,	/* BGP VNC L2 group */
+  RFP_DEFAULTS_NODE,	/* RFP defaults node */
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
+  LDP_NODE,			/* LDP protocol mode */
+  LDP_IPV4_NODE,		/* LDP IPv4 address family */
+  LDP_IPV6_NODE,		/* LDP IPv6 address family */
+  LDP_IPV4_IFACE_NODE,		/* LDP IPv4 Interface */
+  LDP_IPV6_IFACE_NODE,		/* LDP IPv6 Interface */
+  LDP_L2VPN_NODE,		/* LDP L2VPN node */
+  LDP_PSEUDOWIRE_NODE,		/* LDP Pseudowire node */
   ISIS_NODE,			/* ISIS protocol mode */
   PIM_NODE,			/* PIM protocol mode */
   MASC_NODE,			/* MASC for multicast.  */
@@ -109,7 +128,9 @@ enum node_type
   DUMP_NODE,			/* Packet dump node. */
   FORWARDING_NODE,		/* IP forwarding node. */
   PROTOCOL_NODE,                /* protocol filtering node */
+  MPLS_NODE,                    /* MPLS config node */
   VTY_NODE,			/* Vty node. */
+  LINK_PARAMS_NODE,		/* Link-parameters node */
 };
 
 /* Node which has some commands and prompt string and configuration
@@ -521,6 +542,11 @@ struct cmd_token
 #define AREA_TAG_STR "[area tag]\n"
 #define COMMUNITY_AANN_STR "Community number where AA and NN are <0-65535>\n"
 #define COMMUNITY_VAL_STR  "Community number in AA:NN format (where AA and NN are <0-65535>) or local-AS|no-advertise|no-export|internet or additive\n"
+#define MPLS_TE_STR "MPLS-TE specific commands\n"
+#define LINK_PARAMS_STR "Configure interface link parameters\n"
+#define OSPF_RI_STR "OSPF Router Information specific commands\n"
+#define PCE_STR "PCE Router Information specific commands\n"
+#define MPLS_STR "MPLS information\n"
 
 #define CONF_BACKUP_EXT ".sav"
 

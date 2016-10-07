@@ -29,6 +29,7 @@
 #include "command.h"
 #include "vty.h"
 #include "memory.h"
+#include "memory_vty.h"
 #include "stream.h"
 #include "if.h"
 #include "privs.h"
@@ -50,6 +51,8 @@
 #include "isisd/isis_route.h"
 #include "isisd/isis_routemap.h"
 #include "isisd/isis_zebra.h"
+#include "isisd/isis_tlv.h"
+#include "isisd/isis_te.h"
 
 /* Default configuration file name */
 #define ISISD_DEFAULT_CONFIG "isisd.conf"
@@ -348,6 +351,7 @@ main (int argc, char **argv, char **envp)
   isis_spf_cmds_init ();
   isis_redist_init ();
   isis_route_map_init();
+  isis_mpls_te_init();
 
   /* create the global 'isis' instance */
   isis_new (1);

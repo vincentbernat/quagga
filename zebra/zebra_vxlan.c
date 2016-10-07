@@ -41,6 +41,10 @@
 #include "zebra/zebra_vrf.h"
 #include "zebra/rt_netlink.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_memory.h"
+
+DEFINE_MTYPE_STATIC(ZEBRA, ZVNI,      "VNI hash");
+DEFINE_MTYPE_STATIC(ZEBRA, ZVNI_VTEP, "VNI remote VTEP");
 
 /* definitions */
 typedef struct zebra_vni_t_ zebra_vni_t;

@@ -27,6 +27,9 @@
 #include "memory.h"
 
 #ifdef HAVE_CAPABILITIES
+
+DEFINE_MTYPE_STATIC(LIB, PRIVS, "Privilege information")
+
 /* sort out some generic internal types for:
  *
  * privilege values (cap_value_t, priv_t) 	-> pvalue_t
@@ -247,12 +250,6 @@ zprivs_caps_init (struct zebra_privs_t *zprivs)
       exit(1);
     }
 
-  if ( !zprivs_state.syscaps_p )
-    {
-      fprintf (stderr, "privs_init: capabilities enabled, "
-                       "but no capabilities supplied\n");
-    }
-
   /* we have caps, we have no need to ever change back the original user */
   if (zprivs_state.zuid)
     {
@@ -263,6 +260,9 @@ zprivs_caps_init (struct zebra_privs_t *zprivs)
           exit (1);
         }
     }
+
+  if ( !zprivs_state.syscaps_p )
+    return;
   
   if ( !(zprivs_state.caps = cap_init()) )
     {
@@ -307,11 +307,18 @@ zprivs_caps_init (struct zebra_privs_t *zprivs)
 
       current_caps = cap_get_proc();
       if (current_caps)
+        {
           current_caps_text = cap_to_text(current_caps, NULL);
+          cap_free(current_caps);
+        }
 
       wanted_caps_text = cap_to_text(zprivs_state.caps, NULL);
       fprintf(stderr, "Wanted caps: %s\n", wanted_caps_text ? wanted_caps_text : "???");
       fprintf(stderr, "Have   caps: %s\n", current_caps_text ? current_caps_text : "???");
+      if (current_caps_text)
+          cap_free(current_caps_text);
+      if (wanted_caps_text)
+          cap_free(wanted_caps_text);
 
       exit (1);
     }

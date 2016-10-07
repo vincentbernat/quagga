@@ -63,6 +63,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_damp.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_encap.h"
+#if ENABLE_BGP_VNC
+#include "bgpd/rfapi/bgp_rfapi_cfg.h"
+#include "bgpd/rfapi/rfapi_backend.h"
+#endif
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_vty.h"
@@ -74,6 +78,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_bfd.h"
 #include "bgpd/bgp_evpn.h"
+#include "bgpd/bgp_memory.h"
 
 /* BGP process wide configuration.  */
 static struct bgp_master bgp_master;
@@ -1164,7 +1169,7 @@ peer_unlock_with_caller (const char *name, struct peer *peer)
 }
 
 /* Allocate new peer object, implicitely locked.  */
-static struct peer *
+struct peer *
 peer_new (struct bgp *bgp)
 {
   afi_t afi;
@@ -1333,7 +1338,7 @@ bgp_peer_conf_if_to_su_update_v4 (struct peer *peer, struct interface *ifp)
 {
   struct connected *ifc;
   struct prefix p;
-  u_int32_t s_addr;
+  u_int32_t addr;
   struct listnode *node;
 
   /* If our IPv4 address on the interface is /30 or /31, we can derive the
@@ -1347,11 +1352,11 @@ bgp_peer_conf_if_to_su_update_v4 (struct peer *peer, struct interface *ifp)
           if (p.prefixlen == 30)
             {
               peer->su.sa.sa_family = AF_INET;
-              s_addr = ntohl(p.u.prefix4.s_addr);
-              if (s_addr % 4 == 1)
-                peer->su.sin.sin_addr.s_addr = htonl(s_addr+1);
-              else if (s_addr % 4 == 2)
-                peer->su.sin.sin_addr.s_addr = htonl(s_addr-1);
+              addr = ntohl(p.u.prefix4.s_addr);
+              if (addr % 4 == 1)
+                peer->su.sin.sin_addr.s_addr = htonl(addr+1);
+              else if (addr % 4 == 2)
+                peer->su.sin.sin_addr.s_addr = htonl(addr-1);
 #ifdef HAVE_STRUCT_SOCKADDR_IN_SIN_LEN
               peer->su.sin.sin_len = sizeof(struct sockaddr_in);
 #endif /* HAVE_STRUCT_SOCKADDR_IN_SIN_LEN */
@@ -1360,11 +1365,11 @@ bgp_peer_conf_if_to_su_update_v4 (struct peer *peer, struct interface *ifp)
           else if (p.prefixlen == 31)
             {
               peer->su.sa.sa_family = AF_INET;
-              s_addr = ntohl(p.u.prefix4.s_addr);
-              if (s_addr % 2 == 0)
-                peer->su.sin.sin_addr.s_addr = htonl(s_addr+1);
+              addr = ntohl(p.u.prefix4.s_addr);
+              if (addr % 2 == 0)
+                peer->su.sin.sin_addr.s_addr = htonl(addr+1);
               else
-                peer->su.sin.sin_addr.s_addr = htonl(s_addr-1);
+                peer->su.sin.sin_addr.s_addr = htonl(addr-1);
 #ifdef HAVE_STRUCT_SOCKADDR_IN_SIN_LEN
               peer->su.sin.sin_len = sizeof(struct sockaddr_in);
 #endif /* HAVE_STRUCT_SOCKADDR_IN_SIN_LEN */
@@ -2153,13 +2158,13 @@ peer_delete (struct peer *peer)
 
   if (peer->hostname)
     {
-      XFREE(MTYPE_HOST, peer->hostname);
+      XFREE(MTYPE_BGP_PEER_HOST, peer->hostname);
       peer->hostname = NULL;
     }
 
   if (peer->domainname)
     {
-      XFREE(MTYPE_HOST, peer->domainname);
+      XFREE(MTYPE_BGP_PEER_HOST, peer->domainname);
       peer->domainname = NULL;
     }
   
@@ -2178,14 +2183,14 @@ peer_group_cmp (struct peer_group *g1, struct peer_group *g2)
 static struct peer_group *
 peer_group_new (void)
 {
-  return (struct peer_group *) XCALLOC (MTYPE_BGP_PEER_GROUP,
+  return (struct peer_group *) XCALLOC (MTYPE_PEER_GROUP,
 					sizeof (struct peer_group));
 }
 
 static void
 peer_group_free (struct peer_group *group)
 {
-  XFREE (MTYPE_BGP_PEER_GROUP, group);
+  XFREE (MTYPE_PEER_GROUP, group);
 }
 
 struct peer_group *
@@ -2215,8 +2220,8 @@ peer_group_get (struct bgp *bgp, const char *name)
   group = peer_group_new ();
   group->bgp = bgp;
   if (group->name)
-    XFREE(MTYPE_BGP_PEER_GROUP_HOST, group->name);
-  group->name = XSTRDUP(MTYPE_BGP_PEER_GROUP_HOST, name);
+    XFREE(MTYPE_PEER_GROUP_HOST, group->name);
+  group->name = XSTRDUP(MTYPE_PEER_GROUP_HOST, name);
   group->peer = list_new ();
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     group->listen_range[afi] = list_new ();
@@ -2958,6 +2963,12 @@ bgp_create (as_t *as, const char *name, enum bgp_instance_type inst_type)
 
   bgp->as = *as;
 
+#if ENABLE_BGP_VNC
+  bgp->rfapi = bgp_rfapi_new(bgp);
+  assert(bgp->rfapi);
+  assert(bgp->rfapi_cfg);
+#endif /* ENABLE_BGP_VNC */
+
   if (name)
     {
       bgp->name = XSTRDUP(MTYPE_BGP, name);
@@ -3240,6 +3251,11 @@ bgp_delete (struct bgp *bgp)
 
   /* TODO - Other memory may need to be freed - e.g., NHT */
 
+#if ENABLE_BGP_VNC
+  rfapi_delete(bgp);
+  bgp_cleanup_routes();         /* rfapi cleanup can create route entries! */
+#endif
+
   /* Remove visibility via the master list - there may however still be
    * routes to be processed still referencing the struct bgp.
    */
@@ -3313,6 +3329,8 @@ bgp_free (struct bgp *bgp)
 	if (bgp->rib[afi][safi])
           bgp_table_finish (&bgp->rib[afi][safi]);
       }
+
+  bgp_address_destroy (bgp);
 
   /* If Default instance or VRF, unlink from the VRF structure. */
   vrf = bgp_vrf_lookup_by_instance_type (bgp);
@@ -5321,6 +5339,9 @@ peer_distribute_update (struct access_list *access)
 		  }
 	      }
 	}
+#if ENABLE_BGP_VNC
+      vnc_prefix_list_update(bgp);
+#endif
     }
 }
 
@@ -6828,6 +6849,18 @@ bgp_config_write_peer_af (struct vty *vty, struct bgp *bgp,
                                 "  neighbor %s activate%s",
                                 addr, VTY_NEWLINE);
         }
+      else
+	{
+	  if ((afi == AFI_IP) && (safi == SAFI_UNICAST))
+	    {
+	      if (!bgp_flag_check (bgp, BGP_FLAG_NO_DEFAULT_IPV4))
+		{
+		  afi_header_vty_out (vty, afi, safi, write,
+				      "  no neighbor %s activate%s",
+				      addr, VTY_NEWLINE);
+		}
+	    }
+	}
     }
 
   /* addpath TX knobs */
@@ -7318,6 +7351,9 @@ bgp_config_write (struct vty *vty)
       if (bgp->stalepath_time != BGP_DEFAULT_STALEPATH_TIME)
 	vty_out (vty, " bgp graceful-restart stalepath-time %d%s",
 		 bgp->stalepath_time, VTY_NEWLINE);
+      if (bgp->restart_time != BGP_DEFAULT_RESTART_TIME)
+	vty_out (vty, " bgp graceful-restart restart-time %d%s",
+		 bgp->restart_time, VTY_NEWLINE);
       if (bgp_flag_check (bgp, BGP_FLAG_GRACEFUL_RESTART))
        vty_out (vty, " bgp graceful-restart%s", VTY_NEWLINE);
 
@@ -7420,6 +7456,11 @@ bgp_config_write (struct vty *vty)
 
       /* EVPN configuration.  */
       write += bgp_config_write_family (vty, bgp, AFI_L2VPN, SAFI_EVPN);
+#if ENABLE_BGP_VNC
+      write += bgp_rfapi_cfg_write(vty, bgp);
+#endif
+
+      vty_out (vty, " exit%s", VTY_NEWLINE);
 
       write++;
     }
@@ -7491,6 +7532,10 @@ bgp_init (void)
   /* Init zebra. */
   bgp_zebra_init(bm->master);
 
+#if ENABLE_BGP_VNC
+  vnc_zebra_init (bm->master);
+#endif
+
   /* BGP VTY commands installation.  */
   bgp_vty_init ();
 
@@ -7503,6 +7548,9 @@ bgp_init (void)
   bgp_scan_vty_init();
   bgp_mplsvpn_init ();
   bgp_encap_init ();
+#if ENABLE_BGP_VNC
+  rfapi_init ();
+#endif
 
   /* Access list initialize. */
   access_list_init ();

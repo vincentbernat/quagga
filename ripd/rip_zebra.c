@@ -147,13 +147,13 @@ rip_zebra_read_ipv4 (int command, struct zclient *zclient, zebra_size_t length,
   /* Type, flags, message. */
   api.type = stream_getc (s);
   api.instance = stream_getw (s);
-  api.flags = stream_getc (s);
+  api.flags = stream_getl (s);
   api.message = stream_getc (s);
 
   /* IPv4 prefix. */
   memset (&p, 0, sizeof (struct prefix_ipv4));
   p.family = AF_INET;
-  p.prefixlen = stream_getc (s);
+  p.prefixlen = MIN(IPV4_MAX_PREFIXLEN, stream_getc (s));
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
   /* Nexthop, ifindex, distance, metric. */
@@ -248,6 +248,7 @@ static struct {
   {ZEBRA_ROUTE_STATIC,  1, "static"},
   {ZEBRA_ROUTE_OSPF,    1, "ospf"},
   {ZEBRA_ROUTE_BGP,     2, "bgp"},
+  {ZEBRA_ROUTE_VNC,     1, "vnc"},
   {0, 0, NULL}
 };
 
@@ -723,8 +724,6 @@ rip_zclient_init (struct thread_master *master)
   zclient->interface_delete = rip_interface_delete;
   zclient->interface_address_add = rip_interface_address_add;
   zclient->interface_address_delete = rip_interface_address_delete;
-  zclient->ipv4_route_add = rip_zebra_read_ipv4;
-  zclient->ipv4_route_delete = rip_zebra_read_ipv4;
   zclient->interface_up = rip_interface_up;
   zclient->interface_down = rip_interface_down;
   zclient->redistribute_route_ipv4_add = rip_zebra_read_ipv4;

@@ -229,13 +229,13 @@ ospf6_zebra_read_ipv6 (int command, struct zclient *zclient,
   /* Type, flags, message. */
   api.type = stream_getc (s);
   api.instance = stream_getw (s);
-  api.flags = stream_getc (s);
+  api.flags = stream_getl (s);
   api.message = stream_getc (s);
 
   /* IPv6 prefix. */
   memset (&p, 0, sizeof (struct prefix_ipv6));
   p.family = AF_INET6;
-  p.prefixlen = stream_getc (s);
+  p.prefixlen = MIN(IPV6_MAX_PREFIXLEN, stream_getc (s));
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
   /* Nexthop, ifindex, distance, metric. */
@@ -677,12 +677,8 @@ ospf6_zebra_init (struct thread_master *master)
   zclient->interface_down = ospf6_zebra_if_state_update;
   zclient->interface_address_add = ospf6_zebra_if_address_update_add;
   zclient->interface_address_delete = ospf6_zebra_if_address_update_delete;
-  zclient->ipv4_route_add = NULL;
-  zclient->ipv4_route_delete = NULL;
   zclient->redistribute_route_ipv4_add = NULL;
   zclient->redistribute_route_ipv4_del = NULL;
-  zclient->ipv6_route_add = ospf6_zebra_read_ipv6;
-  zclient->ipv6_route_delete = ospf6_zebra_read_ipv6;
   zclient->redistribute_route_ipv6_add = ospf6_zebra_read_ipv6;
   zclient->redistribute_route_ipv6_del = ospf6_zebra_read_ipv6;
 

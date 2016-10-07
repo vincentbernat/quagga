@@ -49,6 +49,26 @@
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_dump.h"
 
+/*
+ * OSPF Fragmentation / fragmented writes
+ *
+ * ospfd can support writing fragmented packets, for cases where
+ * kernel will not fragment IP_HDRINCL and/or multicast destined
+ * packets (ie TTBOMK all kernels, BSD, SunOS, Linux). However,
+ * SunOS, probably BSD too, clobber the user supplied IP ID and IP
+ * flags fields, hence user-space fragmentation will not work.
+ * Only Linux is known to leave IP header unmolested.
+ * Further, fragmentation really should be done the kernel, which already
+ * supports it, and which avoids nasty IP ID state problems.
+ *
+ * Fragmentation of OSPF packets can be required on networks with router
+ * with many many interfaces active in one area, or on networks with links
+ * with low MTUs.
+ */
+#ifdef GNU_LINUX
+#define WANT_OSPF_WRITE_FRAGMENT
+#endif
+
 /* Packet Type String. */
 const struct message ospf_packet_type_str[] =
 {
@@ -913,7 +933,7 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   /* Compare options. */
 #define REJECT_IF_TBIT_ON	1 /* XXX */
 #ifdef REJECT_IF_TBIT_ON
-  if (CHECK_FLAG (hello->options, OSPF_OPTION_T))
+  if (CHECK_FLAG (hello->options, OSPF_OPTION_MT))
     {
       /*
        * This router does not support non-zero TOS.
@@ -1265,7 +1285,7 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
     }
 
 #ifdef REJECT_IF_TBIT_ON
-  if (CHECK_FLAG (dd->options, OSPF_OPTION_T))
+  if (CHECK_FLAG (dd->options, OSPF_OPTION_MT))
     {
       /*
        * In Hello protocol, optional capability must have checked

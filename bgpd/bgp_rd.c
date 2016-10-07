@@ -32,14 +32,32 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_rd.h"
 
+#if ENABLE_BGP_VNC
+#include "bgpd/rfapi/rfapi_backend.h"
+#endif
+
 u_int16_t
 decode_rd_type (u_char *pnt)
 {
   u_int16_t v;
   
   v = ((u_int16_t) *pnt++ << 8);
+#if ENABLE_BGP_VNC
+  /*
+   * VNC L2 stores LHI in lower byte, so omit it
+   */
+  if (v != RD_TYPE_VNC_ETH)
+    v |= (u_int16_t) *pnt;
+#else                           /* duplicate code for clarity */
   v |= (u_int16_t) *pnt;
+#endif
   return v;
+}
+
+void
+encode_rd_type (u_int16_t v, u_char *pnt)
+{
+  *((u_int16_t *)pnt) = htons(v);
 }
 
 /* type == RD_TYPE_AS */
@@ -169,5 +187,20 @@ prefix_rd2str (struct prefix_rd *prd, char *buf, size_t size)
       snprintf (buf, size, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
       return buf;
     }
+#if ENABLE_BGP_VNC
+  else if (type == RD_TYPE_VNC_ETH)
+    {
+      snprintf(buf, size, "LHI:%d, %02x:%02x:%02x:%02x:%02x:%02x",
+	    *(pnt+1),	/* LHI */
+	    *(pnt+2),	/* MAC[0] */
+	    *(pnt+3),
+	    *(pnt+4),
+	    *(pnt+5),
+	    *(pnt+6),
+	    *(pnt+7));
+
+      return buf;
+    }
+#endif
   return NULL;
 }

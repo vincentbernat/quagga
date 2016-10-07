@@ -87,4 +87,7 @@ extern char *ecommunity_str (struct ecommunity *);
 extern int ecommunity_encode (u_char type, u_char sub_type, int trans, as_t as,
                 struct in_addr ip, u_int32_t val, struct ecommunity_val *eval);
 
+/* for vpn */
+extern struct ecommunity *ecommunity_new (void);
+extern int ecommunity_add_val (struct ecommunity *, struct ecommunity_val *);
 #endif /* _QUAGGA_BGP_ECOMMUNITY_H */

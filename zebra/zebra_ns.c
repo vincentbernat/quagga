@@ -21,6 +21,7 @@
  */
 #include "zebra.h"
 
+#include "lib/ns.h"
 #include "lib/vrf.h"
 #include "lib/prefix.h"
 #include "lib/memory.h"
@@ -28,6 +29,10 @@
 #include "rtadv.h"
 #include "zebra_ns.h"
 #include "zebra_vrf.h"
+#include "zebra_memory.h"
+
+DEFINE_MTYPE(ZEBRA, ZEBRA_NS,       "Zebra Name Space")
+DEFINE_MTYPE(ZEBRA, NETLINK_NAME,   "Netlink name")
 
 struct zebra_ns *dzns;
 
@@ -85,6 +90,8 @@ int
 zebra_ns_init (void)
 {
   dzns = XCALLOC (MTYPE_ZEBRA_NS, sizeof (struct zebra_ns));
+
+  ns_init ();
 
   zebra_vrf_init ();
 

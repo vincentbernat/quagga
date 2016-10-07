@@ -51,7 +51,9 @@ typedef enum
   ZLOG_OSPF,
   ZLOG_RIPNG,
   ZLOG_OSPF6,
+  ZLOG_LDP,
   ZLOG_ISIS,
+  ZLOG_RFP,
   ZLOG_PIM,
   ZLOG_MASC
 } zlog_proto_t;
@@ -115,11 +117,14 @@ extern void zlog (struct zlog *zl, int priority, const char *format, ...)
   PRINTF_ATTRIBUTE(3, 4);
 
 /* Handy zlog functions. */
+extern void vzlog (struct zlog *zl, int priority, const char *format, va_list args);
 extern void zlog_err (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
 extern void zlog_warn (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
 extern void zlog_info (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
 extern void zlog_notice (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
 extern void zlog_debug (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
+
+extern void vzlog (struct zlog *, int , const char *, va_list );
 
 extern void zlog_thread_info (int log_level);
 
@@ -179,6 +184,10 @@ extern size_t quagga_timestamp(int timestamp_precision /* # subsecond digits */,
 			       char *buf, size_t buflen);
 
 extern void zlog_hexdump(const void *mem, unsigned int len);
+
+
+extern int 
+vzlog_test (struct zlog *zl, int priority);
 
 /* structure useful for avoiding repeated rendering of the same timestamp */
 struct timestamp_control {

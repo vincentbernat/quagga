@@ -27,6 +27,9 @@
 #include "memory.h"
 #include "sockunion.h"
 
+DEFINE_MTYPE(       LIB, ROUTE_TABLE, "Route table")
+DEFINE_MTYPE_STATIC(LIB, ROUTE_NODE,  "Route node")
+
 static void route_node_delete (struct route_node *);
 static void route_table_free (struct route_table *);
 
@@ -519,6 +522,12 @@ static route_table_delegate_t default_delegate = {
   .create_node = route_node_create,
   .destroy_node = route_node_destroy
 };
+
+route_table_delegate_t *
+route_table_get_default_delegate(void)
+{
+  return &default_delegate;
+}
 
 /*
  * route_table_init

@@ -32,6 +32,7 @@
 #include "isisd/isis_redist.h"
 #include "isis_flags.h"
 #include "dict.h"
+#include "isis_memory.h"
 
 /* uncomment if you are a developer in bug hunt */
 /* #define EXTREME_DEBUG  */
@@ -196,5 +197,9 @@ extern struct thread_master *master;
         zlog_debug(__VA_ARGS__); \
     } \
   while (0)
+
+#define DEBUG_TE                         (1<<13)
+
+#define IS_DEBUG_ISIS(x)                 (isis->debugs & x)
 
 #endif /* ISISD_H */

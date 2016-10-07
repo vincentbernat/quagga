@@ -23,6 +23,13 @@ from ipaddr import IPv6Address
 from pprint import pformat
 
 
+log = logging.getLogger(__name__)
+
+
+class VtyshMarkException(Exception):
+    pass
+
+
 class Context(object):
 
     """
@@ -80,14 +87,12 @@ class Config(object):
         The internal representation has been marked appropriately by passing it
         through vtysh with the -m parameter
         """
-        logger.info('Loading Config object from file %s', filename)
+        log.info('Loading Config object from file %s', filename)
 
         try:
             file_output = subprocess.check_output(['/usr/bin/vtysh', '-m', '-f', filename])
         except subprocess.CalledProcessError as e:
-            logger.error('vtysh marking of config file %s failed with error %s:', filename, str(e))
-            print "vtysh marking of file %s failed with error: %s" % (filename, str(e))
-            sys.exit(1)
+            raise VtyshMarkException(str(e))
 
         for line in file_output.split('\n'):
             line = line.strip()
@@ -105,16 +110,14 @@ class Config(object):
         The internal representation has been marked appropriately by passing it
         through vtysh with the -m parameter
         """
-        logger.info('Loading Config object from vtysh show running')
+        log.info('Loading Config object from vtysh show running')
 
         try:
             config_text = subprocess.check_output(
                 "/usr/bin/vtysh -c 'show run' | /usr/bin/tail -n +4 | /usr/bin/vtysh -m -f -",
                 shell=True)
         except subprocess.CalledProcessError as e:
-            logger.error('vtysh marking of running config failed with error %s:', str(e))
-            print "vtysh marking of running config failed with error %s:" % (str(e))
-            sys.exit(1)
+            raise VtyshMarkException(str(e))
 
         for line in config_text.split('\n'):
             line = line.strip()
@@ -270,13 +273,13 @@ end
                 ctx_keys = [line, ]
                 current_context_lines = []
 
-                logger.debug('LINE %-50s: entering new context, %-50s', line, ctx_keys)
+                log.debug('LINE %-50s: entering new context, %-50s', line, ctx_keys)
                 self.save_contexts(ctx_keys, current_context_lines)
                 new_ctx = True
 
             elif line == "end":
                 self.save_contexts(ctx_keys, current_context_lines)
-                logger.debug('LINE %-50s: exiting old context, %-50s', line, ctx_keys)
+                log.debug('LINE %-50s: exiting old context, %-50s', line, ctx_keys)
 
                 # Start a new context
                 new_ctx = True
@@ -292,7 +295,7 @@ end
                     # Start a new context
                     ctx_keys = copy.deepcopy(main_ctx_key)
                     current_context_lines = []
-                    logger.debug('LINE %-50s: popping from subcontext to ctx%-50s', line, ctx_keys)
+                    log.debug('LINE %-50s: popping from subcontext to ctx%-50s', line, ctx_keys)
 
             elif new_ctx is True:
                 if not main_ctx_key:
@@ -303,7 +306,7 @@ end
 
                 current_context_lines = []
                 new_ctx = False
-                logger.debug('LINE %-50s: entering new context, %-50s', line, ctx_keys)
+                log.debug('LINE %-50s: entering new context, %-50s', line, ctx_keys)
 
             elif "address-family " in line:
                 main_ctx_key = []
@@ -312,7 +315,7 @@ end
                 self.save_contexts(ctx_keys, current_context_lines)
                 current_context_lines = []
                 main_ctx_key = copy.deepcopy(ctx_keys)
-                logger.debug('LINE %-50s: entering sub-context, append to ctx_keys', line)
+                log.debug('LINE %-50s: entering sub-context, append to ctx_keys', line)
 
                 if line == "address-family ipv6":
                     ctx_keys.append("address-family ipv6 unicast")
@@ -335,7 +338,7 @@ end
             else:
                 # Continuing in an existing context, add non-commented lines to it
                 current_context_lines.append(line)
-                logger.debug('LINE %-50s: append to current_context_lines, %-50s', line, ctx_keys)
+                log.debug('LINE %-50s: append to current_context_lines, %-50s', line, ctx_keys)
 
         # Save the context of the last one
         self.save_contexts(ctx_keys, current_context_lines)
@@ -724,7 +727,7 @@ if __name__ == '__main__':
     # argparse should prevent this from happening but just to be safe...
     else:
         raise Exception('Must specify --reload or --test')
-    logger = logging.getLogger(__name__)
+    log = logging.getLogger(__name__)
 
     # Verify the new config file is valid
     if not os.path.isfile(args.filename):
@@ -753,9 +756,9 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if args.debug:
-        logger.setLevel(logging.DEBUG)
+        log.setLevel(logging.DEBUG)
 
-    logger.info('Called via "%s"', str(args))
+    log.info('Called via "%s"', str(args))
 
     # Create a Config object from the config generated by newconf
     newconf = Config()
@@ -802,7 +805,7 @@ if __name__ == '__main__':
 
     elif args.reload:
 
-        logger.debug('New Quagga Config\n%s', newconf.get_lines())
+        log.debug('New Quagga Config\n%s', newconf.get_lines())
 
         # This looks a little odd but we have to do this twice...here is why
         # If the user had this running bgp config:
@@ -829,7 +832,7 @@ if __name__ == '__main__':
         for x in range(2):
             running = Config()
             running.load_from_show_running()
-            logger.debug('Running Quagga Config (Pass #%d)\n%s', x, running.get_lines())
+            log.debug('Running Quagga Config (Pass #%d)\n%s', x, running.get_lines())
 
             (lines_to_add, lines_to_del) = compare_context_objects(newconf, running)
 
@@ -869,17 +872,17 @@ if __name__ == '__main__':
                             #   'no ip ospf authentication message-digest 1.1.1.1' in
                             #   our example above
                             # - Split that last entry by whitespace and drop the last word
-                            logger.warning('Failed to execute %s', ' '.join(cmd))
+                            log.warning('Failed to execute %s', ' '.join(cmd))
                             last_arg = cmd[-1].split(' ')
 
                             if len(last_arg) <= 2:
-                                logger.error('"%s" we failed to remove this command', original_cmd)
+                                log.error('"%s" we failed to remove this command', original_cmd)
                                 break
 
                             new_last_arg = last_arg[0:-1]
                             cmd[-1] = ' '.join(new_last_arg)
                         else:
-                            logger.info('Executed "%s"', ' '.join(cmd))
+                            log.info('Executed "%s"', ' '.join(cmd))
                             break
 
             if lines_to_add:
@@ -899,7 +902,7 @@ if __name__ == '__main__':
                                             string.digits) for _ in range(6))
 
                     filename = "/var/run/quagga/reload-%s.txt" % random_string
-                    logger.info("%s content\n%s" % (filename, pformat(lines_to_configure)))
+                    log.info("%s content\n%s" % (filename, pformat(lines_to_configure)))
 
                     with open(filename, 'w') as fh:
                         for line in lines_to_configure:

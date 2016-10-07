@@ -49,6 +49,7 @@
 #include "isisd/isis_lsp.h"
 #include "isisd/isis_route.h"
 #include "isisd/isis_zebra.h"
+#include "isisd/isis_te.h"
 
 struct zclient *zclient = NULL;
 
@@ -60,6 +61,13 @@ isis_router_id_update_zebra (int command, struct zclient *zclient,
   struct isis_area *area;
   struct listnode *node;
   struct prefix router_id;
+
+  /*
+   * If ISIS TE is enable, TE Router ID is set through specific command.
+   * See mpls_te_router_addr() command in isis_te.c
+   */
+  if (IS_MPLS_TE(isisMplsTE))
+    return 0;
 
   zebra_router_id_update_read (zclient->ibuf, &router_id);
   if (isis->router_id == router_id.u.prefix4.s_addr)
@@ -228,11 +236,29 @@ isis_zebra_if_address_del (int command, struct zclient *client,
   return 0;
 }
 
+static int
+isis_zebra_link_params (int command, struct zclient *zclient,
+                        zebra_size_t length)
+{
+  struct interface *ifp;
+
+  ifp = zebra_interface_link_params_read (zclient->ibuf);
+
+  if (ifp == NULL)
+    return 0;
+
+  /* Update TE TLV */
+  isis_mpls_te_update(ifp);
+
+  return 0;
+}
+
 static void
 isis_zebra_route_add_ipv4 (struct prefix *prefix,
 			   struct isis_route_info *route_info)
 {
-  u_char message, flags;
+  u_char message;
+  u_int32_t flags;
   int psize;
   struct stream *stream;
   struct isis_nexthop *nexthop;
@@ -260,7 +286,7 @@ isis_zebra_route_add_ipv4 (struct prefix *prefix,
       /* instance */
       stream_putw (stream, 0);
       /* flags */
-      stream_putc (stream, flags);
+      stream_putl (stream, flags);
       /* message */
       stream_putc (stream, message);
       /* SAFI */
@@ -541,11 +567,11 @@ isis_zebra_read_ipv4 (int command, struct zclient *zclient,
 
   api.type = stream_getc (stream);
   api.instance = stream_getw (stream);
-  api.flags = stream_getc (stream);
+  api.flags = stream_getl (stream);
   api.message = stream_getc (stream);
 
   p.family = AF_INET;
-  p.prefixlen = stream_getc (stream);
+  p.prefixlen = MIN(IPV4_MAX_PREFIXLEN, stream_getc (stream));
   stream_get (&p.prefix, stream, PSIZE (p.prefixlen));
 
   if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
@@ -598,7 +624,7 @@ isis_zebra_read_ipv6 (int command, struct zclient *zclient,
   ifindex = 0;
 
   api.type = stream_getc(stream);
-  api.flags = stream_getc(stream);
+  api.flags = stream_getl(stream);
   api.message = stream_getc(stream);
 
   p.family = AF_INET6;
@@ -680,13 +706,10 @@ isis_zebra_init (struct thread_master *master)
   zclient->interface_down = isis_zebra_if_state_down;
   zclient->interface_address_add = isis_zebra_if_address_add;
   zclient->interface_address_delete = isis_zebra_if_address_del;
-  zclient->ipv4_route_add = isis_zebra_read_ipv4;
-  zclient->ipv4_route_delete = isis_zebra_read_ipv4;
+  zclient->interface_link_params = isis_zebra_link_params;
   zclient->redistribute_route_ipv4_add = isis_zebra_read_ipv4;
   zclient->redistribute_route_ipv4_del = isis_zebra_read_ipv4;
 #ifdef HAVE_IPV6
-  zclient->ipv6_route_add = isis_zebra_read_ipv6;
-  zclient->ipv6_route_delete = isis_zebra_read_ipv6;
   zclient->redistribute_route_ipv6_add = isis_zebra_read_ipv6;
   zclient->redistribute_route_ipv6_del = isis_zebra_read_ipv6;
 #endif /* HAVE_IPV6 */

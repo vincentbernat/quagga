@@ -47,8 +47,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "zebra/rib.h"
 #include "zebra/zserv.h"	/* For ZEBRA_SERV_PATH. */
 
-
-
 char *
 bnc_str (struct bgp_nexthop_cache *bnc, char *buf, int size)
 {
@@ -59,14 +57,7 @@ bnc_str (struct bgp_nexthop_cache *bnc, char *buf, int size)
 void
 bnc_nexthop_free (struct bgp_nexthop_cache *bnc)
 {
-  struct nexthop *nexthop;
-  struct nexthop *next = NULL;
-
-  for (nexthop = bnc->nexthop; nexthop; nexthop = next)
-    {
-      next = nexthop->next;
-      XFREE (MTYPE_NEXTHOP, nexthop);
-    }
+  nexthops_free(bnc->nexthop);
 }
 
 struct bgp_nexthop_cache *
@@ -564,12 +555,9 @@ bgp_scan_init (struct bgp *bgp)
   bgp->connected_table[AFI_IP] = bgp_table_init (AFI_IP, SAFI_UNICAST);
   bgp->import_check_table[AFI_IP] = bgp_table_init (AFI_IP, SAFI_UNICAST);
 
-#ifdef HAVE_IPV6
   bgp->nexthop_cache_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
   bgp->connected_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
   bgp->import_check_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
-#endif /* HAVE_IPV6 */
-
 }
 
 void

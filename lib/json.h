@@ -26,6 +26,12 @@
 #include <json-c/json.h>
 #else
 #include <json/json.h>
+
+/*
+ * json_object_to_json_string_ext is only available for json-c
+ * so let's just turn it back to the original usage.
+ */
+#define json_object_to_json_string_ext(A, B) json_object_to_json_string (A)
 #endif
 
 extern int use_json(const int argc, const char *argv[]);
@@ -39,5 +45,7 @@ extern void json_object_boolean_true_add(struct json_object* obj,
                                          const char *key);
 extern struct json_object* json_object_lock(struct json_object *obj);
 extern void json_object_free(struct json_object *obj);
+
+#define JSON_STR "JavaScript Object Notation\n"
 
 #endif /* _QUAGGA_JSON_H */

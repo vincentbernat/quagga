@@ -34,6 +34,10 @@ Boston, MA 02111-1307, USA.  */
 #include "workqueue.h"
 #include "vrf.h"
 
+DEFINE_MTYPE(       LIB, HOST,       "Host config")
+DEFINE_MTYPE(       LIB, STRVEC,     "String vector")
+DEFINE_MTYPE_STATIC(LIB, CMD_TOKENS, "Command desc")
+
 /* Command vector which includes some level of command lists. Normally
    each daemon maintains each own cmdvec. */
 vector cmdvec = NULL;
@@ -2416,8 +2420,11 @@ cmd_complete_command_real (vector vline, struct vty *vty, int *status, int islib
   /* Only one matched */
   if (vector_slot (matchvec, 1) == NULL)
     {
-      match_str = (char **) matchvec->index;
-      vector_only_wrapper_free (matchvec);
+      size_t index_size = matchvec->alloced * sizeof (void *);
+      match_str = XMALLOC (MTYPE_TMP, index_size);
+      memcpy (match_str, matchvec->index, index_size);
+      vector_free (matchvec);
+
       *status = CMD_COMPLETE_FULL_MATCH;
       return match_str;
     }
@@ -2459,8 +2466,11 @@ cmd_complete_command_real (vector vline, struct vty *vty, int *status, int islib
 	      /* Make new matchvec. */
 	      matchvec = vector_init (INIT_MATCHVEC_SIZE);
 	      vector_set (matchvec, lcdstr);
-	      match_str = (char **) matchvec->index;
-	      vector_only_wrapper_free (matchvec);
+
+              size_t index_size = matchvec->alloced * sizeof (void *);
+              match_str = XMALLOC (MTYPE_TMP, index_size);
+              memcpy (match_str, matchvec->index, index_size);
+              vector_free (matchvec);
 
 	      *status = CMD_COMPLETE_MATCH;
 	      return match_str;
@@ -2529,6 +2539,9 @@ node_parent ( enum node_type node )
     case BGP_EVPN_NODE:
     case BGP_ENCAP_NODE:
     case BGP_ENCAPV6_NODE:
+    case BGP_VNC_DEFAULTS_NODE:
+    case BGP_VNC_NVE_GROUP_NODE: 
+    case BGP_VNC_L2_GROUP_NODE: 
     case BGP_IPV4_NODE:
     case BGP_IPV4M_NODE:
     case BGP_IPV6_NODE:
@@ -2541,8 +2554,25 @@ node_parent ( enum node_type node )
     case KEYCHAIN_KEY_NODE:
       ret = KEYCHAIN_NODE;
       break;
+    case LINK_PARAMS_NODE:
+      ret = INTERFACE_NODE;
+      break;
+    case LDP_IPV4_NODE:
+    case LDP_IPV6_NODE:
+      ret = LDP_NODE;
+      break;
+    case LDP_IPV4_IFACE_NODE:
+      ret = LDP_IPV4_NODE;
+      break;
+    case LDP_IPV6_IFACE_NODE:
+      ret = LDP_IPV6_NODE;
+      break;
+    case LDP_PSEUDOWIRE_NODE:
+      ret = LDP_L2VPN_NODE;
+      break;
     default:
       ret = CONFIG_NODE;
+      break;
     }
 
   return ret;
@@ -2902,6 +2932,7 @@ DEFUN (config_exit,
       vty_config_unlock (vty);
       break;
     case INTERFACE_NODE:
+    case NS_NODE:
     case VRF_NODE:
     case ZEBRA_NODE:
     case BGP_NODE:
@@ -2909,6 +2940,8 @@ DEFUN (config_exit,
     case RIPNG_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case LDP_NODE:
+    case LDP_L2VPN_NODE:
     case ISIS_NODE:
     case KEYCHAIN_NODE:
     case MASC_NODE:
@@ -2924,6 +2957,9 @@ DEFUN (config_exit,
     case BGP_EVPN_NODE:
     case BGP_ENCAP_NODE:
     case BGP_ENCAPV6_NODE:
+    case BGP_VNC_DEFAULTS_NODE:
+    case BGP_VNC_NVE_GROUP_NODE:
+    case BGP_VNC_L2_GROUP_NODE:
     case BGP_IPV6_NODE:
     case BGP_IPV6M_NODE:
       vty->node = BGP_NODE;
@@ -2931,8 +2967,24 @@ DEFUN (config_exit,
     case BGP_EVPN_VNI_NODE:
       vty->node = BGP_EVPN_NODE;
       break;
+    case LDP_IPV4_NODE:
+    case LDP_IPV6_NODE:
+      vty->node = LDP_NODE;
+      break;
+    case LDP_IPV4_IFACE_NODE:
+      vty->node = LDP_IPV4_NODE;
+      break;
+    case LDP_IPV6_IFACE_NODE:
+      vty->node = LDP_IPV6_NODE;
+      break;
+    case LDP_PSEUDOWIRE_NODE:
+      vty->node = LDP_L2VPN_NODE;
+      break;
     case KEYCHAIN_KEY_NODE:
       vty->node = KEYCHAIN_NODE;
+      break;
+    case LINK_PARAMS_NODE:
+      vty->node = INTERFACE_NODE;
       break;
     default:
       break;
@@ -2961,6 +3013,7 @@ DEFUN (config_end,
       break;
     case CONFIG_NODE:
     case INTERFACE_NODE:
+    case NS_NODE:
     case VRF_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -2970,6 +3023,9 @@ DEFUN (config_end,
     case BGP_EVPN_VNI_NODE:
     case BGP_ENCAP_NODE:
     case BGP_ENCAPV6_NODE:
+    case BGP_VNC_DEFAULTS_NODE:
+    case BGP_VNC_NVE_GROUP_NODE:
+    case BGP_VNC_L2_GROUP_NODE:
     case BGP_VPNV4_NODE:
     case BGP_VPNV6_NODE:
     case BGP_IPV4_NODE:
@@ -2979,12 +3035,20 @@ DEFUN (config_end,
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case LDP_NODE:
+    case LDP_IPV4_NODE:
+    case LDP_IPV6_NODE:
+    case LDP_IPV4_IFACE_NODE:
+    case LDP_IPV6_IFACE_NODE:
+    case LDP_L2VPN_NODE:
+    case LDP_PSEUDOWIRE_NODE:
     case ISIS_NODE:
     case KEYCHAIN_NODE:
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case PIM_NODE:
     case VTY_NODE:
+    case LINK_PARAMS_NODE:
       vty_config_unlock (vty);
       vty->node = ENABLE_NODE;
       break;
@@ -3585,6 +3649,7 @@ DEFUN (config_logmsg,
   zlog(NULL, level, "%s", ((message = argv_concat(argv, argc, 1)) ? message : ""));
   if (message)
     XFREE(MTYPE_TMP, message);
+
   return CMD_SUCCESS;
 }
 
