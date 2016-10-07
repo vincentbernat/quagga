@@ -61,6 +61,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_filter.h"
 #include "bgpd/bgp_nexthop.h"
 #include "bgpd/bgp_damp.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_encap.h"
 #if ENABLE_BGP_VNC

@@ -53,6 +53,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_filter.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_vty.h"

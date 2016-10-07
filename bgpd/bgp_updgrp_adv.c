@@ -47,6 +47,7 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_packet.h"
 #include "bgpd/bgp_fsm.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_advertise.h"
