@@ -33,6 +33,7 @@
 # endif
 #endif
 #include "sockunion.h"
+#include "vxlan.h"
 
 #ifndef ETHER_ADDR_LEN
 #define ETHER_ADDR_LEN  ETHERADDRL
@@ -64,6 +65,7 @@ struct evpn_addr
 #define IP_ADDR_V4        0x1
 #define IP_ADDR_V6        0x2
   struct ethaddr mac;
+  vni_t vni;
   union
   {
     u_char addr;

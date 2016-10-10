@@ -2185,6 +2185,36 @@ bgp_zebra_process_local_vni (int command, struct zclient *zclient,
     return bgp_evpn_local_vni_del (bgp, vni);
 }
 
+static int
+bgp_zebra_process_local_macip (int command, struct zclient *zclient,
+                               zebra_size_t length, vrf_id_t vrf_id)
+{
+  struct stream *s;
+  vni_t vni;
+  struct bgp *bgp;
+  struct in_addr nw_ip;
+  struct ethaddr mac;
+
+  zlog_debug("%s: Received MACIP from Zebra\n", __FUNCTION__);
+  s = zclient->ibuf;
+  vni = stream_getl (s);
+  nw_ip.s_addr = stream_get_ipv4 (s);
+  stream_get (&mac.octet, s, ETHER_ADDR_LEN);
+  bgp = bgp_lookup_by_vrf_id (vrf_id);
+  if (!bgp)
+    return 0;
+
+  if (BGP_DEBUG (zebra, ZEBRA))
+    zlog_debug("Rx VNI %s VRF %u VNI %u " MAC_STR " ",
+               (command == ZEBRA_MACIP_ADD) ? "add" : "del",  vrf_id, vni,
+               macaddrtostring(mac.octet));
+
+  if (command == ZEBRA_MACIP_ADD)
+    return bgp_evpn_local_macip_add (bgp, vni, nw_ip, mac);
+  else
+    return bgp_evpn_local_macip_del (bgp, vni, nw_ip, mac);
+}
+
 void
 bgp_zebra_init (struct thread_master *master)
 {
@@ -2210,6 +2240,8 @@ bgp_zebra_init (struct thread_master *master)
   zclient->import_check_update = bgp_read_import_check_update;
   zclient->local_vni_add = bgp_zebra_process_local_vni;
   zclient->local_vni_del = bgp_zebra_process_local_vni;
+  zclient->local_macip_add = bgp_zebra_process_local_macip;
+  zclient->local_macip_del = bgp_zebra_process_local_macip;
 
   bgp_nexthop_buf = stream_new(BGP_NEXTHOP_BUF_SIZE);
   bgp_ifindices_buf = stream_new(BGP_IFINDICES_BUF_SIZE);

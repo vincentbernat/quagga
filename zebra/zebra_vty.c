@@ -5878,8 +5878,6 @@ DEFUN (show_evpn_vni_vni,
   return CMD_SUCCESS;
 }
 
-
-
 /* Static ip route configuration write function. */
 static int
 zebra_ip_config (struct vty *vty)

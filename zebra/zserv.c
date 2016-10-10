@@ -2019,6 +2019,12 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_MPLS_LABELS_DELETE:
       zread_mpls_labels (command, client, length, vrf_id);
       break;
+    case ZEBRA_REMOTE_MACIP_ADD:
+      zebra_vxlan_remote_macip_add (client, sock, length, zvrf);
+      break;
+    case ZEBRA_REMOTE_MACIP_DEL:
+      zebra_vxlan_remote_macip_del (client, sock, length, zvrf);
+      break;
     default:
       zlog_info ("Zebra received unknown command %d", command);
       break;

@@ -46,6 +46,10 @@ extern void zebra_evpn_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t
 extern void zebra_evpn_print_vnis (struct vty *vty, struct zebra_vrf *zvrf);
 extern void zebra_vxlan_init_tables (struct zebra_vrf *zvrf);
 extern void zebra_zvni_close (struct zebra_vrf *);
+extern int zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
+                                         u_short length, struct zebra_vrf *zvrf);
+extern int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
+                                         u_short length, struct zebra_vrf *zvrf);
 
 static inline int
 is_interface_vxlan (struct interface *ifp)

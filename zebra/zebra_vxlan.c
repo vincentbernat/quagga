@@ -45,6 +45,7 @@
 
 DEFINE_MTYPE_STATIC(ZEBRA, ZVNI,      "VNI hash");
 DEFINE_MTYPE_STATIC(ZEBRA, ZVNI_VTEP, "VNI remote VTEP");
+DEFINE_MTYPE_STATIC(ZEBRA, MACIP,     "VNI MACIP");
 
 /* definitions */
 typedef struct zebra_vni_t_ zebra_vni_t;
@@ -85,8 +86,21 @@ struct zebra_vni_t_
 
   /* Local IP */
   struct in_addr local_vtep_ip;
+
+  /* List of local/remote MAC/IP */
+  struct hash *macip_table;
 };
 
+struct macip
+{
+  struct ethaddr emac;
+  struct in_addr  nw_ip;
+  u_int32_t       flags;
+#define LOCAL_MACIP_FLAG   0x01
+#define REMOTE_MACIP_FLAG  0x02
+
+  struct in_addr  remote_vtep_ip;
+};
 
 /* static function declarations */
 static unsigned int
@@ -159,6 +173,49 @@ vni_hash_cmp (const void *p1, const void *p2)
 }
 
 /*
+ * macip_keymake
+ *
+ * Make hash key.
+ */
+static unsigned int
+macip_keymake (void *p)
+{
+  struct macip *pmac = p;
+  char *pnt = (char *) pmac->emac.octet;
+  unsigned int key = 0;
+  int c = 0;
+  
+  key += pnt[c];
+  key += pnt[c + 1];
+  key += pnt[c + 2];
+  key += pnt[c + 3];
+  key += pnt[c + 4];
+  key += pnt[c + 5];
+
+  return (key);
+}
+
+/*
+ * macip_cmp
+ *
+ * Compare MAC addresses.
+ */
+static int
+macip_cmp (const void *p1, const void *p2)
+{
+  const struct macip *pmac1 = p1;
+  const struct macip *pmac2 = p2;
+
+  if (pmac1 == NULL && pmac2 == NULL)
+    return 1;
+
+  if (pmac1 == NULL || pmac2 == NULL)
+    return 0;
+
+  return(memcmp(pmac1->emac.octet, pmac2->emac.octet, ETHER_ADDR_LEN) == 0);
+}
+
+/*
  * Callback to allocate VNI hash entry.
  */
 static void *
@@ -198,8 +255,42 @@ zvni_add (struct zebra_vrf *zvrf, vni_t vni)
   tmp_zvni.vni = vni;
   zvni = hash_get (zvrf->vni_table, &tmp_zvni, zvni_alloc);
   assert (zvni);
+  zvni->macip_table = hash_create(macip_keymake, macip_cmp);
 
   return zvni;
+}
+
+static void
+zebra_evpn_macip_free (zebra_vni_t *zvni, struct macip *pmac)
+{
+  if (pmac)
+    {
+      hash_release (zvni->macip_table, pmac);
+      XFREE(MTYPE_MACIP, pmac);
+    }
+  return;
+}
+
+static void
+zebra_evpn_free_all_macip_iterator (struct hash_backet *backet, 
+                                    zebra_vni_t *zvni)
+{
+  struct macip *pmac;
+
+  pmac = (struct macip *) backet->data;
+  zebra_evpn_macip_free(zvni, pmac);
+  return;
+}
+
+static void
+zebra_evpn_macip_cleanup (zebra_vni_t *zvni)
+{
+  hash_iterate (zvni->macip_table,
+                (void (*) (struct hash_backet *, void *))
+                zebra_evpn_free_all_macip_iterator,
+                zvni);
+  hash_free(zvni->macip_table);
+  zvni->macip_table = NULL;
 }
 
 /*
@@ -213,6 +304,7 @@ zvni_del (struct zebra_vrf *zvrf, zebra_vni_t *zvni)
   zvni->vxlan_if = NULL;
 
   /* TODO: Handle remote VTEPs. */
+  zebra_evpn_macip_cleanup (zvni);
 
   /* Free the VNI hash entry and allocated memory. */
   tmp_zvni = hash_release (zvrf->vni_table, zvni);
@@ -220,6 +312,55 @@ zvni_del (struct zebra_vrf *zvrf, zebra_vni_t *zvni)
     XFREE(MTYPE_ZVNI, tmp_zvni);
 
   return 0;
+}
+
+/*
+ * zebra_evpn_new_macip
+ *
+ * Create a new mac ip entry.
+ */
+static void 
+zebra_evpn_new_macip (zebra_vni_t *zvni, struct ethaddr mac, struct in_addr ip, 
+                      struct in_addr remote_vtep_ip, int local)
+{
+  struct macip *new;
+
+  /*
+   * Allocate new import rt node
+   */
+  new = XCALLOC (MTYPE_MACIP, sizeof (struct macip));
+
+  if (!new)
+    return;
+
+  memcpy(&new->emac.octet, &mac.octet, ETHER_ADDR_LEN);
+  new->nw_ip = ip;
+  new->remote_vtep_ip = remote_vtep_ip;
+
+  if (local)
+    SET_FLAG (new->flags, LOCAL_MACIP_FLAG);
+  else 
+    SET_FLAG (new->flags, REMOTE_MACIP_FLAG);
+
+  /* Add to hash */
+  if (!hash_get(zvni->macip_table, new, hash_alloc_intern))
+    {
+      XFREE(MTYPE_MACIP, new);
+      return;
+    }
+  return;
+}
+
+static struct macip *
+zebra_evpn_macip_lookup (zebra_vni_t *zvni, struct ethaddr mac)
+{
+  struct macip *pmac;
+  struct macip tmp;
+
+  memset(&tmp, 0, sizeof(struct macip));
+  memcpy(&tmp.emac.octet, &mac.octet, ETHER_ADDR_LEN);
+  pmac = hash_lookup(zvni->macip_table, &tmp);
+  return(pmac);
 }
 
 /*
@@ -307,6 +448,81 @@ zvni_propagate_vnis (struct zebra_vrf *zvrf)
 {
   hash_iterate(zvrf->vni_table, zvni_propagate_this_vni, (void *)zvrf);
 }
+
+#define macaddrtostring(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+#define MAC_STR "%02x:%02x:%02x:%02x:%02x:%02x"
+
+#if 0
+/*
+ * Inform BGP about local MAC addition.
+ */
+static int
+zvni_send_macip_add_to_client (struct zebra_vrf *zvrf, vni_t vni, 
+                               struct ethaddr mac, struct in_addr ip)
+{
+  struct zserv *client;
+  struct stream *s;
+
+  zlog_debug ("%s: Add MAC" MAC_STR " for vni %u, and IP %s\n", __FUNCTION__,
+              macaddrtostring(mac.octet),
+              vni, inet_ntoa(ip));
+  client = zebra_find_client (ZEBRA_ROUTE_BGP);
+  /* BGP may not be running. */
+  if (!client)
+    return 0;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  zserv_create_header (s, ZEBRA_MACIP_ADD, zvrf->vrf_id);
+  stream_putl (s, vni);
+  stream_put_in_addr (s, &ip);
+  stream_put (s, mac.octet, ETHER_ADDR_LEN); /* Mac Addr */
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Send MACIP_ADD %u %s to BGP", zvrf->vrf_id, vni,
+                                               inet_ntoa(ip));
+
+  client->macipadd_cnt++;
+  return zebra_server_send_message(client);
+}
+
+/*
+ * Inform BGP about local MAC deletion.
+ */
+static int
+zvni_send_macip_del_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr mac, struct in_addr ip)
+{
+  struct zserv *client;
+  struct stream *s;
+
+  client = zebra_find_client (ZEBRA_ROUTE_BGP);
+  /* BGP may not be running. */
+  if (!client)
+    return 0;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  zserv_create_header (s, ZEBRA_MACIP_DEL, zvrf->vrf_id);
+  stream_putl (s, vni);
+  stream_put_in_addr (s, &ip);
+  stream_put (s, mac.octet, 6); /* Mac Addr */
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Send MACIP_DEL %u to BGP", zvrf->vrf_id, vni);
+
+  client->vnidel_cnt++;
+  return zebra_server_send_message(client);
+}
+#endif
 
 /*
  * See if remote VTEP matches with prefix.
@@ -464,6 +680,36 @@ zvni_vtep_uninstall (zebra_vni_t *zvni, struct prefix *vtep)
   return 0;
 }
 
+static void
+zvni_print_macip (struct macip *pmac, void *ctxt)
+{
+  struct vty *vty;
+  char buf1[20];
+  char buf2[20];
+
+  vty = (struct vty *) ctxt;
+  int local = CHECK_FLAG(pmac->flags, LOCAL_MACIP_FLAG);
+  strcpy(buf1, inet_ntoa(pmac->nw_ip));
+  strcpy(buf2, inet_ntoa(pmac->remote_vtep_ip));
+
+  vty_out(vty, " " MAC_STR " %s %s   %s%s", macaddrtostring(pmac->emac.octet),
+                                            buf1, buf2, 
+                                            (local)? "LOCAL" : "REMOTE", 
+                                            VTY_NEWLINE);
+}
+
+static void
+zvni_print_macip_hash (struct hash_backet *backet, void *ctxt)
+{
+  struct macip *pmac;
+
+  pmac = (struct macip *) backet->data;
+  if (!pmac)
+    return;
+
+  zvni_print_macip (pmac, ctxt);
+}
+
 /*
  * Print an VNI entry.
  */
@@ -489,18 +735,47 @@ zvni_print (zebra_vni_t *zvni, void *ctxt)
   if (!zvni->vteps)
     {
       vty_out(vty, " No remote VTEPs known for this VNI%s", VTY_NEWLINE);
-      return;
     }
-
-  vty_out(vty, " Remote VTEPs for this VNI:%s", VTY_NEWLINE);
-  for (zvtep = zvni->vteps; zvtep; zvtep = zvtep->next)
+  else
     {
-      struct prefix *p = &zvtep->vtep_ip;
-      vty_out(vty, "  %s%s",
-              inet_ntop (p->family, &p->u.prefix, buf, sizeof (buf)),
-              VTY_NEWLINE);
+      vty_out(vty, " Remote VTEPs for this VNI:%s", VTY_NEWLINE);
+      for (zvtep = zvni->vteps; zvtep; zvtep = zvtep->next)
+        {
+          struct prefix *p = &zvtep->vtep_ip;
+          vty_out(vty, "  %s%s",
+                  inet_ntop (p->family, &p->u.prefix, buf, sizeof (buf)),
+                  VTY_NEWLINE);
+        }
     }
+  vty_out(vty, " MACs for this VNI:%s", VTY_NEWLINE);
+  vty_out(vty, " MAC               IP      RemoteVTEP  Flag%s", VTY_NEWLINE);
+  hash_iterate(zvni->macip_table, zvni_print_macip_hash, vty);
 }
+
+#if 0
+/*
+ * stringtomacaddr
+ *
+ * Function to convert string to mac address
+ */
+static void
+stringtomacaddr (const char *mac_str, unsigned char *mac_addr)
+{
+    unsigned int mac[6];
+    int ret;
+
+    ret = sscanf(mac_str, "%02x:%02x:%02x:%02x:%02x:%02x",
+                 &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
+                 &mac[5]);
+    if (!ret) {
+        printf("Failed to copy mac_str into mac\n");
+        return;
+    }
+    mac_addr[0] = mac[0]; mac_addr[1] = mac[1]; mac_addr[2] = mac[2];
+    mac_addr[3] = mac[3]; mac_addr[4] = mac[4]; mac_addr[5] = mac[5];
+    return;
+}
+#endif
 
 /* Cleanup VNI/VTEP and update kernel */
 static void
@@ -925,6 +1200,108 @@ int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
 }
 
 /*
+ * Handle message from client to add a remote MAC/IP for a VNI.
+ */
+int 
+zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
+                              u_short length, struct zebra_vrf *zvrf)
+{
+  struct stream *s;
+  vni_t vni;
+  struct in_addr ip, remote_vtep_ip;
+  zebra_vni_t *zvni;
+  struct ethaddr mac;
+  struct macip *pmac;
+
+  s = client->ibuf;
+
+  /* Obtain each remote VTEP and process. */
+  vni = (vni_t) stream_getl (s);
+  stream_getc (s); // flags, currently unused
+  ip.s_addr = stream_get_ipv4 (s);
+  stream_get (&mac.octet, s, ETHER_ADDR_LEN);
+  remote_vtep_ip.s_addr = stream_get_ipv4 (s);
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Recv VTEP_ADD %s VNI %u " MAC_STR " %s\n",
+                zvrf->vrf_id, inet_ntoa (ip), vni,
+                macaddrtostring(mac.octet), inet_ntoa(remote_vtep_ip));
+
+  /* Locate VNI hash entry - expected to exist. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
+                zvrf->vrf_id, vni);
+      return 0;
+    }
+  if (!zvni->vxlan_if)
+    {
+      zlog_err ("VNI %u hash %p doesn't have intf upon remote VTEP add",
+                zvni->vni, zvni);
+      return 0;
+    }
+
+  if (!if_is_operative (zvni->vxlan_if))
+    return 0;
+
+  /* If the remote MAC/IP already exists, or the local VxLAN interface is
+   * not up (should be a transient event),  there's nothing more to do.
+   * Otherwise, add and install the entry.
+   */
+  pmac = zebra_evpn_macip_lookup (zvni, mac);
+  if (!pmac)
+    zebra_evpn_new_macip (zvni, mac, ip, remote_vtep_ip, FALSE);
+
+  return 0;
+}
+
+/*
+ * Handle message from client to delete a remote MAC/IP for a VNI.
+ */
+int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  struct stream *s;
+  vni_t vni;
+  struct in_addr ip;
+  zebra_vni_t *zvni;
+  struct ethaddr mac;
+  struct macip *pmac;
+
+  s = client->ibuf;
+
+  /* Obtain each remote VTEP and process. */
+  vni = (vni_t) stream_getl (s);
+  stream_getc (s); // flags, currently unused
+  ip.s_addr = stream_get_ipv4 (s);
+  stream_get (&mac.octet, s, ETHER_ADDR_LEN);
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Recv VTEP_DEL %s VNI %u " MAC_STR " ",
+                zvrf->vrf_id, inet_ntoa (ip), vni,
+                macaddrtostring(mac.octet));
+
+  /* Locate VNI hash entry - expected to exist. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
+                zvrf->vrf_id, vni);
+      return 0;
+    }
+
+  /* If the remote MAC/IP does not exist, there's nothing more to do.
+   * Otherwise, uninstall the entry and remove it.
+   */
+  pmac = zebra_evpn_macip_lookup (zvni, mac);
+  if (pmac)
+    zebra_evpn_macip_free (zvni, pmac);
+
+  return 0;
+}
+
+/*
  * Display VNI information (VTY command handler).
  */
 void
@@ -949,7 +1326,6 @@ zebra_evpn_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
 {
   hash_iterate(zvrf->vni_table, zvni_print_hash, vty);
 }
-
 
 /*
  * Allocate VNI hash table for this VRF and do other initialization.

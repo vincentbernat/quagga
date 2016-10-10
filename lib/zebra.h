@@ -438,6 +438,10 @@ typedef enum {
   ZEBRA_IPV4_NEXTHOP_DELETE,
   ZEBRA_IPV6_NEXTHOP_ADD,
   ZEBRA_IPV6_NEXTHOP_DELETE,
+  ZEBRA_MACIP_ADD,
+  ZEBRA_MACIP_DEL,
+  ZEBRA_REMOTE_MACIP_ADD,
+  ZEBRA_REMOTE_MACIP_DEL,
 } zebra_message_types_t;
 
 /* Marker value used in new Zserv, in the byte location corresponding

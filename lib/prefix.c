@@ -913,11 +913,27 @@ prefix2str (union prefixconstptr pu, char *str, int size)
 
       case AF_ETHERNET:
         family = (p->u.prefix_evpn.flags & IP_ADDR_V4) ? AF_INET : AF_INET6;
-        snprintf (str, size, "[%d]:[%s]/%d",
-                  p->u.prefix_evpn.route_type,
-                  inet_ntop (family, &p->u.prefix_evpn.ip.addr,
-                             buf, PREFIX2STR_BUFFER),
-                  p->prefixlen);
+        if (p->u.prefix_evpn.route_type == 3)
+          {
+            snprintf (str, size, "[%d]:[%s]/%d",
+                      p->u.prefix_evpn.route_type,
+                      inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                                 buf, PREFIX2STR_BUFFER),
+                      p->prefixlen);
+          }
+        else if (p->u.prefix_evpn.route_type == 2)
+          {
+#define macaddrtostring(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+#define MAC_STR "%02x:%02x:%02x:%02x:%02x:%02x"
+
+            snprintf (str, size, "[%d]:["MAC_STR"]:[%s]/%d",
+                      p->u.prefix_evpn.route_type,
+                      macaddrtostring(p->u.prefix_evpn.mac.octet),
+                      inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                                 buf, PREFIX2STR_BUFFER),
+                      p->prefixlen);
+          }
+
         break;
 
       default:

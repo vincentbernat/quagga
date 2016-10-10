@@ -68,3 +68,15 @@ void
 zebra_zvni_close (struct zebra_vrf *zvrf)
 {
 }
+
+int zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  return 0;
+}
+
+int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
+                                 u_short length, struct zebra_vrf *zvrf)
+{
+  return 0;
+}

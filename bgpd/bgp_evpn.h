@@ -39,7 +39,9 @@ typedef enum
   BGP_EVPN_IP_PREFIX_ROUTE,       /* IP Prefix route */
 } bgp_evpn_route_type;
 
-#define EVPN_ROUTE_LEN 42
+#define EVPN_ROUTE_LEN 50
+#define macaddrtostring(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+#define MAC_STR "%02x:%02x:%02x:%02x:%02x:%02x"
 
 extern struct bgpevpn *bgp_evpn_update_vni (struct bgp*, vni_t, int);
 extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr);
@@ -72,4 +74,8 @@ extern void bgp_evpn_check_uninstall_evpn_route (struct bgp *, afi_t, safi_t,
                                                  struct prefix_evpn *, struct bgp_info *);
 extern void bgp_config_write_advertise_vni (struct vty *, struct bgp *, afi_t, 
                                             safi_t, int *);
+extern int bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni, struct in_addr ip, 
+                                     struct ethaddr mac);
+extern int bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni, struct in_addr ip, 
+                                     struct ethaddr mac);
 #endif /* _QUAGGA_BGP_EVPN_H */
