@@ -20,7 +20,7 @@ zebra_vxlan_if_down (struct interface *ifp)
 }
 
 int
-zebra_vxlan_if_add (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
+zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
 {
   return 0;
 }
@@ -43,32 +43,6 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
   return 0;
 }
 
-int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
-                               u_short length, struct zebra_vrf *zvrf)
-{
-  return 0;
-}
-
-void
-zebra_evpn_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
-{
-}
-
-void
-zebra_evpn_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
-{
-}
-
-void
-zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
-{
-}
-
-void
-zebra_zvni_close (struct zebra_vrf *zvrf)
-{
-}
-
 int zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
                                  u_short length, struct zebra_vrf *zvrf)
 {
@@ -79,4 +53,30 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
                                  u_short length, struct zebra_vrf *zvrf)
 {
   return 0;
+}
+
+int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
+                               u_short length, struct zebra_vrf *zvrf)
+{
+  return 0;
+}
+
+void
+zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
+{
+}
+
+void
+zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
+{
+}
+
+void
+zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
+{
+}
+
+void
+zebra_vxlan_close_tables (struct zebra_vrf *zvrf)
+{
 }

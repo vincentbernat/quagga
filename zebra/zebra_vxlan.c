@@ -116,7 +116,7 @@ zvni_add (struct zebra_vrf *zvrf, vni_t vni);
 static int
 zvni_del (struct zebra_vrf *zvrf, zebra_vni_t *zvni);
 static int
-zvni_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni, struct in_addr vtep_ip);
+zvni_send_add_to_client (struct zebra_vrf *zvrf, zebra_vni_t *zvni);
 static int
 zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni);
 static void
@@ -367,8 +367,8 @@ zebra_evpn_macip_lookup (zebra_vni_t *zvni, struct ethaddr mac)
  * Inform BGP about local VNI addition.
  */
 static int
-zvni_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni, 
-                         struct in_addr vtep_ip)
+zvni_send_add_to_client (struct zebra_vrf *zvrf,
+                         zebra_vni_t *zvni)
 {
   struct zserv *client;
   struct stream *s;
@@ -382,15 +382,15 @@ zvni_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni,
   stream_reset (s);
 
   zserv_create_header (s, ZEBRA_VNI_ADD, zvrf->vrf_id);
-  stream_putl (s, vni);
-  stream_put_in_addr (s, &vtep_ip);
+  stream_putl (s, zvni->vni);
+  stream_put_in_addr (s, &zvni->local_vtep_ip);
 
   /* Write packet size. */
   stream_putw_at (s, 0, stream_get_endp (s));
 
   if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Send VNI_ADD %u %s to BGP", zvrf->vrf_id, vni,
-                                               inet_ntoa(vtep_ip));
+    zlog_debug ("%u:Send VNI_ADD %u %s to BGP",
+                zvrf->vrf_id, zvni->vni, inet_ntoa(zvni->local_vtep_ip));
 
   client->vniadd_cnt++;
   return zebra_server_send_message(client);
@@ -437,7 +437,7 @@ zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt)
 
   zvni = (zebra_vni_t *) backet->data;
   zvrf = (struct zebra_vrf *)ctxt;
-  zvni_send_add_to_client (zvrf, zvni->vni, zvni->local_vtep_ip);
+  zvni_send_add_to_client (zvrf, zvni);
 }
 
 /*
@@ -794,13 +794,6 @@ zvni_cleanup_all (struct hash_backet *backet, void *zvrf)
   zvni_del (zvrf, zvni);
 }
 
-/* Close all VNI handling */
-void
-zebra_zvni_close (struct zebra_vrf *zvrf)
-{
-  hash_iterate (zvrf->vni_table, zvni_cleanup_all, zvrf);
-}
-
 /*
  * Print a VNI hash entry.
  */
@@ -859,7 +852,7 @@ zebra_vxlan_if_up (struct interface *ifp)
   if (!zvrf->advertise_vni)
     return 0;
 
-  zvni_send_add_to_client (zvrf, vni, zvni->local_vtep_ip);
+  zvni_send_add_to_client (zvrf, zvni);
   return 0;
 }
 
@@ -910,11 +903,11 @@ zebra_vxlan_if_down (struct interface *ifp)
 }
 
 /*
- * Handle VxLAN interface add. Store the VNI (in hash table) and update BGP,
- * if required.
+ * Handle VxLAN interface add or update. Store the VNI (in hash table) and
+ * update BGP, if required.
  */
 int
-zebra_vxlan_if_add (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
+zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
 {
   struct zebra_if *zif;
   struct zebra_vrf *zvrf;
@@ -928,23 +921,27 @@ zebra_vxlan_if_add (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
   assert(zvrf);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Add intf %s(%u) VNI %u",
-                ifp->vrf_id, ifp->name, ifp->ifindex, vni);
+    zlog_debug ("%u:Add/Update intf %s(%u) VNI %u local IP %s",
+                ifp->vrf_id, ifp->name, ifp->ifindex, vni,
+                inet_ntoa (vtep_ip));
 
   /* Store VNI in interface. */
   zif->vni = vni;
 
-  /* If hash entry exists, check if vtep IP changed. */
-  if ((zvni = zvni_lookup (zvrf, vni)))
-    if (IPV4_ADDR_SAME(&zvni->local_vtep_ip, &vtep_ip))
-      return 0;
+  /* If hash entry exists and no change to VTEP IP, we're done. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (zvni && IPV4_ADDR_SAME(&zvni->local_vtep_ip, &vtep_ip))
+    return 0;
 
-  zvni = zvni_add (zvrf, vni);
   if (!zvni)
     {
-      zlog_err ("Failed to add VNI hash, VRF %d IF %s(%u) VNI %u",
-                ifp->vrf_id, ifp->name, ifp->ifindex, vni);
-      return -1;
+      zvni = zvni_add (zvrf, vni);
+      if (!zvni)
+        {
+          zlog_err ("Failed to add VNI hash, VRF %d IF %s(%u) VNI %u",
+                    ifp->vrf_id, ifp->name, ifp->ifindex, vni);
+          return -1;
+        }
     }
 
   zvni->local_vtep_ip = vtep_ip;
@@ -958,7 +955,7 @@ zebra_vxlan_if_add (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
   if (!zvrf->advertise_vni)
     return 0;
 
-  zvni_send_add_to_client (zvrf, vni, vtep_ip);
+  zvni_send_add_to_client (zvrf, zvni);
   return 0;
 }
 
@@ -1305,7 +1302,7 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
  * Display VNI information (VTY command handler).
  */
 void
-zebra_evpn_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
+zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
   zebra_vni_t *zvni;
 
@@ -1322,7 +1319,7 @@ zebra_evpn_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
  * Display VNI hash table (VTY command handler).
  */
 void
-zebra_evpn_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
+zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
 {
   hash_iterate(zvrf->vni_table, zvni_print_hash, vty);
 }
@@ -1337,4 +1334,11 @@ zebra_vxlan_init_tables (struct zebra_vrf *zvrf)
   if (!zvrf)
     return;
   zvrf->vni_table = hash_create(vni_hash_keymake, vni_hash_cmp);
+}
+
+/* Close all VNI handling */
+void
+zebra_vxlan_close_tables (struct zebra_vrf *zvrf)
+{
+  hash_iterate (zvrf->vni_table, zvni_cleanup_all, zvrf);
 }

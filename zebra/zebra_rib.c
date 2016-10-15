@@ -3208,8 +3208,8 @@ rib_close (void)
     }
 
   /* Cleanup Vxlan table and update kernel */
-  zebra_zvni_close (zvrf);
-  zebra_mpls_close_tables(zvrf);
+  zebra_vxlan_close_tables (zvrf);
+  zebra_mpls_close_tables (zvrf);
 }
 
 /* Routing information base initialize. */

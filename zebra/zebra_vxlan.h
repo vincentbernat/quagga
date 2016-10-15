@@ -34,22 +34,23 @@
 
 extern int zebra_vxlan_if_up (struct interface *ifp);
 extern int zebra_vxlan_if_down (struct interface *ifp);
-extern int zebra_vxlan_if_add (struct interface *ifp, vni_t vni, struct in_addr vtep_ip);
+extern int zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni,
+                                      struct in_addr vtep_ip);
 extern int zebra_vxlan_if_del (struct interface *ifp);
 extern int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
                                      u_short length, struct zebra_vrf *zvrf);
 extern int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
                                      u_short length, struct zebra_vrf *zvrf);
-extern int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
-                                      u_short length, struct zebra_vrf *zvrf);
-extern void zebra_evpn_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni);
-extern void zebra_evpn_print_vnis (struct vty *vty, struct zebra_vrf *zvrf);
-extern void zebra_vxlan_init_tables (struct zebra_vrf *zvrf);
-extern void zebra_zvni_close (struct zebra_vrf *);
 extern int zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
                                          u_short length, struct zebra_vrf *zvrf);
 extern int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
                                          u_short length, struct zebra_vrf *zvrf);
+extern int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
+                                      u_short length, struct zebra_vrf *zvrf);
+extern void zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni);
+extern void zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf);
+extern void zebra_vxlan_init_tables (struct zebra_vrf *zvrf);
+extern void zebra_vxlan_close_tables (struct zebra_vrf *);
 
 static inline int
 is_interface_vxlan (struct interface *ifp)

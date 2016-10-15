@@ -5857,7 +5857,7 @@ DEFUN (show_evpn_vni,
   struct zebra_vrf *zvrf;
 
   zvrf = vrf_info_lookup(VRF_DEFAULT);
-  zebra_evpn_print_vnis(vty, zvrf);
+  zebra_vxlan_print_vnis(vty, zvrf);
   return CMD_SUCCESS;
 }
 
@@ -5874,7 +5874,7 @@ DEFUN (show_evpn_vni_vni,
 
   VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
   zvrf = vrf_info_lookup(VRF_DEFAULT);
-  zebra_evpn_print_vni(vty, zvrf, vni);
+  zebra_vxlan_print_vni(vty, zvrf, vni);
   return CMD_SUCCESS;
 }
 

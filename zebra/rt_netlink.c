@@ -868,7 +868,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   if (vxlan_if)
     {
       /* Update VNI, create or update hash table, notify BGP, if needed. */
-      zebra_vxlan_if_add (ifp, vni, vtep_ip);
+      zebra_vxlan_if_add_update (ifp, vni, vtep_ip);
     }
 
   return 0;
@@ -1714,7 +1714,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           if (vxlan_if)
             {
               /* Update VNI, create or update hash table, notify BGP, if needed. */
-              zebra_vxlan_if_add (ifp, vni, vtep_ip);
+              zebra_vxlan_if_add_update (ifp, vni, vtep_ip);
             }
         }
       else if (ifp->vrf_id != vrf_id)
@@ -1761,7 +1761,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           if (vxlan_if)
             {
               /* Update VNI, create or update hash table, notify BGP, if needed. */
-              zebra_vxlan_if_add (ifp, vni, vtep_ip);
+              zebra_vxlan_if_add_update (ifp, vni, vtep_ip);
             }
         }
     }
