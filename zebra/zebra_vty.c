@@ -6332,7 +6332,5 @@ zebra_vty_init (void)
 #endif /* HAVE_IPV6 */
 
   install_element (VIEW_NODE, &show_evpn_vni_cmd);
-  install_element (ENABLE_NODE, &show_evpn_vni_cmd);
   install_element (VIEW_NODE, &show_evpn_vni_vni_cmd);
-  install_element (ENABLE_NODE, &show_evpn_vni_vni_cmd);
 }
