@@ -16653,12 +16653,6 @@ bgp_vty_init (void)
   install_element (VIEW_NODE, &show_bgp_evpn_route_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_rd_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_import_rt_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_vni_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_vni_num_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_summary_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_route_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_route_rd_cmd);
-  install_element (ENABLE_NODE, &show_bgp_evpn_import_rt_cmd);
 
   /* Community-list. */
   community_list_vty ();
