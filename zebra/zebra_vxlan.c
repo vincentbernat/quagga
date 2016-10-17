@@ -42,6 +42,7 @@
 #include "zebra/rt_netlink.h"
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_memory.h"
+#include "zebra/zebra_l2.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, ZVNI,      "VNI hash");
 DEFINE_MTYPE_STATIC(ZEBRA, ZVNI_VTEP, "VNI remote VTEP");
@@ -831,7 +832,7 @@ zebra_vxlan_if_up (struct interface *ifp)
   zvrf = vrf_info_lookup(ifp->vrf_id);
   assert(zvrf);
 
-  vni = vni_from_intf (ifp);
+  vni = VNI_FROM_ZEBRA_IF (zif);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
     zlog_debug ("%u:Intf %s(%u) VNI %u is UP",
@@ -875,7 +876,7 @@ zebra_vxlan_if_down (struct interface *ifp)
   zvrf = vrf_info_lookup(ifp->vrf_id);
   assert(zvrf);
 
-  vni = vni_from_intf (ifp);
+  vni = VNI_FROM_ZEBRA_IF (zif);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
     zlog_debug ("%u:Intf %s(%u) VNI %u is DOWN",
@@ -903,18 +904,24 @@ zebra_vxlan_if_down (struct interface *ifp)
 }
 
 /*
- * Handle VxLAN interface add or update. Store the VNI (in hash table) and
- * update BGP, if required.
+ * Handle VxLAN interface add or update. Create/update VxLAN L2
+ * interface info.  Store the VNI (in hash table) and update BGP,
+ * if required.
  */
 int
-zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
+zebra_vxlan_if_add_update (struct interface *ifp,
+                           struct zebra_l2if_vxlan *zl2if)
 {
   struct zebra_if *zif;
   struct zebra_vrf *zvrf;
+  struct zebra_l2if_vxlan *_zl2if;
   zebra_vni_t *zvni;
+  vni_t vni;
 
   zif = ifp->info;
   assert(zif);
+
+  vni = zl2if->vni;
 
   /* Locate VRF corresponding to interface. */
   zvrf = vrf_info_lookup(ifp->vrf_id);
@@ -923,14 +930,26 @@ zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni, struct in_addr vtep
   if (IS_ZEBRA_DEBUG_VXLAN)
     zlog_debug ("%u:Add/Update intf %s(%u) VNI %u local IP %s",
                 ifp->vrf_id, ifp->name, ifp->ifindex, vni,
-                inet_ntoa (vtep_ip));
+                inet_ntoa (zl2if->vtep_ip));
 
-  /* Store VNI in interface. */
-  zif->vni = vni;
+  /* Allocate/update L2 interface */
+  if (!zif->l2if)
+    {
+      zif->l2if = XCALLOC (MTYPE_ZEBRA_L2IF,
+                           sizeof (struct zebra_l2if_vxlan));
+      if (!zif->l2if)
+        {
+          zlog_err ("Failed to alloc VxLAN L2IF VRF %d IF %s(%u)",
+                    ifp->vrf_id, ifp->name, ifp->ifindex);
+          return -1;
+        }
+    }
+  _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  *_zl2if = *zl2if;
 
   /* If hash entry exists and no change to VTEP IP, we're done. */
   zvni = zvni_lookup (zvrf, vni);
-  if (zvni && IPV4_ADDR_SAME(&zvni->local_vtep_ip, &vtep_ip))
+  if (zvni && IPV4_ADDR_SAME(&zvni->local_vtep_ip, &zl2if->vtep_ip))
     return 0;
 
   if (!zvni)
@@ -944,7 +963,7 @@ zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni, struct in_addr vtep
         }
     }
 
-  zvni->local_vtep_ip = vtep_ip;
+  zvni->local_vtep_ip = zl2if->vtep_ip;
   zvni->vxlan_if = ifp;
 
   /* Done if interface is not up. */
@@ -968,17 +987,19 @@ zebra_vxlan_if_del (struct interface *ifp)
 {
   struct zebra_if *zif;
   struct zebra_vrf *zvrf;
+  struct zebra_l2if_vxlan *_zl2if;
   vni_t vni;
   zebra_vni_t *zvni;
 
   zif = ifp->info;
   assert(zif);
+  _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  assert(_zl2if);
+  vni = _zl2if->vni;
 
   /* Locate VRF corresponding to interface. */
   zvrf = vrf_info_lookup(ifp->vrf_id);
   assert(zvrf);
-
-  vni = vni_from_intf (ifp);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
     zlog_debug ("%u:Del intf %s(%u) VNI %u",
@@ -1008,8 +1029,9 @@ zebra_vxlan_if_del (struct interface *ifp)
       return -1;
     }
 
-  /* Clear VNI in interface. */
-  zif->vni = 0;
+  /* Free the L2 interface */
+  XFREE (MTYPE_ZEBRA_L2IF, _zl2if);
+  zif->l2if = NULL;
 
   return 0;
 }

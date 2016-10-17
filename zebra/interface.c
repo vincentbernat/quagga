@@ -832,7 +832,7 @@ if_up (struct interface *ifp)
   zebra_vrf_static_route_interface_fixup (ifp);
 
   /* Notification for VxLAN interfaces - for EVPN. */
-  if (is_interface_vxlan (ifp))
+  if (IS_ZEBRA_IF_VXLAN (ifp))
     zebra_vxlan_if_up (ifp);
 }
 
@@ -848,7 +848,7 @@ if_down (struct interface *ifp)
   quagga_timestamp (2, zif->down_last, sizeof (zif->down_last));
 
   /* Notification for VxLAN interfaces - for EVPN. */
-  if (is_interface_vxlan (ifp))
+  if (IS_ZEBRA_IF_VXLAN (ifp))
     zebra_vxlan_if_down (ifp);
 
   /* Notify to the protocol daemons. */
@@ -1096,9 +1096,9 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 	connected_dump_vty (vty, connected);
     }
 
-  if (is_interface_vxlan (ifp))
+  if (IS_ZEBRA_IF_VXLAN (ifp))
     {
-      vty_out(vty, "  VxLAN Id %u", vni_from_intf (ifp));
+      vty_out(vty, "  VxLAN Id %u", VNI_FROM_ZEBRA_IF (zebra_if));
       vty_out(vty, "%s", VTY_NEWLINE);
     }
 

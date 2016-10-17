@@ -5,6 +5,7 @@
 #include "zebra/zserv.h"
 #include "zebra/rib.h"
 #include "zebra/zebra_vrf.h"
+#include "zebra/zebra_l2.h"
 #include "zebra/zebra_vxlan.h"
 
 int
@@ -20,7 +21,8 @@ zebra_vxlan_if_down (struct interface *ifp)
 }
 
 int
-zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni, struct in_addr vtep_ip)
+zebra_vxlan_if_add_update (struct interface *ifp,
+                           struct zebra_l2if_vxlan *zl2if)
 {
   return 0;
 }

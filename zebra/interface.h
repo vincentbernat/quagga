@@ -30,6 +30,8 @@
 #include "zebra/irdp.h"
 #endif
 
+#include "zebra/zebra_l2.h"
+
 /* For interface multicast configuration. */
 #define IF_ZEBRA_MULTICAST_UNSPEC 0
 #define IF_ZEBRA_MULTICAST_ON     1
@@ -182,6 +184,14 @@ struct rtadvconf
 
 #endif /* HAVE_RTADV */
 
+/* Zebra interface type */
+typedef enum
+{
+  ZEBRA_IF_VXLAN,     /* VxLAN interface */
+  ZEBRA_IF_VRF,       /* VRF device */
+  ZEBRA_IF_OTHER,     /* Anything else */
+} zebra_iftype_t;
+
 /* `zebra' daemon local interface structure. */
 struct zebra_if
 {
@@ -193,6 +203,9 @@ struct zebra_if
 
   /* Router advertise configuration. */
   u_char rtadv_enable;
+
+  /* Zebra interface type */
+  zebra_iftype_t zif_type;
 
   /* Installed addresses chains tree. */
   struct route_table *ipv4_subnets;
@@ -234,9 +247,24 @@ struct zebra_if
   /* ptm enable configuration */
   u_char ptm_enable;
 
-  /* Additional fields for EVPN for VxLAN. */
-  vni_t vni;
+  /* Additional fields for L2 interfaces. Depends on zif_type */
+  void *l2if;
 };
+
+static inline void
+zebra_if_set_ziftype (struct interface *ifp, zebra_iftype_t zif_type)
+{
+  struct zebra_if *zif;
+
+  zif = (struct zebra_if *)ifp->info;
+  zif->zif_type = zif_type;
+}
+
+#define IS_ZEBRA_IF_VXLAN(ifp) \
+        (((struct zebra_if *)(ifp->info))->zif_type == ZEBRA_IF_VXLAN)
+
+#define IS_ZEBRA_IF_VRF(ifp) \
+        (((struct zebra_if *)(ifp->info))->zif_type == ZEBRA_IF_VRF)
 
 extern struct interface *if_lookup_by_index_per_ns (struct zebra_ns *, u_int32_t);
 extern struct interface *if_link_per_ns (struct zebra_ns *, struct interface *);

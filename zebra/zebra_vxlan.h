@@ -34,8 +34,8 @@
 
 extern int zebra_vxlan_if_up (struct interface *ifp);
 extern int zebra_vxlan_if_down (struct interface *ifp);
-extern int zebra_vxlan_if_add_update (struct interface *ifp, vni_t vni,
-                                      struct in_addr vtep_ip);
+extern int zebra_vxlan_if_add_update (struct interface *ifp,
+                                      struct zebra_l2if_vxlan *zl2if);
 extern int zebra_vxlan_if_del (struct interface *ifp);
 extern int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
                                      u_short length, struct zebra_vrf *zvrf);
@@ -51,17 +51,5 @@ extern void zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_
 extern void zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf);
 extern void zebra_vxlan_init_tables (struct zebra_vrf *zvrf);
 extern void zebra_vxlan_close_tables (struct zebra_vrf *);
-
-static inline int
-is_interface_vxlan (struct interface *ifp)
-{
-  return ((ifp->info && (((struct zebra_if *)(ifp->info))->vni != 0)) ? 1 : 0);
-}
-
-static inline vni_t
-vni_from_intf (struct interface *ifp)
-{
-  return ((ifp->info) ? (((struct zebra_if *)(ifp->info))->vni) : 0);
-}
 
 #endif /* _ZEBRA_VXLAN_H */
