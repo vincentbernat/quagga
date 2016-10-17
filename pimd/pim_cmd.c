@@ -5945,8 +5945,6 @@ void pim_cmd_init()
   install_element (VIEW_NODE, &show_ip_ssmpingd_cmd);
   install_element (VIEW_NODE, &show_debugging_pim_cmd);
 
-  install_element (ENABLE_NODE, &show_ip_pim_address_cmd);
-
   install_element (ENABLE_NODE, &clear_ip_interfaces_cmd);
   install_element (ENABLE_NODE, &clear_ip_igmp_interfaces_cmd);
   install_element (ENABLE_NODE, &clear_ip_mroute_cmd);
