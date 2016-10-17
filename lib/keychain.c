@@ -28,30 +28,40 @@ Boston, MA 02111-1307, USA.  */
 DEFINE_MTYPE_STATIC(LIB, KEY,      "Key")
 DEFINE_MTYPE_STATIC(LIB, KEYCHAIN, "Key chain")
 
+DEFINE_QOBJ_TYPE(keychain)
+DEFINE_QOBJ_TYPE(key)
+
 /* Master list of key chain. */
 struct list *keychain_list;
 
 static struct keychain *
 keychain_new (void)
 {
-  return XCALLOC (MTYPE_KEYCHAIN, sizeof (struct keychain));
+  struct keychain *keychain;
+  keychain = XCALLOC (MTYPE_KEYCHAIN, sizeof (struct keychain));
+  QOBJ_REG (keychain, keychain);
+  return keychain;
 }
 
 static void
 keychain_free (struct keychain *keychain)
 {
+  QOBJ_UNREG (keychain);
   XFREE (MTYPE_KEYCHAIN, keychain);
 }
 
 static struct key *
 key_new (void)
 {
-  return XCALLOC (MTYPE_KEY, sizeof (struct key));
+  struct key *key = XCALLOC (MTYPE_KEY, sizeof (struct key));
+  QOBJ_REG (key, key);
+  return key;
 }
 
 static void
 key_free (struct key *key)
 {
+  QOBJ_UNREG (key);
   XFREE (MTYPE_KEY, key);
 }
 
@@ -240,8 +250,7 @@ DEFUN (key_chain,
   struct keychain *keychain;
 
   keychain = keychain_get (argv[0]);
-  vty->index = keychain;
-  vty->node = KEYCHAIN_NODE;
+  VTY_PUSH_CONTEXT_COMPAT (KEYCHAIN_NODE, keychain);
 
   return CMD_SUCCESS;
 }
@@ -275,17 +284,14 @@ DEFUN (key,
        "Configure a key\n"
        "Key identifier number\n")
 {
-  struct keychain *keychain;
+  VTY_DECLVAR_CONTEXT (keychain, keychain);
   struct key *key;
   u_int32_t index;
 
-  keychain = vty->index;
-
   VTY_GET_INTEGER ("key identifier", index, argv[0]);
   key = key_get (keychain, index);
-  vty->index_sub = key;
-  vty->node = KEYCHAIN_KEY_NODE;
-  
+  VTY_PUSH_CONTEXT_SUB (KEYCHAIN_KEY_NODE, key);
+
   return CMD_SUCCESS;
 }
 
@@ -296,11 +302,9 @@ DEFUN (no_key,
        "Delete a key\n"
        "Key identifier number\n")
 {
-  struct keychain *keychain;
+  VTY_DECLVAR_CONTEXT (keychain, keychain);
   struct key *key;
   u_int32_t index;
-  
-  keychain = vty->index;
 
   VTY_GET_INTEGER ("key identifier", index, argv[0]);
   key = key_lookup (keychain, index);
@@ -323,9 +327,7 @@ DEFUN (key_string,
        "Set key string\n"
        "The key\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   if (key->string)
     XFREE(MTYPE_KEY, key->string);
@@ -341,9 +343,7 @@ DEFUN (no_key_string,
        "Unset key string\n"
        "The key\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   if (key->string)
     {
@@ -552,9 +552,7 @@ DEFUN (accept_lifetime_day_month_day_month,
        "Month of the year to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->accept, argv[0], argv[1], argv[2],
 			   argv[3], argv[4], argv[5], argv[6], argv[7]);
@@ -573,9 +571,7 @@ DEFUN (accept_lifetime_day_month_month_day,
        "Day of th month to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->accept, argv[0], argv[1], argv[2],
 			   argv[3], argv[4], argv[6], argv[5], argv[7]);
@@ -594,9 +590,7 @@ DEFUN (accept_lifetime_month_day_day_month,
        "Month of the year to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->accept, argv[0], argv[2], argv[1],
 			   argv[3], argv[4], argv[5], argv[6], argv[7]);
@@ -615,9 +609,7 @@ DEFUN (accept_lifetime_month_day_month_day,
        "Day of th month to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->accept, argv[0], argv[2], argv[1],
 			   argv[3], argv[4], argv[6], argv[5], argv[7]);
@@ -633,9 +625,7 @@ DEFUN (accept_lifetime_infinite_day_month,
        "Year to start\n"
        "Never expires")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_infinite_set (vty, &key->accept, argv[0], argv[1],
 				    argv[2], argv[3]);
@@ -651,9 +641,7 @@ DEFUN (accept_lifetime_infinite_month_day,
        "Year to start\n"
        "Never expires")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_infinite_set (vty, &key->accept, argv[0], argv[2],
 				    argv[1], argv[3]);
@@ -670,9 +658,7 @@ DEFUN (accept_lifetime_duration_day_month,
        "Duration of the key\n"
        "Duration seconds\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_duration_set (vty, &key->accept, argv[0], argv[1],
 				    argv[2], argv[3], argv[4]);
@@ -689,9 +675,7 @@ DEFUN (accept_lifetime_duration_month_day,
        "Duration of the key\n"
        "Duration seconds\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_duration_set (vty, &key->accept, argv[0], argv[2],
 				    argv[1], argv[3], argv[4]);
@@ -710,9 +694,7 @@ DEFUN (send_lifetime_day_month_day_month,
        "Month of the year to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->send, argv[0], argv[1], argv[2], argv[3],
 			   argv[4], argv[5], argv[6], argv[7]);
@@ -731,9 +713,7 @@ DEFUN (send_lifetime_day_month_month_day,
        "Day of th month to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->send, argv[0], argv[1], argv[2], argv[3],
 			   argv[4], argv[6], argv[5], argv[7]);
@@ -752,9 +732,7 @@ DEFUN (send_lifetime_month_day_day_month,
        "Month of the year to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->send, argv[0], argv[2], argv[1], argv[3],
 			   argv[4], argv[5], argv[6], argv[7]);
@@ -773,9 +751,7 @@ DEFUN (send_lifetime_month_day_month_day,
        "Day of th month to expire\n"
        "Year to expire\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_set (vty, &key->send, argv[0], argv[2], argv[1], argv[3],
 			   argv[4], argv[6], argv[5], argv[7]);
@@ -791,9 +767,7 @@ DEFUN (send_lifetime_infinite_day_month,
        "Year to start\n"
        "Never expires")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_infinite_set (vty, &key->send, argv[0], argv[1], argv[2],
 				    argv[3]);
@@ -809,9 +783,7 @@ DEFUN (send_lifetime_infinite_month_day,
        "Year to start\n"
        "Never expires")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_infinite_set (vty, &key->send, argv[0], argv[2], argv[1],
 				    argv[3]);
@@ -828,9 +800,7 @@ DEFUN (send_lifetime_duration_day_month,
        "Duration of the key\n"
        "Duration seconds\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_duration_set (vty, &key->send, argv[0], argv[1], argv[2],
 				    argv[3], argv[4]);
@@ -847,9 +817,7 @@ DEFUN (send_lifetime_duration_month_day,
        "Duration of the key\n"
        "Duration seconds\n")
 {
-  struct key *key;
-
-  key = vty->index_sub;
+  VTY_DECLVAR_CONTEXT_SUB (key, key);
 
   return key_lifetime_duration_set (vty, &key->send, argv[0], argv[2], argv[1],
 				    argv[3], argv[4]);

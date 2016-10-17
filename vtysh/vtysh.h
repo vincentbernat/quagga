@@ -52,6 +52,14 @@ DECLARE_MGROUP(MVTYSH)
        || saved_node == BGP_IPV6M_NODE || saved_node == BGP_EVPN_NODE \
        || saved_node == BGP_EVPN_VNI_NODE)
 
+enum vtysh_write_integrated {
+	WRITE_INTEGRATED_UNSPECIFIED,
+	WRITE_INTEGRATED_NO,
+	WRITE_INTEGRATED_YES
+};
+
+extern enum vtysh_write_integrated vtysh_write_integrated;
+
 void vtysh_init_vty (void);
 void vtysh_init_cmd (void);
 extern int vtysh_connect_all (const char *optional_daemon_name);

@@ -622,4 +622,8 @@ static inline safi_t safi_int2iana (safi_t safi)
   return IANA_SAFI_RESERVED;
 }
 
+typedef uint32_t route_tag_t;
+#define ROUTE_TAG_MAX UINT32_MAX
+#define ROUTE_TAG_PRI PRIu32
+
 #endif /* _ZEBRA_H */

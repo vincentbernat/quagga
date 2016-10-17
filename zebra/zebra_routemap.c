@@ -51,17 +51,18 @@ struct nh_rmap_obj
   vrf_id_t vrf_id;
   u_int32_t source_protocol;
   int metric;
-  u_short tag;
+  route_tag_t tag;
 };
 
 static void zebra_route_map_set_delay_timer(u_int32_t value);
 
 /* Add zebra route map rule */
 static int
-zebra_route_match_add(struct vty *vty, struct route_map_index *index,
+zebra_route_match_add(struct vty *vty,
 		      const char *command, const char *arg,
 		      route_map_event_t type)
 {
+  VTY_DECLVAR_CONTEXT (route_map_index, index);
   int ret;
 
   ret = route_map_add_match (index, command, arg);
@@ -87,10 +88,11 @@ zebra_route_match_add(struct vty *vty, struct route_map_index *index,
 
 /* Delete zebra route map rule. */
 static int
-zebra_route_match_delete (struct vty *vty, struct route_map_index *index,
+zebra_route_match_delete (struct vty *vty,
 			  const char *command, const char *arg,
 			  route_map_event_t type)
 {
+  VTY_DECLVAR_CONTEXT (route_map_index, index);
   int ret;
   char *dep_name = NULL;
   const char *tmpstr;
@@ -138,9 +140,10 @@ zebra_route_match_delete (struct vty *vty, struct route_map_index *index,
 
 /* Add zebra route map rule. */
 static int
-zebra_route_set_add (struct vty *vty, struct route_map_index *index,
+zebra_route_set_add (struct vty *vty,
 		   const char *command, const char *arg)
 {
+  VTY_DECLVAR_CONTEXT (route_map_index, index);
   int ret;
 
   ret = route_map_add_set (index, command, arg);
@@ -161,9 +164,10 @@ zebra_route_set_add (struct vty *vty, struct route_map_index *index,
 
 /* Delete zebra route map rule. */
 static int
-zebra_route_set_delete (struct vty *vty, struct route_map_index *index,
+zebra_route_set_delete (struct vty *vty,
 		      const char *command, const char *arg)
 {
+  VTY_DECLVAR_CONTEXT (route_map_index, index);
   int ret;
 
   ret = route_map_delete_set (index, command, arg);
@@ -189,7 +193,7 @@ static route_map_result_t
 route_match_tag (void *rule, struct prefix *prefix,
 		 route_map_object_t type, void *object)
 {
-  u_short *tag;
+  route_tag_t *tag;
   struct nh_rmap_obj *nh_data;
 
   if (type == RMAP_ZEBRA)
@@ -203,45 +207,13 @@ route_match_tag (void *rule, struct prefix *prefix,
   return RMAP_NOMATCH;
 }
 
-/* Route map 'match tag' match statement. 'arg' is TAG value */
-static void *
-route_match_tag_compile (const char *arg)
-{
-  u_short *tag;
-  u_short tmp;
-
-  /* tag value shoud be integer. */
-  if (! all_digit (arg))
-    return NULL;
-
-  tmp = atoi(arg);
-  if (tmp < 1)
-    return NULL;
-
-  tag = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_short));
-
-  if (!tag)
-    return tag;
-
-  *tag = tmp;
-
-  return tag;
-}
-
-/* Free route map's compiled 'match tag' value. */
-static void
-route_match_tag_free (void *rule)
-{
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
-}
-
 /* Route map commands for tag matching */
-struct route_map_rule_cmd route_match_tag_cmd =
+static struct route_map_rule_cmd route_match_tag_cmd =
 {
-   "tag",
-   route_match_tag,
-   route_match_tag_compile,
-   route_match_tag_free
+  "tag",
+  route_match_tag,
+  route_map_rule_tag_compile,
+  route_map_rule_tag_free,
 };
 
 
@@ -301,7 +273,7 @@ DEFUN (match_interface,
        "match first hop interface of route\n"
        "Interface name\n")
 {
-  return zebra_route_match_add (vty, vty->index, "interface", argv[0],
+  return zebra_route_match_add (vty, "interface", argv[0],
 				RMAP_EVENT_MATCH_ADDED);
 }
 
@@ -313,9 +285,9 @@ DEFUN (no_match_interface,
        "Match first hop interface of route\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index, "interface", NULL, RMAP_EVENT_MATCH_DELETED);
+    return zebra_route_match_delete (vty, "interface", NULL, RMAP_EVENT_MATCH_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index, "interface", argv[0], RMAP_EVENT_MATCH_DELETED);
+  return zebra_route_match_delete (vty, "interface", argv[0], RMAP_EVENT_MATCH_DELETED);
 }
 
 ALIAS (no_match_interface,
@@ -328,12 +300,12 @@ ALIAS (no_match_interface,
 
 DEFUN (match_tag,
        match_tag_cmd,
-       "match tag <1-65535>",
+       "match tag <1-4294967295>",
        MATCH_STR
        "Match tag of route\n"
        "Tag value\n")
 {
-  return zebra_route_match_add (vty, vty->index, "tag", argv[0],
+  return zebra_route_match_add (vty, "tag", argv[0],
                                 RMAP_EVENT_MATCH_ADDED);
 }
 
@@ -345,16 +317,16 @@ DEFUN (no_match_tag,
        "Match tag of route\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index, "tag", NULL,
+    return zebra_route_match_delete (vty, "tag", NULL,
                                      RMAP_EVENT_MATCH_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index, "tag", argv[0],
+  return zebra_route_match_delete (vty, "tag", argv[0],
                                    RMAP_EVENT_MATCH_DELETED);
 }
 
 ALIAS (no_match_tag,
        no_match_tag_val_cmd,
-       "no match tag <1-65535>",
+       "no match tag <1-4294967295>",
        NO_STR
        MATCH_STR
        "Match tag of route\n")
@@ -369,7 +341,7 @@ DEFUN (match_ip_next_hop,
        "IP access-list number (expanded range)\n"
        "IP Access-list name\n")
 {
-  return zebra_route_match_add (vty, vty->index, "ip next-hop", argv[0], RMAP_EVENT_FILTER_ADDED);
+  return zebra_route_match_add (vty, "ip next-hop", argv[0], RMAP_EVENT_FILTER_ADDED);
 }
 
 DEFUN (no_match_ip_next_hop,
@@ -381,10 +353,10 @@ DEFUN (no_match_ip_next_hop,
        "Match next-hop address of route\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index, "ip next-hop", NULL,
+    return zebra_route_match_delete (vty, "ip next-hop", NULL,
 				     RMAP_EVENT_FILTER_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index, "ip next-hop", argv[0],
+  return zebra_route_match_delete (vty, "ip next-hop", argv[0],
 				   RMAP_EVENT_FILTER_DELETED);
 }
 
@@ -408,7 +380,7 @@ DEFUN (match_ip_next_hop_prefix_list,
        "Match entries of prefix-lists\n"
        "IP prefix-list name\n")
 {
-  return zebra_route_match_add (vty, vty->index, "ip next-hop prefix-list",
+  return zebra_route_match_add (vty, "ip next-hop prefix-list",
 				argv[0], RMAP_EVENT_PLIST_ADDED);
 }
 
@@ -422,11 +394,11 @@ DEFUN (no_match_ip_next_hop_prefix_list,
        "Match entries of prefix-lists\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index,
+    return zebra_route_match_delete (vty,
 				     "ip next-hop prefix-list", NULL,
 				     RMAP_EVENT_PLIST_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index,
+  return zebra_route_match_delete (vty,
 				   "ip next-hop prefix-list", argv[0],
 				   RMAP_EVENT_PLIST_DELETED);
 }
@@ -452,7 +424,7 @@ DEFUN (match_ip_address,
        "IP Access-list name\n")
 
 {
-  return zebra_route_match_add (vty, vty->index, "ip address", argv[0],
+  return zebra_route_match_add (vty, "ip address", argv[0],
 				RMAP_EVENT_FILTER_ADDED);
 }
 
@@ -465,10 +437,10 @@ DEFUN (no_match_ip_address,
        "Match address of route\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index, "ip address", NULL,
+    return zebra_route_match_delete (vty, "ip address", NULL,
 				     RMAP_EVENT_FILTER_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index, "ip address", argv[0],
+  return zebra_route_match_delete (vty, "ip address", argv[0],
 				   RMAP_EVENT_FILTER_DELETED);
 }
 
@@ -492,7 +464,7 @@ DEFUN (match_ip_address_prefix_list,
        "Match entries of prefix-lists\n"
        "IP prefix-list name\n")
 {
-  return zebra_route_match_add (vty, vty->index, "ip address prefix-list",
+  return zebra_route_match_add (vty, "ip address prefix-list",
 				argv[0], RMAP_EVENT_PLIST_ADDED);
 }
 
@@ -506,11 +478,11 @@ DEFUN (no_match_ip_address_prefix_list,
        "Match entries of prefix-lists\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index,
+    return zebra_route_match_delete (vty,
 				     "ip address prefix-list", NULL,
 				     RMAP_EVENT_PLIST_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index,
+  return zebra_route_match_delete (vty,
 				   "ip address prefix-list", argv[0],
 				   RMAP_EVENT_PLIST_DELETED);
 }
@@ -534,7 +506,7 @@ DEFUN (match_ip_address_prefix_len,
        "Match prefix length of ip address\n"
        "Prefix length\n")
 {
-  return zebra_route_match_add (vty, vty->index, "ip address prefix-len",
+  return zebra_route_match_add (vty, "ip address prefix-len",
 				argv[0], RMAP_EVENT_MATCH_ADDED);
 }
 
@@ -548,11 +520,11 @@ DEFUN (no_match_ip_address_prefix_len,
        "prefix length of ip address\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index,
+    return zebra_route_match_delete (vty,
 				     "ip address prefix-len", NULL,
 				     RMAP_EVENT_MATCH_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index,
+  return zebra_route_match_delete (vty,
 				   "ip address prefix-len", argv[0],
 				   RMAP_EVENT_MATCH_DELETED);
 }
@@ -575,7 +547,7 @@ DEFUN (match_ip_nexthop_prefix_len,
        "Match prefixlen of given nexthop\n"
        "Prefix length\n")
 {
-  return zebra_route_match_add (vty, vty->index, "ip next-hop prefix-len",
+  return zebra_route_match_add (vty, "ip next-hop prefix-len",
 				argv[0], RMAP_EVENT_MATCH_ADDED);
 }
 
@@ -589,11 +561,11 @@ DEFUN (no_match_ip_nexthop_prefix_len,
        "Match prefix length of nexthop\n")
 {
   if (argc == 0)
-    return zebra_route_match_delete (vty, vty->index,
+    return zebra_route_match_delete (vty,
 				     "ip next-hop prefix-len", NULL,
 				     RMAP_EVENT_MATCH_DELETED);
 
-  return zebra_route_match_delete (vty, vty->index,
+  return zebra_route_match_delete (vty,
 				   "ip next-hop prefix-len", argv[0],
 				   RMAP_EVENT_MATCH_DELETED);
 }
@@ -620,7 +592,7 @@ DEFUN (match_source_protocol,
                VTY_NEWLINE);
       return CMD_WARNING;
     }
-  return zebra_route_match_add (vty, vty->index, "source-protocol",
+  return zebra_route_match_add (vty, "source-protocol",
 				argv[0], RMAP_EVENT_MATCH_ADDED);
 }
 
@@ -643,7 +615,7 @@ DEFUN (no_match_source_protocol,
 	  return CMD_WARNING;
 	}
     }
-  return zebra_route_match_delete (vty, vty->index,
+  return zebra_route_match_delete (vty,
 				   "source-protocol", argv[0] ? argv[0] : NULL,
 				   RMAP_EVENT_MATCH_DELETED);
 }
@@ -706,7 +678,7 @@ DEFUN (set_src,
       vty_out (vty, "%% not a local address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  return zebra_route_set_add (vty, vty->index, "src", argv[0]);
+  return zebra_route_set_add (vty, "src", argv[0]);
 }
 
 DEFUN (no_set_src,
@@ -717,9 +689,9 @@ DEFUN (no_set_src,
        "Source address for route\n")
 {
   if (argc == 0)
-    return zebra_route_set_delete (vty, vty->index, "src", NULL);
+    return zebra_route_set_delete (vty, "src", NULL);
 
-  return zebra_route_set_delete (vty, vty->index, "src", argv[0]);
+  return zebra_route_set_delete (vty, "src", argv[0]);
 }
 
 DEFUN (zebra_route_map_timer,
@@ -1645,7 +1617,7 @@ zebra_route_map_write_delay_timer (struct vty *vty)
 
 route_map_result_t
 zebra_route_map_check (int family, int rib_type, struct prefix *p,
-		       struct nexthop *nexthop, vrf_id_t vrf_id, u_short tag)
+		       struct nexthop *nexthop, vrf_id_t vrf_id, route_tag_t tag)
 {
   struct route_map *rmap = NULL;
   route_map_result_t ret = RMAP_MATCH;
@@ -1688,7 +1660,7 @@ zebra_del_import_table_route_map (afi_t afi, uint32_t table)
 
 route_map_result_t
 zebra_import_table_route_map_check (int family, int rib_type, struct prefix *p,
-                struct nexthop *nexthop, vrf_id_t vrf_id, u_short tag, const char *rmap_name)
+                struct nexthop *nexthop, vrf_id_t vrf_id, route_tag_t tag, const char *rmap_name)
 {
   struct route_map *rmap = NULL;
   route_map_result_t ret = RMAP_DENYMATCH;

@@ -83,13 +83,10 @@ char *vty_cwd = NULL;
 
 /* Configure lock. */
 static int vty_config;
+static int vty_config_is_lockless = 0;
 
 /* Login password check. */
 static int no_password_check = 0;
-
-/* Restrict unauthenticated logins? */
-static const u_char restricted_mode_default = 0;
-static u_char restricted_mode = 0;
 
 /* Integrated configuration file path */
 char integrate_default[] = SYSCONFDIR INTEGRATE_DEFAULT_CONFIG;
@@ -394,7 +391,7 @@ vty_auth (struct vty *vty, char *buf)
 	      /* AUTH_ENABLE_NODE */
 	      vty->fail = 0;
 	      vty_out (vty, "%% Bad enable passwords, too many failures!%s", VTY_NEWLINE);
-	      vty->node = restricted_mode ? RESTRICTED_NODE : VIEW_NODE;
+	      vty->status = VTY_CLOSE;
 	    }
 	}
     }
@@ -734,7 +731,6 @@ vty_end_config (struct vty *vty)
     {
     case VIEW_NODE:
     case ENABLE_NODE:
-    case RESTRICTED_NODE:
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
@@ -1158,7 +1154,6 @@ vty_stop_input (struct vty *vty)
     {
     case VIEW_NODE:
     case ENABLE_NODE:
-    case RESTRICTED_NODE:
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
@@ -1718,9 +1713,7 @@ vty_create (int vty_sock, union sockunion *su)
   strcpy (vty->address, buf);
   if (no_password_check)
     {
-      if (restricted_mode)
-        vty->node = RESTRICTED_NODE;
-      else if (host.advanced)
+      if (host.advanced)
 	vty->node = ENABLE_NODE;
       else
 	vty->node = VIEW_NODE;
@@ -2636,6 +2629,8 @@ vty_log_fixed (char *buf, size_t len)
 int
 vty_config_lock (struct vty *vty)
 {
+  if (vty_config_is_lockless)
+    return 1;
   if (vty_config == 0)
     {
       vty->config = 1;
@@ -2647,12 +2642,20 @@ vty_config_lock (struct vty *vty)
 int
 vty_config_unlock (struct vty *vty)
 {
+  if (vty_config_is_lockless)
+    return 0;
   if (vty_config == 1 && vty->config == 1)
     {
       vty->config = 0;
       vty_config = 0;
     }
   return vty->config;
+}
+
+void
+vty_config_lockless (void)
+{
+  vty_config_is_lockless = 1;
 }
 
 /* Master of the threads. */
@@ -2890,26 +2893,6 @@ DEFUN (no_vty_login,
   return CMD_SUCCESS;
 }
 
-/* initial mode. */
-DEFUN (vty_restricted_mode,
-       vty_restricted_mode_cmd,
-       "anonymous restricted",
-       "Restrict view commands available in anonymous, unauthenticated vty\n")
-{
-  restricted_mode = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (vty_no_restricted_mode,
-       vty_no_restricted_mode_cmd,
-       "no anonymous restricted",
-       NO_STR
-       "Enable password checking\n")
-{
-  restricted_mode = 0;
-  return CMD_SUCCESS;
-}
-
 DEFUN (service_advanced_vty,
        service_advanced_vty_cmd,
        "service advanced-vty",
@@ -3018,14 +3001,6 @@ vty_config_write (struct vty *vty)
   /* login */
   if (no_password_check)
     vty_out (vty, " no login%s", VTY_NEWLINE);
-    
-  if (restricted_mode != restricted_mode_default)
-    {
-      if (restricted_mode_default)
-        vty_out (vty, " no anonymous restricted%s", VTY_NEWLINE);
-      else
-        vty_out (vty, " anonymous restricted%s", VTY_NEWLINE);
-    }
 
   if (do_log_commands)
     vty_out (vty, "log commands%s", VTY_NEWLINE);
@@ -3155,11 +3130,8 @@ vty_init (struct thread_master *master_thread)
   /* Install bgp top node. */
   install_node (&vty_node, vty_config_write);
 
-  install_element (RESTRICTED_NODE, &config_who_cmd);
-  install_element (RESTRICTED_NODE, &show_history_cmd);
   install_element (VIEW_NODE, &config_who_cmd);
   install_element (VIEW_NODE, &show_history_cmd);
-  install_element (ENABLE_NODE, &config_who_cmd);
   install_element (CONFIG_NODE, &line_vty_cmd);
   install_element (CONFIG_NODE, &service_advanced_vty_cmd);
   install_element (CONFIG_NODE, &no_service_advanced_vty_cmd);
@@ -3168,7 +3140,6 @@ vty_init (struct thread_master *master_thread)
   install_element (ENABLE_NODE, &terminal_monitor_cmd);
   install_element (ENABLE_NODE, &terminal_no_monitor_cmd);
   install_element (ENABLE_NODE, &no_terminal_monitor_cmd);
-  install_element (ENABLE_NODE, &show_history_cmd);
 
   install_default (VTY_NODE);
   install_element (VTY_NODE, &exec_timeout_min_cmd);
@@ -3178,8 +3149,6 @@ vty_init (struct thread_master *master_thread)
   install_element (VTY_NODE, &no_vty_access_class_cmd);
   install_element (VTY_NODE, &vty_login_cmd);
   install_element (VTY_NODE, &no_vty_login_cmd);
-  install_element (VTY_NODE, &vty_restricted_mode_cmd);
-  install_element (VTY_NODE, &vty_no_restricted_mode_cmd);
 #ifdef HAVE_IPV6
   install_element (VTY_NODE, &vty_ipv6_access_class_cmd);
   install_element (VTY_NODE, &no_vty_ipv6_access_class_cmd);

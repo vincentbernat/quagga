@@ -113,11 +113,7 @@ DEFUN (show_memory,
 void
 memory_init (void)
 {
-  install_element (RESTRICTED_NODE, &show_memory_cmd);
-
   install_element (VIEW_NODE, &show_memory_cmd);
-
-  install_element (ENABLE_NODE, &show_memory_cmd);
 }
 
 /* Stats querying from users */

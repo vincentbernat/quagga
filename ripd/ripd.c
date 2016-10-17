@@ -760,17 +760,18 @@ rip_packet_dump (struct rip_packet *packet, int size, const char *sndrcv)
 		}
             }
 	  else
-	    zlog_debug ("  %s/%d -> %s family %d tag %d metric %ld",
+	    zlog_debug ("  %s/%d -> %s family %d tag %"ROUTE_TAG_PRI" metric %ld",
                        inet_ntop (AF_INET, &rte->prefix, pbuf, BUFSIZ),
                        netmask, inet_ntop (AF_INET, &rte->nexthop, nbuf,
                                            BUFSIZ), ntohs (rte->family),
-                       ntohs (rte->tag), (u_long) ntohl (rte->metric));
+                       (route_tag_t)ntohs (rte->tag),
+                       (u_long) ntohl (rte->metric));
 	}
       else
 	{
-	  zlog_debug ("  %s family %d tag %d metric %ld", 
+	  zlog_debug ("  %s family %d tag %"ROUTE_TAG_PRI" metric %ld", 
 		     inet_ntop (AF_INET, &rte->prefix, pbuf, BUFSIZ),
-		     ntohs (rte->family), ntohs (rte->tag),
+		     ntohs (rte->family), (route_tag_t)ntohs (rte->tag),
 		     (u_long)ntohl (rte->metric));
 	}
     }
@@ -1512,7 +1513,8 @@ rip_send_packet (u_char * buf, int size, struct sockaddr_in *to,
 void
 rip_redistribute_add (int type, int sub_type, struct prefix_ipv4 *p, 
 		      ifindex_t ifindex, struct in_addr *nexthop,
-                      unsigned int metric, unsigned char distance)
+                      unsigned int metric, unsigned char distance,
+                      route_tag_t tag)
 {
   int ret;
   struct route_node *rp = NULL;
@@ -1533,6 +1535,8 @@ rip_redistribute_add (int type, int sub_type, struct prefix_ipv4 *p,
   newinfo.metric = 1;
   newinfo.external_metric = metric;
   newinfo.distance = distance;
+  if (tag <= UINT16_MAX) /* RIP only supports 16 bit tags */
+    newinfo.tag = tag;
   newinfo.rp = rp;
   if (nexthop)
     newinfo.nexthop = *nexthop;
@@ -2944,7 +2948,7 @@ DEFUN (rip_route,
 
   node->info = (void *)1;
 
-  rip_redistribute_add (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0, NULL, 0, 0);
+  rip_redistribute_add (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0, NULL, 0, 0, 0);
 
   return CMD_SUCCESS;
 }
@@ -3551,13 +3555,13 @@ DEFUN (show_ip_rip,
 	    (rinfo->sub_type == RIP_ROUTE_RTE))
 	  {
 	    vty_out (vty, "%-15s ", inet_ntoa (rinfo->from));
-	    vty_out (vty, "%3d ", rinfo->tag);
+	    vty_out (vty, "%3"ROUTE_TAG_PRI" ", (route_tag_t)rinfo->tag);
 	    rip_vty_out_uptime (vty, rinfo);
 	  }
 	else if (rinfo->metric == RIP_METRIC_INFINITY)
 	  {
 	    vty_out (vty, "self            ");
-	    vty_out (vty, "%3d ", rinfo->tag);
+	    vty_out (vty, "%3"ROUTE_TAG_PRI" ", (route_tag_t)rinfo->tag);
 	    rip_vty_out_uptime (vty, rinfo);
 	  }
 	else
@@ -3573,7 +3577,7 @@ DEFUN (show_ip_rip,
 	      }
 	    else
 	      vty_out (vty, "self            ");
-	    vty_out (vty, "%3d", rinfo->tag);
+	    vty_out (vty, "%3"ROUTE_TAG_PRI, (route_tag_t)rinfo->tag);
 	  }
 
 	vty_out (vty, "%s", VTY_NEWLINE);
@@ -4080,8 +4084,6 @@ rip_init (void)
   /* Install rip commands. */
   install_element (VIEW_NODE, &show_ip_rip_cmd);
   install_element (VIEW_NODE, &show_ip_rip_status_cmd);
-  install_element (ENABLE_NODE, &show_ip_rip_cmd);
-  install_element (ENABLE_NODE, &show_ip_rip_status_cmd);
   install_element (CONFIG_NODE, &router_rip_cmd);
   install_element (CONFIG_NODE, &no_router_rip_cmd);
 

@@ -734,7 +734,7 @@ zsend_redistribute_route (int cmd, struct zserv *client, struct prefix *p,
   if (rib->tag)
     {
       SET_FLAG(zapi_flags, ZAPI_MESSAGE_TAG);
-      stream_putw(s, rib->tag);
+      stream_putl(s, rib->tag);
     }
 
   /* MTU */
@@ -1114,7 +1114,7 @@ zread_ipv4_add (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
     
   /* Tag */
   if (CHECK_FLAG (message, ZAPI_MESSAGE_TAG))
-    rib->tag = stream_getw (s);
+    rib->tag = stream_getl (s);
   else
     rib->tag = 0;
 
@@ -1213,7 +1213,7 @@ zread_ipv4_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
     
   /* tag */
   if (CHECK_FLAG (api.message, ZAPI_MESSAGE_TAG))
-    api.tag = stream_getw (s);
+    api.tag = stream_getl (s);
   else
     api.tag = 0;
 
@@ -1343,7 +1343,7 @@ zread_ipv4_route_ipv6_nexthop_add (struct zserv *client, u_short length, struct 
 
   /* Tag */
   if (CHECK_FLAG (message, ZAPI_MESSAGE_TAG))
-    rib->tag = stream_getw (s);
+    rib->tag = stream_getl (s);
   else
     rib->tag = 0;
 
@@ -1464,7 +1464,7 @@ zread_ipv6_add (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
     
   /* Tag */
   if (CHECK_FLAG (message, ZAPI_MESSAGE_TAG))
-    rib->tag = stream_getw (s);
+    rib->tag = stream_getl (s);
   else
     rib->tag = 0;
 
@@ -1553,7 +1553,7 @@ zread_ipv6_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
     
   /* tag */
   if (CHECK_FLAG (api.message, ZAPI_MESSAGE_TAG))
-    api.tag = stream_getw (s);
+    api.tag = stream_getl (s);
   else
     api.tag = 0;
 
@@ -2653,7 +2653,6 @@ zebra_init (void)
 #endif
 
   install_element (VIEW_NODE, &show_ip_forwarding_cmd);
-  install_element (ENABLE_NODE, &show_ip_forwarding_cmd);
   install_element (CONFIG_NODE, &ip_forwarding_cmd);
   install_element (CONFIG_NODE, &no_ip_forwarding_cmd);
   install_element (ENABLE_NODE, &show_zebra_client_cmd);
@@ -2661,14 +2660,12 @@ zebra_init (void)
 
 #ifdef HAVE_NETLINK
   install_element (VIEW_NODE, &show_table_cmd);
-  install_element (ENABLE_NODE, &show_table_cmd);
   install_element (CONFIG_NODE, &config_table_cmd);
   install_element (CONFIG_NODE, &no_config_table_cmd);
 #endif /* HAVE_NETLINK */
 
 #ifdef HAVE_IPV6
   install_element (VIEW_NODE, &show_ipv6_forwarding_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_forwarding_cmd);
   install_element (CONFIG_NODE, &ipv6_forwarding_cmd);
   install_element (CONFIG_NODE, &no_ipv6_forwarding_cmd);
 #endif /* HAVE_IPV6 */

@@ -47,35 +47,7 @@
 #define EVPN_TYPE_2_ROUTE_PREFIXLEN      192
 #define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
 
-/*
- * Hash table of VNIs - configured, learnt and local.
- * TODO: Configuration is not supported right now.
- */
-struct bgpevpn
-{
-  vni_t                     vni;
-  u_int32_t                 flags;
-#define VNI_FLAG_CONFIGURED   0x01
-#define VNI_FLAG_LOCAL        0x02
-#define RD_AUTO               0x04
-#define RT_IMPORT_AUTO        0x08
-#define RT_EXPORT_AUTO        0x10
-#define MAC_FLAG_LOCAL        0x20
 
-  /* RD for this VNI. */
-  struct prefix_rd          prd;
-
-  /* Route type 3 field */
-  struct in_addr            originator_ip;
-
-  /* List of MAC/IP */
-  struct hash *macip_table;
-  
-  /* Import and Export RTs. */
-  struct list               *import_rtl;
-  /* TODO: Only 1 supported. */
-  struct ecommunity_val     export_rt;
-};
 
 struct import_rt_node
 {
@@ -96,6 +68,8 @@ struct macip
 };
 
 extern struct zclient *zclient;
+
+DEFINE_QOBJ_TYPE(bgpevpn)
 
 static int
 bgp_evpn_uninstall_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,

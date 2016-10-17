@@ -33,6 +33,7 @@ Boston, MA 02111-1307, USA.  */
 #include "command.h"
 #include "workqueue.h"
 #include "vrf.h"
+#include "qobj.h"
 
 DEFINE_MTYPE(       LIB, HOST,       "Host config")
 DEFINE_MTYPE(       LIB, STRVEC,     "String vector")
@@ -94,12 +95,6 @@ static struct cmd_node view_node =
 {
   VIEW_NODE,
   "%s> ",
-};
-
-static struct cmd_node restricted_node =
-{
-  RESTRICTED_NODE,
-  "%s$ ",
 };
 
 static struct cmd_node auth_enable_node =
@@ -723,6 +718,9 @@ install_element (enum node_type ntype, struct cmd_element *cmd)
   vector_set (cnode->cmd_vector, cmd);
   if (cmd->tokens == NULL)
     cmd->tokens = cmd_parse_format(cmd->string, cmd->doc);
+
+  if (ntype == VIEW_NODE)
+    install_element (ENABLE_NODE, cmd);
 }
 
 static const unsigned char itoa64[] =
@@ -2018,7 +2016,6 @@ cmd_try_do_shortcut (enum node_type node, char* first_word) {
        node != VIEW_NODE &&
        node != AUTH_ENABLE_NODE &&
        node != ENABLE_NODE &&
-       node != RESTRICTED_NODE &&
        0 == strcmp( "do", first_word ) )
     return 1;
   return 0;
@@ -2921,7 +2918,6 @@ DEFUN (config_exit,
     {
     case VIEW_NODE:
     case ENABLE_NODE:
-    case RESTRICTED_NODE:
       if (vty_shell (vty))
 	exit (0);
       else
@@ -3008,7 +3004,6 @@ DEFUN (config_end,
     {
     case VIEW_NODE:
     case ENABLE_NODE:
-    case RESTRICTED_NODE:
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
@@ -4189,6 +4184,8 @@ install_default (enum node_type node)
 void
 cmd_init (int terminal)
 {
+  qobj_init ();
+
   command_cr = XSTRDUP(MTYPE_CMD_TOKENS, "<cr>");
   token_cr.type = TOKEN_TERMINAL;
   token_cr.terminal = TERMINAL_LITERAL;
@@ -4213,7 +4210,6 @@ cmd_init (int terminal)
   install_node (&enable_node, NULL);
   install_node (&auth_node, NULL);
   install_node (&auth_enable_node, NULL);
-  install_node (&restricted_node, NULL);
   install_node (&config_node, config_write_host);
 
   /* Each node's basic commands. */
@@ -4230,36 +4226,25 @@ cmd_init (int terminal)
       install_element (VIEW_NODE, &show_logging_cmd);
       install_element (VIEW_NODE, &show_commandtree_cmd);
       install_element (VIEW_NODE, &echo_cmd);
-
-      install_element (RESTRICTED_NODE, &config_list_cmd);
-      install_element (RESTRICTED_NODE, &config_exit_cmd);
-      install_element (RESTRICTED_NODE, &config_quit_cmd);
-      install_element (RESTRICTED_NODE, &config_help_cmd);
-      install_element (RESTRICTED_NODE, &config_enable_cmd);
-      install_element (RESTRICTED_NODE, &config_terminal_length_cmd);
-      install_element (RESTRICTED_NODE, &config_terminal_no_length_cmd);
-      install_element (RESTRICTED_NODE, &echo_cmd);
     }
 
   if (terminal)
     {
-      install_default (ENABLE_NODE);
+      install_element (ENABLE_NODE, &config_end_cmd);
       install_element (ENABLE_NODE, &config_disable_cmd);
       install_element (ENABLE_NODE, &config_terminal_cmd);
       install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
+      install_element (ENABLE_NODE, &config_write_terminal_cmd);
+      install_element (ENABLE_NODE, &config_write_file_cmd);
+      install_element (ENABLE_NODE, &config_write_memory_cmd);
+      install_element (ENABLE_NODE, &config_write_cmd);
+      install_element (ENABLE_NODE, &show_running_config_cmd);
     }
   install_element (ENABLE_NODE, &show_startup_config_cmd);
-  install_element (ENABLE_NODE, &show_version_cmd);
-  install_element (ENABLE_NODE, &show_commandtree_cmd);
 
   if (terminal)
     {
-      install_element (ENABLE_NODE, &config_terminal_length_cmd);
-      install_element (ENABLE_NODE, &config_terminal_no_length_cmd);
-      install_element (ENABLE_NODE, &show_logging_cmd);
-      install_element (ENABLE_NODE, &echo_cmd);
       install_element (ENABLE_NODE, &config_logmsg_cmd);
-
       install_default (CONFIG_NODE);
     }
   
@@ -4306,12 +4291,9 @@ cmd_init (int terminal)
       install_element (CONFIG_NODE, &no_service_terminal_length_cmd);
 
       install_element (VIEW_NODE, &show_thread_cpu_cmd);
-      install_element (ENABLE_NODE, &show_thread_cpu_cmd);
-      install_element (RESTRICTED_NODE, &show_thread_cpu_cmd);
       
       install_element (ENABLE_NODE, &clear_thread_cpu_cmd);
       install_element (VIEW_NODE, &show_work_queues_cmd);
-      install_element (ENABLE_NODE, &show_work_queues_cmd);
 
       vrf_install_commands ();
     }

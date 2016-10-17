@@ -784,7 +784,7 @@ add_vnc_route (
     }
 
   /* override default weight assigned by bgp_attr_default_set() */
-  attr.extra->weight = (rfd->peer ? rfd->peer->weight : 0);
+  attr.extra->weight = rfd->peer ? rfd->peer->weight[afi][safi] : 0;
 
   /*
    * NB: ticket 81: do not reset attr.aspath here because it would
@@ -3191,14 +3191,7 @@ DEFUN (debug_rfapi_close_rfd,
   int rc;
   char *endptr = NULL;
 
-#if (UINTPTR_MAX == ULONG_MAX)
-  handle = (void *) (uintptr_t) (strtoul (argv[0], &endptr, 16));
-#elif (UINTPTR_MAX == ULLONG_MAX)
   handle = (rfapi_handle) (uintptr_t) (strtoull (argv[0], &endptr, 16));
-#else
-  /* give up */
-  assert (0);
-#endif
 
   if (*endptr != '\0' || (uintptr_t) handle == UINTPTR_MAX)
     {
@@ -4110,10 +4103,10 @@ rfapi_rfp_get_or_init_group_config_nve (
   struct vty		*vty,
   uint32_t		size)
 {
-  struct rfapi_nve_group_cfg *rfg = vty->index_sub;
+  struct rfapi_nve_group_cfg *rfg = VTY_GET_CONTEXT_SUB(rfapi_nve_group_cfg);
 
   /* make sure group is still in list */
-  if (!listnode_lookup (rfc->nve_groups_sequential, rfg))
+  if (!rfg || !listnode_lookup (rfc->nve_groups_sequential, rfg))
     {
       /* Not in list anymore */
       vty_out (vty, "Current NVE group no longer exists%s", VTY_NEWLINE);
@@ -4135,10 +4128,10 @@ rfapi_rfp_get_or_init_group_config_l2 (
   struct vty		*vty,
   uint32_t		size)
 {
-  struct rfapi_l2_group_cfg *rfg = vty->index_sub;
+  struct rfapi_l2_group_cfg *rfg = VTY_GET_CONTEXT_SUB(rfapi_l2_group_cfg);
 
   /* make sure group is still in list */
-  if (!listnode_lookup (rfc->l2_groups, rfg))
+  if (!rfg || !listnode_lookup (rfc->l2_groups, rfg))
     {
       /* Not in list anymore */
       vty_out (vty, "Current L2 group no longer exists%s", VTY_NEWLINE);
@@ -4188,7 +4181,7 @@ rfapi_rfp_init_group_config_ptr_vty (
     return NULL;
 
   bgp = rfapi_bgp_lookup_by_rfp (rfp_start_val);
-  if (!bgp || !bgp->rfapi_cfg || !vty->index_sub)
+  if (!bgp || !bgp->rfapi_cfg)
     return NULL;
 
   switch (type)

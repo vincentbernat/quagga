@@ -43,6 +43,8 @@ DEFINE_MTYPE_STATIC(LIB, NBR_CONNECTED,   "Neighbor Connected")
 DEFINE_MTYPE(       LIB, CONNECTED_LABEL, "Connected interface label")
 DEFINE_MTYPE_STATIC(LIB, IF_LINK_PARAMS,  "Informational Link Parameters")
 
+DEFINE_QOBJ_TYPE(interface)
+
 /* List of interfaces in only the default VRF */
 int ptm_enable = 0;
 
@@ -149,6 +151,8 @@ if_create_vrf (const char *name, int namelen, vrf_id_t vrf_id)
   /* Enable Link-detection by default */
   SET_FLAG(ifp->status, ZEBRA_INTERFACE_LINKDETECTION);
 
+  QOBJ_REG (ifp, interface);
+
   if (if_master.if_new_hook)
     (*if_master.if_new_hook) (ifp);
 
@@ -192,6 +196,8 @@ if_delete_retain (struct interface *ifp)
 {
   if (if_master.if_delete_hook)
     (*if_master.if_delete_hook) (ifp);
+
+  QOBJ_UNREG (ifp);
 
   /* Free connected address list */
   list_delete_all_node (ifp->connected);
@@ -677,12 +683,11 @@ DEFUN (interface_desc,
        "Interface specific description\n"
        "Characters describing this interface\n")
 {
-  struct interface *ifp;
+  VTY_DECLVAR_CONTEXT (interface, ifp);
 
   if (argc == 0)
     return CMD_SUCCESS;
 
-  ifp = vty->index;
   if (ifp->desc)
     XFREE (MTYPE_TMP, ifp->desc);
   ifp->desc = argv_concat(argv, argc, 0);
@@ -696,9 +701,8 @@ DEFUN (no_interface_desc,
        NO_STR
        "Interface specific description\n")
 {
-  struct interface *ifp;
+  VTY_DECLVAR_CONTEXT (interface, ifp);
 
-  ifp = vty->index;
   if (ifp->desc)
     XFREE (MTYPE_TMP, ifp->desc);
   ifp->desc = NULL;
@@ -782,8 +786,7 @@ DEFUN (interface,
       vty_out (vty, "%% interface %s not in %s%s", argv[0], argv[1], VTY_NEWLINE);
       return CMD_WARNING;
     }
-  vty->index = ifp;
-  vty->node = INTERFACE_NODE;
+  VTY_PUSH_CONTEXT_COMPAT (INTERFACE_NODE, ifp);
 
   return CMD_SUCCESS;
 }
@@ -856,8 +859,7 @@ DEFUN (vrf,
 
   vrfp = vrf_get (VRF_UNKNOWN, argv[0]);
 
-  vty->index = vrfp;
-  vty->node = VRF_NODE;
+  VTY_PUSH_CONTEXT_COMPAT (VRF_NODE, vrfp);
 
   return CMD_SUCCESS;
 }

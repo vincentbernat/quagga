@@ -38,6 +38,9 @@ DEFINE_MTYPE_STATIC(LIB, ROUTE_MAP_RULE_STR, "Route map rule str")
 DEFINE_MTYPE(       LIB, ROUTE_MAP_COMPILED, "Route map compiled")
 DEFINE_MTYPE_STATIC(LIB, ROUTE_MAP_DEP,      "Route map dependency")
 
+DEFINE_QOBJ_TYPE(route_map_index)
+DEFINE_QOBJ_TYPE(route_map)
+
 /* Vector for route match rules. */
 static vector route_match_vec;
 
@@ -155,6 +158,7 @@ route_map_new (const char *name)
 
   new =  XCALLOC (MTYPE_ROUTE_MAP, sizeof (struct route_map));
   new->name = XSTRDUP (MTYPE_ROUTE_MAP_NAME, name);
+  QOBJ_REG (new, route_map);
   return new;
 }
 
@@ -215,6 +219,8 @@ route_map_free_map (struct route_map *map)
 
   if (map != NULL)
     {
+      QOBJ_UNREG (map);
+
       if (map->next)
 	map->next->prev = map->prev;
       else
@@ -482,6 +488,7 @@ route_map_index_new (void)
 
   new =  XCALLOC (MTYPE_ROUTE_MAP_INDEX, sizeof (struct route_map_index));
   new->exitpolicy = RMAP_EXIT; /* Default to Cisco-style */
+  QOBJ_REG (new, route_map_index);
   return new;
 }
 
@@ -490,6 +497,8 @@ static void
 route_map_index_delete (struct route_map_index *index, int notify)
 {
   struct route_map_rule *rule;
+
+  QOBJ_UNREG (index);
 
   /* Free route match. */
   while ((rule = index->match_list.head) != NULL)
@@ -1441,8 +1450,7 @@ DEFUN (route_map,
   map = route_map_get (argv[0]);
   index = route_map_index_get (map, permit, pref);
 
-  vty->index = index;
-  vty->node = RMAP_NODE;
+  VTY_PUSH_CONTEXT_COMPAT (RMAP_NODE, index);
   return CMD_SUCCESS;
 }
 
@@ -1543,9 +1551,7 @@ DEFUN (rmap_onmatch_next,
        "Exit policy on matches\n"
        "Next clause\n")
 {
-  struct route_map_index *index;
-
-  index = vty->index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
   if (index)
     {
@@ -1568,10 +1574,8 @@ DEFUN (no_rmap_onmatch_next,
        "Exit policy on matches\n"
        "Next clause\n")
 {
-  struct route_map_index *index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
-  index = vty->index;
-  
   if (index)
     index->exitpolicy = RMAP_EXIT;
 
@@ -1585,7 +1589,7 @@ DEFUN (rmap_onmatch_goto,
        "Goto Clause number\n"
        "Number\n")
 {
-  struct route_map_index *index = vty->index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
   int d = 0;
 
   if (index)
@@ -1626,9 +1630,7 @@ DEFUN (no_rmap_onmatch_goto,
        "Exit policy on matches\n"
        "Goto Clause number\n")
 {
-  struct route_map_index *index;
-
-  index = vty->index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
   if (index)
     index->exitpolicy = RMAP_EXIT;
@@ -1687,9 +1689,8 @@ DEFUN (rmap_call,
        "Jump to another Route-Map after match+set\n"
        "Target route-map name\n")
 {
-  struct route_map_index *index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
-  index = vty->index;
   if (index)
     {
       if (index->nextrm)
@@ -1715,9 +1716,7 @@ DEFUN (no_rmap_call,
        NO_STR
        "Jump to another Route-Map after match+set\n")
 {
-  struct route_map_index *index;
-
-  index = vty->index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
   if (index->nextrm)
     {
@@ -1737,9 +1736,8 @@ DEFUN (rmap_description,
        "Route-map comment\n"
        "Comment describing this route-map rule\n")
 {
-  struct route_map_index *index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
-  index = vty->index;
   if (index)
     {
       if (index->description)
@@ -1755,9 +1753,8 @@ DEFUN (no_rmap_description,
        NO_STR
        "Route-map comment\n")
 {
-  struct route_map_index *index;
+  struct route_map_index *index = VTY_GET_CONTEXT (route_map_index);
 
-  index = vty->index;
   if (index)
     {
       if (index->description)
@@ -1830,6 +1827,32 @@ route_map_init_dep_hashes (void)
   for (i = 1; i < ROUTE_MAP_DEP_MAX; i++)
     route_map_dep_hash[i] = hash_create(route_map_dep_hash_make_key,
 					route_map_dep_hash_cmp);
+}
+
+/* Common route map rules */
+
+void *
+route_map_rule_tag_compile (const char *arg)
+{
+  unsigned long int tmp;
+  char *endptr;
+  route_tag_t *tag;
+
+  errno = 0;
+  tmp = strtoul(arg, &endptr, 0);
+  if (arg[0] == '\0' || *endptr != '\0' || errno || tmp > ROUTE_TAG_MAX)
+    return NULL;
+
+  tag = XMALLOC(MTYPE_ROUTE_MAP_COMPILED, sizeof(*tag));
+  *tag = tmp;
+
+  return tag;
+}
+
+void
+route_map_rule_tag_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
 }
 
 /* Initialization of route map vector. */

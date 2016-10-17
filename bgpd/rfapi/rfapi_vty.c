@@ -487,7 +487,7 @@ rfapi_vty_out_vncinfo (
       XFREE (MTYPE_ECOMMUNITY_STR, s);
     }
 
-  if (bi->extra != NULL && bi->extra->tag != NULL)
+  if (bi->extra != NULL)
     vty_out (vty, " label=%u", decode_label (bi->extra->tag));
 
   if (rfapiGetVncLifetime (bi->attr, &lifetime))
@@ -566,7 +566,7 @@ rfapiPrintBi (void *stream, struct bgp_info *bi)
   int has_macaddr = 0;
   struct ethaddr macaddr;
   struct rfapi_l2address_option l2o_buf;
-  uint8_t l2hid;                /* valid if has_macaddr */
+  uint8_t l2hid=0;                /* valid if has_macaddr */
 
 #define REMAIN (BUFSIZ - (p-line))
 #define INCP {p += (r > REMAIN)? REMAIN: r;}

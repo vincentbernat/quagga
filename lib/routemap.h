@@ -24,6 +24,7 @@
 
 #include "prefix.h"
 #include "memory.h"
+#include "qobj.h"
 DECLARE_MTYPE(ROUTE_MAP_NAME)
 DECLARE_MTYPE(ROUTE_MAP_RULE)
 DECLARE_MTYPE(ROUTE_MAP_COMPILED)
@@ -152,7 +153,10 @@ struct route_map_index
   /* Make linked list. */
   struct route_map_index *next;
   struct route_map_index *prev;
+
+  QOBJ_FIELDS
 };
+DECLARE_QOBJ_TYPE(route_map_index)
 
 /* Route map list structure. */
 struct route_map
@@ -171,7 +175,10 @@ struct route_map
   /* Maintain update info */
   int to_be_processed;	 /* True if modification isn't acted on yet */
   int deleted;		 /* If 1, then this node will be deleted */
+
+  QOBJ_FIELDS
 };
+DECLARE_QOBJ_TYPE(route_map)
 
 /* Prototypes. */
 extern void route_map_init (void);
@@ -227,5 +234,8 @@ extern void route_map_upd8_dependency (route_map_event_t type, const char *arg,
 				       const char *rmap_name);
 extern void route_map_notify_dependencies (const char *affected_name,
 					   route_map_event_t event);
+
+extern void *route_map_rule_tag_compile (const char *arg);
+extern void route_map_rule_tag_free (void *rule);
 
 #endif /* _ZEBRA_ROUTEMAP_H */
