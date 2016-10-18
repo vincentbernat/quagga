@@ -1230,7 +1230,7 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
 /* Update flag indicates whether this is a "replace" or not. */
 static int
 netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
-                         int family, int update)
+                         int update)
 {
   int bytelen;
   struct sockaddr_nl snl;
@@ -1238,6 +1238,7 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
   int recursing;
   int nexthop_num;
   int discard;
+  int family = PREFIX_FAMILY(p);
   const char *routedesc;
   int setsrc = 0;
   union g_addr src;
@@ -1554,48 +1555,14 @@ netlink_get_ipmr_sg_stats (void *in)
 }
 
 int
-kernel_add_ipv4 (struct prefix *p, struct rib *rib)
+kernel_route_rib (struct prefix *p, struct rib *old, struct rib *new)
 {
-  return netlink_route_multipath (RTM_NEWROUTE, p, rib, AF_INET, 0);
-}
+  if (!old && new)
+    return netlink_route_multipath (RTM_NEWROUTE, p, new, 0);
+  if (old && !new)
+    return netlink_route_multipath (RTM_DELROUTE, p, old, 0);
 
-int
-kernel_update_ipv4 (struct prefix *p, struct rib *rib)
-{
-  return netlink_route_multipath (RTM_NEWROUTE, p, rib, AF_INET, 1);
-}
-
-int
-kernel_delete_ipv4 (struct prefix *p, struct rib *rib)
-{
-  return netlink_route_multipath (RTM_DELROUTE, p, rib, AF_INET, 0);
-}
-
-int
-kernel_add_ipv6 (struct prefix *p, struct rib *rib)
-{
-    {
-      return netlink_route_multipath (RTM_NEWROUTE, p, rib, AF_INET6, 0);
-    }
-}
-
-int
-kernel_update_ipv6 (struct prefix *p, struct rib *rib)
-{
-#if defined (HAVE_V6_RR_SEMANTICS)
-  return netlink_route_multipath (RTM_NEWROUTE, p, rib, AF_INET6, 1);
-#else
-  kernel_delete_ipv6 (p, rib);
-  return kernel_add_ipv6 (p, rib);
-#endif
-}
-
-int
-kernel_delete_ipv6 (struct prefix *p, struct rib *rib)
-{
-    {
-      return netlink_route_multipath (RTM_DELROUTE, p, rib, AF_INET6, 0);
-    }
+  return netlink_route_multipath (RTM_NEWROUTE, p, new, 1);
 }
 
 int

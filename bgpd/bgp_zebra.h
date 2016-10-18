@@ -83,4 +83,6 @@ is_bgp_zebra_rib_route (struct bgp *bgp, afi_t afi, safi_t safi)
 }
 
 extern int bgp_zebra_advertise_vni (struct bgp *, int); 
+extern int bgp_zebra_num_connects(void);
+
 #endif /* _QUAGGA_BGP_ZEBRA_H */
