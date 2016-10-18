@@ -680,7 +680,8 @@ netlink_talk (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *,
 
 /* Get type specified information from netlink. */
 int
-netlink_request (int family, int type, struct nlsock *nl)
+netlink_request (int family, int type, struct nlsock *nl,
+                 u_int32_t filter_mask)
 {
   int ret;
   struct sockaddr_nl snl;
@@ -689,7 +690,9 @@ netlink_request (int family, int type, struct nlsock *nl)
   struct
   {
     struct nlmsghdr nlh;
-    struct rtgenmsg g;
+    struct ifinfomsg ifm;
+    struct rtattr ext_req;
+    u_int32_t ext_filter_mask;
   } req;
 
   /* Check netlink socket. */
@@ -708,7 +711,14 @@ netlink_request (int family, int type, struct nlsock *nl)
   req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
   req.nlh.nlmsg_pid = nl->snl.nl_pid;
   req.nlh.nlmsg_seq = ++nl->seq;
-  req.g.rtgen_family = family;
+  req.ifm.ifi_family = family;
+
+  if (filter_mask)
+    {
+      req.ext_req.rta_type = IFLA_EXT_MASK;
+      req.ext_req.rta_len = RTA_LENGTH(sizeof(__u32));
+      req.ext_filter_mask = filter_mask;
+    }
 
   /* linux appears to check capabilities on every message
    * have to raise caps for every message sent

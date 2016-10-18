@@ -37,6 +37,8 @@ extern int zebra_vxlan_if_down (struct interface *ifp);
 extern int zebra_vxlan_if_add_update (struct interface *ifp,
                                       struct zebra_l2if_vxlan *zl2if);
 extern int zebra_vxlan_if_del (struct interface *ifp);
+extern int zebra_vxlan_update_access_vlan (struct interface *ifp,
+                                           vlanid_t access_vlan);
 extern int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
                                      u_short length, struct zebra_vrf *zvrf);
 extern int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,

@@ -33,6 +33,12 @@ zebra_vxlan_if_del (struct interface *ifp)
   return 0;
 }
 
+int zebra_vxlan_update_access_vlan (struct interface *ifp,
+                                    vlanid_t access_vlan)
+{
+  return 0;
+}
+
 int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
                                  u_short length, struct zebra_vrf *zvrf)
 {

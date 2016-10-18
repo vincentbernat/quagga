@@ -667,7 +667,7 @@ netlink_route_read (struct zebra_ns *zns)
   int ret;
 
   /* Get IPv4 routing table. */
-  ret = netlink_request (AF_INET, RTM_GETROUTE, &zns->netlink_cmd);
+  ret = netlink_request (AF_INET, RTM_GETROUTE, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
   ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0);
@@ -675,7 +675,7 @@ netlink_route_read (struct zebra_ns *zns)
     return ret;
 
   /* Get IPv6 routing table. */
-  ret = netlink_request (AF_INET6, RTM_GETROUTE, &zns->netlink_cmd);
+  ret = netlink_request (AF_INET6, RTM_GETROUTE, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
   ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0);

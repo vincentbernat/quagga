@@ -21,6 +21,15 @@
  */
 
 #include <zebra.h>
+
+/* The following definition is to workaround an issue in the Linux kernel
+ * header files with redefinition of 'struct in6_addr' in both
+ * netinet/in.h and linux/in6.h.
+ * Reference - https://sourceware.org/ml/libc-alpha/2013-01/msg00599.html
+ */
+#define _LINUX_IN6_H
+
+#include <linux/if_bridge.h>
 #include <net/if_arp.h>
 
 #include "linklist.h"
@@ -415,6 +424,76 @@ netlink_vrf_change (struct nlmsghdr *h, struct rtattr *tb, const char *name)
     }
 }
 
+static int
+netlink_interface_af_bridge (struct nlmsghdr *h, int len,
+                             ns_id_t ns_id)
+{
+  char *name = NULL;
+  struct ifinfomsg *ifi;
+  struct rtattr *tb[IFLA_MAX + 1];
+  struct interface *ifp;
+  struct zebra_if *zif;
+  struct rtattr *aftb[IFLA_BRIDGE_MAX + 1];
+  struct
+    {
+      u_int16_t flags;
+      u_int16_t vid;
+    }  *vinfo;
+  vlanid_t access_vlan;
+
+  /* Fetch name and ifindex */
+  ifi = NLMSG_DATA (h);
+  memset (tb, 0, sizeof tb);
+  netlink_parse_rtattr (tb, IFLA_MAX, IFLA_RTA (ifi), len);
+  
+  if (tb[IFLA_IFNAME] == NULL)
+    return -1;
+  name = (char *) RTA_DATA (tb[IFLA_IFNAME]);
+
+  /* The interface should already be known, if not discard. */
+  ifp = if_lookup_by_index_per_ns (zebra_ns_lookup (ns_id),
+                                   ifi->ifi_index);
+  if (!ifp)
+    {
+      zlog_warn ("netlink_interface_af_bridge: Cannot find IF %s(%u)",
+                 name, ifi->ifi_index);
+      return 0;
+    }
+  zif = (struct zebra_if *) ifp->info;
+  assert(zif);
+  if (zif->zif_type != ZEBRA_IF_VXLAN)
+    return 0;
+
+  /* We are only interested in the access VLAN i.e., AF_SPEC */
+  if (!tb[IFLA_AF_SPEC])
+    {
+      zlog_warn ("netlink_interface_af_bridge: No AF_SPEC for VxLAN IF %s(%u)",
+                 name, ifi->ifi_index);
+      return 0;
+    }
+  /* There is a 1-to-1 mapping of VLAN to VxLAN - hence
+   * only 1 access VLAN is accepted.
+   */
+  parse_rtattr_nested(aftb, IFLA_BRIDGE_MAX, tb[IFLA_AF_SPEC]);
+  if (!aftb[IFLA_BRIDGE_VLAN_INFO])
+    {
+      zlog_warn ("netlink_interface_af_bridge: No VLAN info for VxLAN IF %s(%u)",
+                 name, ifi->ifi_index);
+      return 0;
+    }
+
+  vinfo = RTA_DATA(aftb[IFLA_BRIDGE_VLAN_INFO]);
+  if (!(vinfo->flags & BRIDGE_VLAN_INFO_PVID))
+    return 0;
+
+  access_vlan = (vlanid_t) vinfo->vid;
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_err ("netlink_interface_af_bridge: Access VLAN %u for VxLAN IF %s(%u)",
+              access_vlan, name, ifi->ifi_index);
+  zebra_vxlan_update_access_vlan (ifp, access_vlan);
+  return 0;
+}
+
 /* Called from interface_lookup_netlink().  This function is only used
    during bootstrap. */
 static int
@@ -445,8 +524,9 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   if (len < 0)
     return -1;
 
+  /* We are interested in AF_BRIDGE notifications, but only for VxLAN. */
   if (ifi->ifi_family == AF_BRIDGE)
-    return 0;
+    return netlink_interface_af_bridge (h, len, ns_id);
 
   /* Looking up interface name. */
   memset (tb, 0, sizeof tb);
@@ -539,22 +619,41 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   return 0;
 }
 
+static int
+interface_lookup_netlink_af_bridge (struct zebra_ns *zns)
+{
+  int ret;
+
+  ret = netlink_request (AF_BRIDGE, RTM_GETLINK, &zns->netlink_cmd,
+                         RTEXT_FILTER_BRVLAN);
+  if (ret < 0)
+    return ret;
+  ret = netlink_parse_info (netlink_interface, &zns->netlink_cmd, zns, 0);
+
+  return ret;
+}
+
 /* Interface lookup by netlink socket. */
-int
+static int
 interface_lookup_netlink (struct zebra_ns *zns)
 {
   int ret;
 
   /* Get interface information. */
-  ret = netlink_request (AF_PACKET, RTM_GETLINK, &zns->netlink_cmd);
+  ret = netlink_request (AF_PACKET, RTM_GETLINK, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
   ret = netlink_parse_info (netlink_interface, &zns->netlink_cmd, zns, 0);
   if (ret < 0)
     return ret;
 
+  /* Get interface information. */
+  ret = interface_lookup_netlink_af_bridge (zns);
+  if (ret < 0)
+    return ret;
+
   /* Get IPv4 address of the interfaces. */
-  ret = netlink_request (AF_INET, RTM_GETADDR, &zns->netlink_cmd);
+  ret = netlink_request (AF_INET, RTM_GETADDR, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
   ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0);
@@ -563,7 +662,7 @@ interface_lookup_netlink (struct zebra_ns *zns)
 
 #ifdef HAVE_IPV6
   /* Get IPv6 address of the interfaces. */
-  ret = netlink_request (AF_INET6, RTM_GETADDR, &zns->netlink_cmd);
+  ret = netlink_request (AF_INET6, RTM_GETADDR, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
   ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0);
@@ -809,8 +908,9 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   if (len < 0)
     return -1;
 
+  /* We are interested in AF_BRIDGE notifications, but only for VxLAN. */
   if (ifi->ifi_family == AF_BRIDGE)
-    return 0;
+    return netlink_interface_af_bridge (h, len, ns_id);
 
   /* Looking up interface name. */
   memset (tb, 0, sizeof tb);

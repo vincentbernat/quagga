@@ -45,6 +45,7 @@ struct zebra_l2if_vxlan
   struct zebra_l2info_brslave br_slave;
   vni_t vni;                     /* VNI */
   struct in_addr vtep_ip;        /* Local tunnel IP */
+  vlanid_t access_vlan;          /* Access VLAN - for VLAN-aware bridge. */
 };
 
 /* zebra L2 interface information - bridge interface */

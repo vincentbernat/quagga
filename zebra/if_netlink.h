@@ -30,7 +30,6 @@ extern int netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                                 ns_id_t ns_id);
 extern int netlink_vxlan_flood_list_update (struct interface *ifp,
                                             struct prefix *vtep, int cmd);
-extern int interface_lookup_netlink (struct zebra_ns *zns);
 
 #endif /* HAVE_NETLINK */
 

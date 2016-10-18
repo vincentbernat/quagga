@@ -1040,6 +1040,32 @@ zebra_vxlan_if_del (struct interface *ifp)
   return 0;
 }
 
+
+/*
+ * Update the access VLAN for a VNI. This is applicable for a VLAN-aware
+ * bridge.
+ */
+int zebra_vxlan_update_access_vlan (struct interface *ifp,
+                                    vlanid_t access_vlan)
+{
+  struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
+  struct zebra_l2if_vxlan *zl2if;
+
+  zif = ifp->info;
+  assert(zif);
+ 
+  /* Locate VRF corresponding to interface. */
+  zvrf = vrf_info_lookup(ifp->vrf_id);
+  assert(zvrf);
+
+  zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  assert(zl2if);
+
+  zl2if->access_vlan = access_vlan;
+  return 0;
+}
+ 
 /*
  * Handle message from client to add a remote VTEP for a VNI.
  */

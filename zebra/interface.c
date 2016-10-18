@@ -1150,8 +1150,13 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
     }
   else if (IS_ZEBRA_IF_VXLAN (ifp))
     {
-      vty_out(vty, "  VxLAN Id %u", VNI_FROM_ZEBRA_IF (zebra_if));
-      vty_out(vty, "%s", VTY_NEWLINE);
+      struct zebra_l2if_vxlan *zl2if;
+
+      zl2if = (struct zebra_l2if_vxlan *)zebra_if->l2if;
+      vty_out(vty, "  VxLAN Id %u%s", zl2if->vni, VTY_NEWLINE);
+      if (zl2if->access_vlan)
+        vty_out(vty, "  Access VLAN Id %u%s",
+                zl2if->access_vlan, VTY_NEWLINE);
     }
 
   if (IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
