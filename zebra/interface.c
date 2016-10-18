@@ -131,6 +131,9 @@ if_zebra_delete_hook (struct interface *ifp)
       list_free (rtadv->AdvPrefixList);
  #endif /* HAVE_RTADV */
 
+      if (zebra_if->l2if)
+        XFREE (MTYPE_ZEBRA_L2IF, zebra_if->l2if);
+
       XFREE (MTYPE_TMP, zebra_if);
     }
 
@@ -997,6 +1000,37 @@ nd_dump_vty (struct vty *vty, struct interface *ifp)
 }
 #endif /* HAVE_RTADV */
 
+static const char *
+zebra_ziftype_2str (zebra_iftype_t zif_type)
+{
+  switch (zif_type)
+    {
+      case ZEBRA_IF_OTHER:
+        return "Other";
+        break;
+
+      case ZEBRA_IF_BRIDGE:
+        return "Bridge";
+        break;
+
+      case ZEBRA_IF_VLAN:
+        return "Vlan";
+        break;
+
+      case ZEBRA_IF_VXLAN:
+        return "Vxlan";
+        break;
+
+      case ZEBRA_IF_VRF:
+        return "VRF";
+        break;
+
+      default:
+        return "Unknown";
+        break;
+    }
+}
+
 /* Interface's information print out to vty interface. */
 static void
 if_dump_vty (struct vty *vty, struct interface *ifp)
@@ -1096,7 +1130,25 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 	connected_dump_vty (vty, connected);
     }
 
-  if (IS_ZEBRA_IF_VXLAN (ifp))
+  vty_out(vty, "  Interface Type %s%s",
+          zebra_ziftype_2str (zebra_if->zif_type), VTY_NEWLINE);
+  if (IS_ZEBRA_IF_BRIDGE (ifp))
+    {
+      struct zebra_l2if_bridge *zl2if;
+
+      zl2if = (struct zebra_l2if_bridge *)zebra_if->l2if;
+      vty_out(vty, "  Bridge VLAN-aware: %s%s",
+              zl2if->vlan_aware ? "yes" : "no", VTY_NEWLINE);
+    }
+  else if (IS_ZEBRA_IF_VLAN(ifp))
+    {
+      struct zebra_l2if_vlan *zl2if;
+
+      zl2if = (struct zebra_l2if_vlan *)zebra_if->l2if;
+      vty_out(vty, "  VLAN Id %u%s",
+              zl2if->vid, VTY_NEWLINE);
+    }
+  else if (IS_ZEBRA_IF_VXLAN (ifp))
     {
       vty_out(vty, "  VxLAN Id %u", VNI_FROM_ZEBRA_IF (zebra_if));
       vty_out(vty, "%s", VTY_NEWLINE);

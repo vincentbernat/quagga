@@ -24,6 +24,7 @@
 
 #include "redistribute.h"
 #include "vrf.h"
+#include "vlan.h"
 #include "vxlan.h"
 
 #ifdef HAVE_IRDP
@@ -189,6 +190,8 @@ typedef enum
 {
   ZEBRA_IF_VXLAN,     /* VxLAN interface */
   ZEBRA_IF_VRF,       /* VRF device */
+  ZEBRA_IF_BRIDGE,    /* bridge device */
+  ZEBRA_IF_VLAN,      /* VLAN sub-interface */
   ZEBRA_IF_OTHER,     /* Anything else */
 } zebra_iftype_t;
 
@@ -265,6 +268,12 @@ zebra_if_set_ziftype (struct interface *ifp, zebra_iftype_t zif_type)
 
 #define IS_ZEBRA_IF_VRF(ifp) \
         (((struct zebra_if *)(ifp->info))->zif_type == ZEBRA_IF_VRF)
+
+#define IS_ZEBRA_IF_BRIDGE(ifp) \
+        (((struct zebra_if *)(ifp->info))->zif_type == ZEBRA_IF_BRIDGE)
+
+#define IS_ZEBRA_IF_VLAN(ifp) \
+        (((struct zebra_if *)(ifp->info))->zif_type == ZEBRA_IF_VLAN)
 
 extern struct interface *if_lookup_by_index_per_ns (struct zebra_ns *, u_int32_t);
 extern struct interface *if_link_per_ns (struct zebra_ns *, struct interface *);
