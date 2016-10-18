@@ -278,7 +278,8 @@ netlink_bridge_interface_add_update (struct interface *ifp,
 
 static void
 netlink_vlan_interface_add_update (struct interface *ifp,
-                                   struct rtattr *link_data)
+                                   struct rtattr *link_data,
+                                   ifindex_t bridge_ifindex)
 {
   struct zebra_l2if_vlan zl2if;
 
@@ -286,13 +287,17 @@ netlink_vlan_interface_add_update (struct interface *ifp,
   assert (link_data);
   netlink_extract_vlan_info (link_data, &zl2if);
 
+  /* Set master (bridge) ifindex, if any */
+  zl2if.br_slave.bridge_ifindex = bridge_ifindex;
+
   /* Create/update VLAN interface */
   zebra_l2_vlanif_add_update (ifp, &zl2if);
 }
 
 static void
 netlink_vxlan_interface_add_update (struct interface *ifp,
-                                    struct rtattr *link_data)
+                                    struct rtattr *link_data,
+                                    ifindex_t bridge_ifindex)
 {
   struct zebra_l2if_vxlan zl2if;
 
@@ -300,8 +305,27 @@ netlink_vxlan_interface_add_update (struct interface *ifp,
   assert (link_data);
   netlink_extract_vxlan_info (link_data, &zl2if);
 
+  /* Set master (bridge) ifindex, if any */
+  zl2if.br_slave.bridge_ifindex = bridge_ifindex;
+
   /* Create/update VXLAN interface and VNI hash. */
   zebra_vxlan_if_add_update (ifp, &zl2if);
+}
+
+static void
+netlink_l2phys_interface_add_update (struct interface *ifp,
+                                     ifindex_t bridge_ifindex)
+{
+  struct zebra_l2if_phys zl2if;
+
+  /* Initialize physical interface parameters. */
+  memset (&zl2if, 0, sizeof (struct zebra_l2if_phys));
+
+  /* Set master (bridge) ifindex */
+  zl2if.br_slave.bridge_ifindex = bridge_ifindex;
+
+  /* Create/update L2 physical interface */
+  zebra_l2_physif_add_update (ifp, &zl2if);
 }
 
 static void
@@ -408,6 +432,8 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   struct zebra_ns *zns;
   vrf_id_t vrf_id = VRF_DEFAULT;
   zebra_iftype_t zif_type = ZEBRA_IF_OTHER;
+  zebra_slave_iftype_t zif_slave_type = ZEBRA_IF_SLAVE_NONE;
+  ifindex_t bridge_ifindex = IFINDEX_INTERNAL;
 
   zns = zebra_ns_lookup (ns_id);
   ifi = NLMSG_DATA (h);
@@ -466,7 +492,17 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   if (tb[IFLA_MASTER])
     {
       if (slave_kind && (strcmp(slave_kind, "vrf") == 0))
-        vrf_id = *(u_int32_t *)RTA_DATA(tb[IFLA_MASTER]);
+        {
+          zif_slave_type = ZEBRA_IF_SLAVE_VRF;
+          vrf_id = *(u_int32_t *)RTA_DATA(tb[IFLA_MASTER]);
+        }
+      else if (slave_kind && (strcmp(slave_kind, "bridge") == 0))
+        {
+          zif_slave_type = ZEBRA_IF_SLAVE_BRIDGE;
+          bridge_ifindex = *(ifindex_t *)RTA_DATA(tb[IFLA_MASTER]);
+        }
+      else
+        zif_slave_type = ZEBRA_IF_SLAVE_OTHER;
     }
 
   /* Add interface. */
@@ -480,7 +516,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   ifp->ptm_status = ZEBRA_PTM_STATUS_UNKNOWN;
 
   /* Set zebra interface type */
-  zebra_if_set_ziftype (ifp, zif_type);
+  zebra_if_set_ziftype (ifp, zif_type, zif_slave_type);
 
   /* Hardware type and address. */
   ifp->ll_type = netlink_to_zebra_link_type (ifi->ifi_type);
@@ -488,14 +524,17 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   if_add_update (ifp);
 
-  /* Special handling for L2 interfaces - VxLAN */
   /* Special handling for L2 interfaces */
   if (zif_type == ZEBRA_IF_BRIDGE)
     netlink_bridge_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
   else if (zif_type == ZEBRA_IF_VLAN)
-    netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
+    netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
+                                       bridge_ifindex);
   else if (zif_type == ZEBRA_IF_VXLAN)
-    netlink_vxlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
+    netlink_vxlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
+                                        bridge_ifindex);
+  else if (zif_type == ZEBRA_IF_OTHER && IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
+    netlink_l2phys_interface_add_update (ifp, bridge_ifindex);
 
   return 0;
 }
@@ -752,6 +791,8 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   struct zebra_ns *zns;
   vrf_id_t vrf_id = VRF_DEFAULT;
   zebra_iftype_t zif_type = ZEBRA_IF_OTHER;
+  zebra_slave_iftype_t zif_slave_type = ZEBRA_IF_SLAVE_NONE;
+  ifindex_t bridge_ifindex = IFINDEX_INTERNAL;
 
   zns = zebra_ns_lookup (ns_id);
   ifi = NLMSG_DATA (h);
@@ -820,7 +861,17 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
       if (tb[IFLA_MASTER])
 	{
           if (slave_kind && (strcmp(slave_kind, "vrf") == 0))
-            vrf_id = *(u_int32_t *)RTA_DATA(tb[IFLA_MASTER]);
+            {
+              zif_slave_type = ZEBRA_IF_SLAVE_VRF;
+              vrf_id = *(u_int32_t *)RTA_DATA(tb[IFLA_MASTER]);
+            }
+          else if (slave_kind && (strcmp(slave_kind, "bridge") == 0))
+            {
+              zif_slave_type = ZEBRA_IF_SLAVE_BRIDGE;
+              bridge_ifindex = *(ifindex_t *)RTA_DATA(tb[IFLA_MASTER]);
+            }
+          else
+            zif_slave_type = ZEBRA_IF_SLAVE_OTHER;
 	}
 
       if (ifp == NULL || !CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
@@ -852,7 +903,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
           ifp->ptm_status = ZEBRA_PTM_STATUS_UNKNOWN;
 
           /* Set interface type */
-          zebra_if_set_ziftype (ifp, zif_type);
+          zebra_if_set_ziftype (ifp, zif_type, zif_slave_type);
 
           netlink_interface_update_hw_addr (tb, ifp);
 
@@ -864,11 +915,14 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
             netlink_bridge_interface_add_update (ifp,
                                                  linkinfo[IFLA_INFO_DATA]);
           else if (zif_type == ZEBRA_IF_VLAN)
-            netlink_vlan_interface_add_update (ifp,
-                                               linkinfo[IFLA_INFO_DATA]);
+            netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
+                                               bridge_ifindex);
           else if (zif_type == ZEBRA_IF_VXLAN)
-            netlink_vxlan_interface_add_update (ifp,
-                                                linkinfo[IFLA_INFO_DATA]);
+            netlink_vxlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
+                                                bridge_ifindex);
+          else if (zif_type == ZEBRA_IF_OTHER &&
+                   IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
+            netlink_l2phys_interface_add_update (ifp, bridge_ifindex);
         }
       else if (ifp->vrf_id != vrf_id)
         {
@@ -915,9 +969,14 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
             netlink_bridge_interface_add_update (ifp,
                                                  linkinfo[IFLA_INFO_DATA]);
           else if (zif_type == ZEBRA_IF_VLAN)
-            netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
+            netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
+                                               bridge_ifindex);
           else if (zif_type == ZEBRA_IF_VXLAN)
-            netlink_vxlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
+            netlink_vxlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
+                                                bridge_ifindex);
+          else if (zif_type == ZEBRA_IF_OTHER &&
+                   IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
+            netlink_l2phys_interface_add_update (ifp, bridge_ifindex);
         }
     }
   else

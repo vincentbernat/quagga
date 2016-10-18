@@ -1154,6 +1154,19 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
       vty_out(vty, "%s", VTY_NEWLINE);
     }
 
+  if (IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
+    {
+      struct zebra_l2info_brslave *br_slave;
+
+      /* NOTE: This assumes 'zebra_l2info_brslave' is the first field
+       * for any L2 interface.
+       */
+      br_slave = (struct zebra_l2info_brslave *)zebra_if->l2if;
+      if (br_slave->bridge_ifindex != IFINDEX_INTERNAL)
+        vty_out(vty, "  Master (bridge) ifindex %u ifp %p%s",
+                br_slave->bridge_ifindex, br_slave->br_if, VTY_NEWLINE);
+    }
+
   if (HAS_LINK_PARAMS(ifp))
     {
       int i;

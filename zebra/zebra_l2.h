@@ -29,9 +29,20 @@
 #include "vlan.h"
 #include "vxlan.h"
 
+/* zebra L2 interface information - bridge slave */
+/* NOTE: Some parts of code assume this is the first field in any
+ * L2 interface structure.
+ */
+struct zebra_l2info_brslave
+{
+  ifindex_t bridge_ifindex;   /* Bridge Master */
+  struct interface *br_if;    /* Pointer to master */
+};
+
 /* zebra L2 interface information - VXLAN interface */
 struct zebra_l2if_vxlan
 {
+  struct zebra_l2info_brslave br_slave;
   vni_t vni;                     /* VNI */
   struct in_addr vtep_ip;        /* Local tunnel IP */
 };
@@ -45,7 +56,14 @@ struct zebra_l2if_bridge
 /* zebra L2 interface information - VLAN interface */
 struct zebra_l2if_vlan
 {
+  struct zebra_l2info_brslave br_slave;
   vlanid_t vid;                  /* VLAN id */
+};
+
+/* zebra L2 interface information - physical interface part of bridge */
+struct zebra_l2if_phys
+{
+  struct zebra_l2info_brslave br_slave;
 };
 
 /* NOTE: These macros are to be invoked only in the "correct" context.
@@ -62,11 +80,15 @@ struct zebra_l2if_vlan
         (((struct zebra_l2if_vlan *)(zif->l2if))->vid)
 
 
+extern void zebra_l2_map_slave_to_bridge (struct zebra_l2info_brslave *br_slave);
 extern int zebra_l2_bridge_add_update (struct interface *ifp,
                                        struct zebra_l2if_bridge *zl2if);
 extern int zebra_l2_vlanif_add_update (struct interface *ifp,
                                        struct zebra_l2if_vlan *zl2if);
+extern int zebra_l2_physif_add_update (struct interface *ifp,
+                                       struct zebra_l2if_phys *zl2if);
 extern int zebra_l2_bridge_del (struct interface *ifp);
 extern int zebra_l2_vlanif_del (struct interface *ifp);
+extern int zebra_l2_physif_del (struct interface *ifp);
 
 #endif /* _ZEBRA_L2_H */

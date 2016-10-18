@@ -947,6 +947,10 @@ zebra_vxlan_if_add_update (struct interface *ifp,
   _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
   *_zl2if = *zl2if;
 
+  /* If bridge (master) is already known, link to it. */
+  if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+    zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+
   /* If hash entry exists and no change to VTEP IP, we're done. */
   zvni = zvni_lookup (zvrf, vni);
   if (zvni && IPV4_ADDR_SAME(&zvni->local_vtep_ip, &zl2if->vtep_ip))

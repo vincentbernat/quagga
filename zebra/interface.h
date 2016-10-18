@@ -195,6 +195,15 @@ typedef enum
   ZEBRA_IF_OTHER,     /* Anything else */
 } zebra_iftype_t;
 
+/* Zebra "slave" interface type */
+typedef enum
+{
+  ZEBRA_IF_SLAVE_NONE,      /* Not a slave */
+  ZEBRA_IF_SLAVE_VRF,       /* Member of a VRF */
+  ZEBRA_IF_SLAVE_BRIDGE,    /* Member of a bridge */
+  ZEBRA_IF_SLAVE_OTHER,     /* Something else - e.g., bond slave */
+} zebra_slave_iftype_t;
+
 /* `zebra' daemon local interface structure. */
 struct zebra_if
 {
@@ -250,17 +259,22 @@ struct zebra_if
   /* ptm enable configuration */
   u_char ptm_enable;
 
+  /* Zebra "slave" interface type */
+  zebra_slave_iftype_t zif_slave_type;
+
   /* Additional fields for L2 interfaces. Depends on zif_type */
   void *l2if;
 };
 
 static inline void
-zebra_if_set_ziftype (struct interface *ifp, zebra_iftype_t zif_type)
+zebra_if_set_ziftype (struct interface *ifp, zebra_iftype_t zif_type,
+                      zebra_slave_iftype_t zif_slave_type)
 {
   struct zebra_if *zif;
 
   zif = (struct zebra_if *)ifp->info;
   zif->zif_type = zif_type;
+  zif->zif_slave_type = zif_slave_type;
 }
 
 #define IS_ZEBRA_IF_VXLAN(ifp) \
@@ -274,6 +288,12 @@ zebra_if_set_ziftype (struct interface *ifp, zebra_iftype_t zif_type)
 
 #define IS_ZEBRA_IF_VLAN(ifp) \
         (((struct zebra_if *)(ifp->info))->zif_type == ZEBRA_IF_VLAN)
+
+#define IS_ZEBRA_IF_BRIDGE_SLAVE(ifp) \
+        (((struct zebra_if *)(ifp->info))->zif_slave_type == ZEBRA_IF_SLAVE_BRIDGE)
+
+#define IS_ZEBRA_IF_VRF_SLAVE(ifp) \
+        (((struct zebra_if *)(ifp->info))->zif_slave_type == ZEBRA_IF_SLAVE_VRF)
 
 extern struct interface *if_lookup_by_index_per_ns (struct zebra_ns *, u_int32_t);
 extern struct interface *if_link_per_ns (struct zebra_ns *, struct interface *);
