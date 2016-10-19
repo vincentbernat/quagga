@@ -524,7 +524,7 @@ bgp_evpn_new (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
       XFREE(MTYPE_BGP_EVPN, vpn);
       return NULL;
     }
-
+  QOBJ_REG (vpn, bgpevpn);
   return(vpn);
 }
 
@@ -739,6 +739,7 @@ bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn)
     bgp_evpn_cleanup_config_rt_import (bgp, vpn);
     list_free(vpn->import_rtl);
     hash_release(bgp->vnihash, vpn);
+    QOBJ_UNREG (vpn);
     XFREE(MTYPE_BGP_EVPN, vpn);
   }
 }
