@@ -2689,8 +2689,8 @@ ALIAS (show_ip_pim_state,
        IP_STR
        PIM_STR
        "PIM state information\n"
-       "JavaScript Object Notation\n"
-       "Unicast or Multicast address\n")
+       "Unicast or Multicast address\n"
+       "JavaScript Object Notation\n")
 
 ALIAS (show_ip_pim_state,
        show_ip_pim_state_src_group_cmd,
@@ -2699,9 +2699,9 @@ ALIAS (show_ip_pim_state,
        IP_STR
        PIM_STR
        "PIM state information\n"
-       "JavaScript Object Notation\n"
        "Unicast or Multicast address\n"
-       "Multicast address\n")
+       "Multicast address\n"
+       "JavaScript Object Notation\n")
 
 DEFUN (show_ip_pim_upstream,
        show_ip_pim_upstream_cmd,
