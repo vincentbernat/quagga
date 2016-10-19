@@ -1367,29 +1367,6 @@ DEFUNSH (VTYSH_BGPD,
 }
 
 DEFUNSH (VTYSH_BGPD,
-	 bgp_evpn_vni_rd,
-	 bgp_evpn_vni_rd_cmd,
-	 "rd ASN:nn_or_IP-address:nn",
-	 "Route Distinguisher\n"
-	 "ASN:XX or A.B.C.D:XX\n")
-{
-  vty->node = BGP_EVPN_VNI_NODE;
-  return CMD_SUCCESS;
-}
-
-DEFUNSH (VTYSH_BGPD,
-	 bgp_evpn_vni_rt,
-	 bgp_evpn_vni_rt_cmd,
-	 "route-target WORD ASN:nn_or_IP-address:nn",
-	 "Route Target\n"
-	 "import/export/both\n"
-	 "ASN:XX or A.B.C.D:XX\n")
-{
-  vty->node = BGP_EVPN_VNI_NODE;
-  return CMD_SUCCESS;
-}
-
-DEFUNSH (VTYSH_BGPD,
          vnc_l2_group,
          vnc_l2_group_cmd,
          "vnc l2-group NAME",
@@ -3449,15 +3426,13 @@ vtysh_init_vty (void)
   install_element (BGP_NODE, &vnc_nve_group_cmd);
   install_element (BGP_NODE, &address_family_ipv4_unicast_cmd);
   install_element (BGP_NODE, &address_family_ipv4_multicast_cmd);
-#ifdef HAVE_IPV6
+
   install_element (BGP_NODE, &address_family_ipv6_cmd);
   install_element (BGP_NODE, &address_family_ipv6_unicast_cmd);
   install_element (BGP_NODE, &address_family_ipv6_multicast_cmd);
-#endif
+
   /* EVPN commands */
   install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
-  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
-  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
   install_element (BGP_EVPN_VNI_NODE, &exit_vni_cmd);
 
   install_element (BGP_VPNV4_NODE, &exit_address_family_cmd);
