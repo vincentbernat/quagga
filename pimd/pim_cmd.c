@@ -3192,55 +3192,6 @@ DEFUN (show_ip_mroute,
   return CMD_SUCCESS;
 }
 
-static void
-pim_cmd_show_individual_group (struct vty *vty, struct pim_upstream *up)
-{
-  vty_out (vty, "%s%s", pim_str_sg_dump (&up->sg), VTY_NEWLINE);
-
-}
-
-static void
-pim_cmd_show_mroute_group (struct vty *vty, struct in_addr *group)
-{
-  struct pim_upstream *up;
-  struct prefix_sg sg;
-
-  memset (&sg, 0, sizeof (struct prefix_sg));
-  sg.grp = *group;
-  sg.src.s_addr = INADDR_ANY;
-
-  vty_out (vty, "PIM Routing Table%s", VTY_NEWLINE);
-  vty_out (vty, "Flags: s - SSM Group, D - Directly connected,%s", VTY_NEWLINE);
-  vty_out (vty, " L - Local, J - Joined, P - Pruned, R - RP-bit set%s", VTY_NEWLINE);
-  vty_out (vty, " S - SPT-bit set, N - No bits set, I - IGMP, T - static, PP - Prune Pending%s", VTY_NEWLINE);
-
-  up = pim_upstream_find (&sg);
-  if (up)
-    pim_cmd_show_individual_group (vty, up);
-
-  
-}
-
-DEFUN (show_ip_mroute_group,
-       show_ip_mroute_group_cmd,
-       "show ip pim A.B.C.D",
-       SHOW_STR
-       IP_STR
-       PIM_STR
-       MROUTE_STR)
-{
-  struct in_addr group;
-
-  if (inet_aton (argv[0], &group) == 0)
-    {
-      vty_out (vty, "%% Malformed Group Address%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  pim_cmd_show_mroute_group (vty, &group);
-  return CMD_SUCCESS;
-}
-
 static void show_mroute_count(struct vty *vty)
 {
   struct listnode    *node;
@@ -5098,11 +5049,6 @@ DEFUN (no_debug_pim_packets_filter,
       PIM_DONT_DEBUG_PIM_REG;
       vty_out (vty, "PIM Register debugging is off%s", VTY_NEWLINE);
     }
-    else if (strncmp (argv[0], "r", 1) == 0)
-    {
-      PIM_DONT_DEBUG_PIM_REG;
-      vty_out (vty, "PIM Register debugging is off%s", VTY_NEWLINE);
-    }
     return CMD_SUCCESS;
 }
 
@@ -6062,7 +6008,6 @@ void pim_cmd_init()
   install_element (VIEW_NODE, &show_ip_pim_rp_cmd);
   install_element (VIEW_NODE, &show_ip_multicast_cmd);
   install_element (VIEW_NODE, &show_ip_mroute_cmd);
-  install_element (VIEW_NODE, &show_ip_mroute_group_cmd);
   install_element (VIEW_NODE, &show_ip_mroute_count_cmd);
   install_element (VIEW_NODE, &show_ip_rib_cmd);
   install_element (VIEW_NODE, &show_ip_ssmpingd_cmd);
