@@ -1439,7 +1439,7 @@ bgp_evpn_uninstall_type2_route (struct bgp *bgp, afi_t afi, safi_t safi,
   struct attr *attr = ri->attr;
   vni_t route_vni;
   struct bgpevpn *vpn;
-  struct in_addr remote_vtep_ip;
+  struct in_addr remote_vtep_ip = { .s_addr = INADDR_ANY };
 
   assert (attr);
   /* If we don't have Route Target, nothing much to do. */
@@ -2028,7 +2028,7 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni, struct in_addr ip,
                           struct ethaddr mac)
 {
   struct bgpevpn *vpn;
-  struct in_addr originator_ip;
+  struct in_addr originator_ip = { .s_addr = INADDR_ANY };
 
   if (!bgp->vnihash)
     {
