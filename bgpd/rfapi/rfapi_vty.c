@@ -36,6 +36,7 @@
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_mplsvpn.h"
+#include "bgpd/bgp_rd.h"
 
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
 #include "bgpd/rfapi/rfapi.h"
@@ -4983,34 +4984,21 @@ void rfapi_vty_init ()
   install_element (ENABLE_NODE, &vnc_clear_counters_cmd);
 
   install_element (VIEW_NODE, &vnc_show_summary_cmd);
-  install_element (ENABLE_NODE, &vnc_show_summary_cmd);
   install_element (VIEW_NODE, &vnc_show_nves_cmd);
-  install_element (ENABLE_NODE, &vnc_show_nves_cmd);
   install_element (VIEW_NODE, &vnc_show_nves_ptct_cmd);
-  install_element (ENABLE_NODE, &vnc_show_nves_ptct_cmd);
 
   install_element (VIEW_NODE, &vnc_show_registrations_cmd);
-  install_element (ENABLE_NODE, &vnc_show_registrations_cmd);
   install_element (VIEW_NODE, &vnc_show_registrations_pfx_cmd);
-  install_element (ENABLE_NODE, &vnc_show_registrations_pfx_cmd);
 
   install_element (VIEW_NODE, &vnc_show_registrations_some_cmd);
-  install_element (ENABLE_NODE, &vnc_show_registrations_some_cmd);
   install_element (VIEW_NODE, &vnc_show_registrations_some_pfx_cmd);
-  install_element (ENABLE_NODE, &vnc_show_registrations_some_pfx_cmd);
 
   install_element (VIEW_NODE, &vnc_show_responses_cmd);
-  install_element (ENABLE_NODE, &vnc_show_responses_cmd);
   install_element (VIEW_NODE, &vnc_show_responses_pfx_cmd);
-  install_element (ENABLE_NODE, &vnc_show_responses_pfx_cmd);
 
   install_element (VIEW_NODE, &vnc_show_responses_some_cmd);
-  install_element (ENABLE_NODE, &vnc_show_responses_some_cmd);
   install_element (VIEW_NODE, &vnc_show_responses_some_pfx_cmd);
-  install_element (ENABLE_NODE, &vnc_show_responses_some_pfx_cmd);
 
-  install_element (ENABLE_NODE, &show_vnc_queries_cmd);
   install_element (VIEW_NODE, &show_vnc_queries_cmd);
-  install_element (ENABLE_NODE, &show_vnc_queries_pfx_cmd);
   install_element (VIEW_NODE, &show_vnc_queries_pfx_cmd);
 }

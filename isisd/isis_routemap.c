@@ -230,7 +230,7 @@ route_set_metric_compile(const char *arg)
   if (arg[0] == '\0' || *endp != '\0' || metric > MAX_WIDE_PATH_METRIC)
     return NULL;
 
-  ret = XCALLOC(MTYPE_ROUTE_MAP_COMPILED, sizeof(ret));
+  ret = XCALLOC(MTYPE_ROUTE_MAP_COMPILED, sizeof(*ret));
   *ret = metric;
 
   return ret;
@@ -535,7 +535,6 @@ void
 isis_route_map_init(void)
 {
   route_map_init();
-  route_map_init_vty();
 
   route_map_install_match(&route_match_ip_address_cmd);
   install_element(RMAP_NODE, &match_ip_address_cmd);

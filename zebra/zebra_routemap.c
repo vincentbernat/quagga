@@ -1790,28 +1790,23 @@ zebra_route_map_init ()
   install_element (CONFIG_NODE, &no_ip_protocol_cmd);
   install_element (CONFIG_NODE, &no_ip_protocol_val_cmd);
   install_element (VIEW_NODE, &show_ip_protocol_cmd);
-  install_element (ENABLE_NODE, &show_ip_protocol_cmd);
   install_element (CONFIG_NODE, &ipv6_protocol_cmd);
   install_element (CONFIG_NODE, &no_ipv6_protocol_cmd);
   install_element (CONFIG_NODE, &no_ipv6_protocol_val_cmd);
   install_element (VIEW_NODE, &show_ipv6_protocol_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_protocol_cmd);
   install_element (CONFIG_NODE, &ip_protocol_nht_rmap_cmd);
   install_element (CONFIG_NODE, &no_ip_protocol_nht_rmap_cmd);
   install_element (CONFIG_NODE, &no_ip_protocol_nht_rmap_val_cmd);
   install_element (VIEW_NODE, &show_ip_protocol_nht_cmd);
-  install_element (ENABLE_NODE, &show_ip_protocol_nht_cmd);
   install_element (CONFIG_NODE, &ipv6_protocol_nht_rmap_cmd);
   install_element (CONFIG_NODE, &no_ipv6_protocol_nht_rmap_cmd);
   install_element (CONFIG_NODE, &no_ipv6_protocol_nht_rmap_val_cmd);
   install_element (VIEW_NODE, &show_ipv6_protocol_nht_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_protocol_nht_cmd);
   install_element (CONFIG_NODE, &zebra_route_map_timer_cmd);
   install_element (CONFIG_NODE, &no_zebra_route_map_timer_cmd);
   install_element (CONFIG_NODE, &no_zebra_route_map_timer_val_cmd);
 
   route_map_init ();
-  route_map_init_vty ();
 
   route_map_add_hook (zebra_route_map_add);
   route_map_delete_hook (zebra_route_map_delete);

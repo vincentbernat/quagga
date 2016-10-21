@@ -40,6 +40,7 @@
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_vnc_types.h"
+#include "bgpd/bgp_rd.h"
 
 #include "bgpd/rfapi/rfapi.h"
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"

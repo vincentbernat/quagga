@@ -68,7 +68,6 @@ extern void bgp_mplsvpn_init (void);
 extern int bgp_nlri_parse_vpn (struct peer *, struct attr *, struct bgp_nlri *);
 extern u_int32_t decode_label (u_char *);
 extern void encode_label(u_int32_t, u_char *);
-extern void decode_rd_ip (u_char *, struct rd_ip *);
 #if ENABLE_BGP_VNC
 extern void decode_vnc_eth (u_char *, struct rd_vnc_eth *);
 #endif

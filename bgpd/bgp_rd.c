@@ -31,6 +31,8 @@
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_rd.h"
+#include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_mplsvpn.h"
 
 #if ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
@@ -100,11 +102,12 @@ decode_rd_ip (u_char *pnt, struct rd_ip *rd_ip)
 int
 str2prefix_rd (const char *str, struct prefix_rd *prd)
 {
-  int ret;
+  int ret; /* ret of called functions */
+  int lret; /* local ret, of this func */
   char *p;
   char *p2;
-  struct stream *s;
-  char *half;
+  struct stream *s = NULL;
+  char *half = NULL;
   struct in_addr addr;
 
   s = stream_new (8);
@@ -112,12 +115,13 @@ str2prefix_rd (const char *str, struct prefix_rd *prd)
   prd->family = AF_UNSPEC;
   prd->prefixlen = 64;
 
+  lret = 0;
   p = strchr (str, ':');
   if (! p)
-    return 0;
+    goto out;
 
   if (! all_digit (p + 1))
-    return 0;
+    goto out;
 
   half = XMALLOC (MTYPE_TMP, (p - str) + 1);
   memcpy (half, str, (p - str));
@@ -128,10 +132,8 @@ str2prefix_rd (const char *str, struct prefix_rd *prd)
   if (! p2)
     {
       if (! all_digit (half))
-	{
-	  XFREE (MTYPE_TMP, half);
-	  return 0;
-	}
+        goto out;
+
       stream_putw (s, RD_TYPE_AS);
       stream_putw (s, atoi (half));
       stream_putl (s, atol (p + 1));
@@ -140,18 +142,21 @@ str2prefix_rd (const char *str, struct prefix_rd *prd)
     {
       ret = inet_aton (half, &addr);
       if (! ret)
-	{
-	  XFREE (MTYPE_TMP, half);
-	  return 0;
-	}
+        goto out;
+
       stream_putw (s, RD_TYPE_IP);
       stream_put_in_addr (s, &addr);
       stream_putw (s, atol (p + 1));
     }
   memcpy (prd->val, s->data, 8);
+  lret = 1;
 
-  XFREE(MTYPE_TMP, half);
-  return 1;
+out:
+  if (s)
+    stream_free (s);
+  if (half)
+    XFREE(MTYPE_TMP, half);
+  return lret;
 }
 
 char *

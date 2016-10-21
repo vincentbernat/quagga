@@ -216,6 +216,7 @@ cluster_init (void)
 static void
 cluster_finish (void)
 {
+  hash_clean (cluster_hash, (void (*)(void *))cluster_free);
   hash_free (cluster_hash);
   cluster_hash = NULL;
 }
@@ -414,6 +415,7 @@ transit_init (void)
 static void
 transit_finish (void)
 {
+  hash_clean (transit_hash, (void (*)(void *))transit_free);
   hash_free (transit_hash);
   transit_hash = NULL;
 }
@@ -662,9 +664,20 @@ attrhash_init (void)
   attrhash = hash_create (attrhash_key_make, attrhash_cmp);
 }
 
+/*
+ * special for hash_clean below
+ */
+static void
+attr_vfree (void *attr)
+{
+  bgp_attr_extra_free ((struct attr *)attr);
+  XFREE (MTYPE_ATTR, attr);
+}
+
 static void
 attrhash_finish (void)
 {
+  hash_clean(attrhash, attr_vfree);
   hash_free (attrhash);
   attrhash = NULL;
 }
@@ -1131,8 +1144,7 @@ const u_int8_t attr_flags_values [] = {
   [BGP_ATTR_AS4_PATH] =         BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS,
   [BGP_ATTR_AS4_AGGREGATOR] =   BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS,
 };
-static const size_t attr_flags_values_max =
-  sizeof (attr_flags_values) / sizeof (attr_flags_values[0]);
+static const size_t attr_flags_values_max = array_size(attr_flags_values) - 1;
 
 static int
 bgp_attr_flag_invalid (struct bgp_attr_parser_args *args)

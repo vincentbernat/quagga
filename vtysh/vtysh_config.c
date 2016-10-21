@@ -144,7 +144,7 @@ config_add_line_uniq (struct list *config, const char *line)
   listnode_add_sort (config, XSTRDUP (MTYPE_VTYSH_CONFIG_LINE, line));
 }
 
-static void
+void
 vtysh_config_parse_line (const char *line)
 {
   char c;
@@ -171,37 +171,10 @@ vtysh_config_parse_line (const char *line)
       /* Store line to current configuration. */
       if (config)
 	{
-          if (strncmp (line, " address-family vpnv4",
-	      strlen (" address-family vpnv4")) == 0)
-	    config = config_get (BGP_VPNV4_NODE, line);
-	  else if (strncmp (line, " address-family vpn6",
-	      strlen (" address-family vpn6")) == 0)
-	    config = config_get (BGP_VPNV6_NODE, line);
-	  else if (strncmp (line, " address-family encapv6",
-	      strlen (" address-family encapv6")) == 0)
-	    config = config_get (BGP_ENCAPV6_NODE, line);
-	  else if (strncmp (line, " address-family encap",
-	      strlen (" address-family encap")) == 0)
-	    config = config_get (BGP_ENCAP_NODE, line);
-	  else if (strncmp (line, " address-family ipv4 multicast",
-		   strlen (" address-family ipv4 multicast")) == 0)
-	    config = config_get (BGP_IPV4M_NODE, line);
-	  else if (strncmp (line, " address-family ipv6",
-		   strlen (" address-family ipv6")) == 0)
-	    config = config_get (BGP_IPV6_NODE, line);
-	  else if (strncmp (line, " vnc defaults",
-		   strlen (" vnc defaults")) == 0)
-	    config = config_get (BGP_VNC_DEFAULTS_NODE, line);
-	  else if (strncmp (line, " vnc nve-group",
-		   strlen (" vnc nve-group")) == 0)
-	    config = config_get (BGP_VNC_NVE_GROUP_NODE, line);
-	  else if (strncmp (line, " vnc l2-group",
-		   strlen (" vnc l2-group")) == 0)
-	    config = config_get (BGP_VNC_L2_GROUP_NODE, line);
-	  else if (config->index == RMAP_NODE ||
-	           config->index == INTERFACE_NODE ||
-		   config->index == NS_NODE ||
-		   config->index == VTY_NODE)
+	  if (config->index == RMAP_NODE ||
+	      config->index == INTERFACE_NODE ||
+	      config->index == NS_NODE ||
+	      config->index == VTY_NODE)
 	    config_add_line_uniq (config->line, line);
 	  else
 	    config_add_line (config->line, line);
@@ -297,29 +270,6 @@ vtysh_config_parse_line (const char *line)
 	  config = NULL;
 	}
       break;
-    }
-}
-
-void
-vtysh_config_parse (char *line)
-{
-  char *begin;
-  char *pnt;
-  
-  begin = pnt = line;
-
-  while (*pnt != '\0')
-    {
-      if (*pnt == '\n')
-	{
-	  *pnt++ = '\0';
-	  vtysh_config_parse_line (begin);
-	  begin = pnt;
-	}
-      else
-	{
-	  pnt++;
-	}
     }
 }
 

@@ -1432,8 +1432,7 @@ bgp_zebra_announce (struct bgp *bgp, afi_t afi, safi_t safi,
           api.tag = tag;
         }
 
-      distance = bgp_distance_apply (p, info, bgp);
-
+      distance = bgp_distance_apply (p, info, afi, safi, bgp);
       if (distance)
 	{
 	  SET_FLAG (api.message, ZAPI_MESSAGE_DISTANCE);
@@ -1617,6 +1616,13 @@ bgp_zebra_announce (struct bgp *bgp, afi_t afi, safi_t safi,
         {
           SET_FLAG (api.message, ZAPI_MESSAGE_TAG);
           api.tag = tag;
+        }
+
+      distance = bgp_distance_apply (p, info, afi, safi, bgp);
+      if (distance)
+        {
+          SET_FLAG (api.message, ZAPI_MESSAGE_DISTANCE);
+          api.distance = distance;
         }
 
       if (p->family == AF_INET)

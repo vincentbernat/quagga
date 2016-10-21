@@ -254,9 +254,6 @@ bgp_exit (int status)
     bgp_delete (bgp);
   list_free (bm->bgp);
 
-  /* reverse bgp_attr_init */
-  bgp_attr_finish ();
-
   /* reverse bgp_dump_init */
   bgp_dump_finish ();
 
@@ -265,6 +262,9 @@ bgp_exit (int status)
 
   /* cleanup route maps */
   bgp_route_map_terminate();
+
+  /* reverse bgp_attr_init */
+  bgp_attr_finish ();
 
   /* reverse access_list_init */
   access_list_add_hook (NULL);
