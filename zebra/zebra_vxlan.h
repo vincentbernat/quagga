@@ -47,8 +47,14 @@ extern int zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
                                          u_short length, struct zebra_vrf *zvrf);
 extern int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
                                          u_short length, struct zebra_vrf *zvrf);
+extern int zebra_vxlan_local_mac_add_update (struct interface *ifp,
+                    struct interface *br_if, struct ethaddr *mac, vlanid_t vid);
+extern int zebra_vxlan_local_mac_del (struct interface *ifp,
+                    struct interface *br_if, struct ethaddr *mac, vlanid_t vid);
 extern int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
                                       u_short length, struct zebra_vrf *zvrf);
+extern void zebra_vxlan_print_vni_macs (struct vty *vty, struct zebra_vrf *zvrf,
+                                        vni_t vni);
 extern void zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni);
 extern void zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf);
 extern void zebra_vxlan_init_tables (struct zebra_vrf *zvrf);

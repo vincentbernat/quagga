@@ -5917,6 +5917,24 @@ DEFUN (show_evpn_vni_vni,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_evpn_vni_mac,
+       show_evpn_vni_mac_cmd,
+       "show evpn vni " CMD_VNI_RANGE " mac",
+       SHOW_STR
+       "EVPN\n"
+       "VxLAN information\n"
+       "VNI number\n"
+       "MAC addresses\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_vni_macs(vty, zvrf, vni);
+  return CMD_SUCCESS;
+}
+
 /* Static ip route configuration write function. */
 static int
 zebra_ip_config (struct vty *vty)
@@ -6372,4 +6390,5 @@ zebra_vty_init (void)
 
   install_element (VIEW_NODE, &show_evpn_vni_cmd);
   install_element (VIEW_NODE, &show_evpn_vni_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_vni_mac_cmd);
 }

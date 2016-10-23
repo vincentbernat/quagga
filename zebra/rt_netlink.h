@@ -36,6 +36,9 @@ netlink_mpls_multipath (int cmd, zebra_lsp_t *lsp);
 extern int netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                                  ns_id_t ns_id);
 extern int netlink_route_read (struct zebra_ns *zns);
+extern int netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
+                                 ns_id_t ns_id);
+extern int netlink_neigh_read (struct zebra_ns *zns);
 
 extern int netlink_vxlan_flood_list_update (struct interface *ifp,
                                             struct prefix *vtep, int cmd);

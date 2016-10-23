@@ -214,6 +214,9 @@ union prefixconstptr
 /* Maximum prefix string length (IPv6) */
 #define PREFIX_STRLEN 51
 
+/* Maximum MAC address string length */
+#define MACADDR_STRLEN 20
+
 /* Max bit/byte length of IPv4 address. */
 #define IPV4_MAX_BYTELEN    4
 #define IPV4_MAX_BITLEN    32
@@ -321,6 +324,8 @@ extern void masklen2ip6 (const int, struct in6_addr *);
 
 extern void str2in6_addr (const char *, struct in6_addr *);
 extern const char *inet6_ntoa (struct in6_addr);
+
+extern const char *mac2str (const struct ethaddr *, char *, int);
 
 static inline int ipv6_martian (struct in6_addr *addr)
 {

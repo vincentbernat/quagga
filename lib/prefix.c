@@ -899,6 +899,7 @@ prefix2str (union prefixconstptr pu, char *str, int size)
 {
   const struct prefix *p = pu.p;
   char buf[PREFIX2STR_BUFFER];
+  char buf2[MACADDR_STRLEN];
 
   switch (p->family)
     {
@@ -923,12 +924,9 @@ prefix2str (union prefixconstptr pu, char *str, int size)
           }
         else if (p->u.prefix_evpn.route_type == 2)
           {
-#define macaddrtostring(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-#define MAC_STR "%02x:%02x:%02x:%02x:%02x:%02x"
-
-            snprintf (str, size, "[%d]:["MAC_STR"]:[%s]/%d",
+            snprintf (str, size, "[%d]:[%s]:[%s]/%d",
                       p->u.prefix_evpn.route_type,
-                      macaddrtostring(p->u.prefix_evpn.mac.octet),
+                      mac2str (&p->u.prefix_evpn.mac, buf2, sizeof (buf2)),
                       inet_ntop (family, &p->u.prefix_evpn.ip.addr,
                                  buf, PREFIX2STR_BUFFER),
                       p->prefixlen);
@@ -1078,3 +1076,13 @@ inet6_ntoa (struct in6_addr addr)
   return buf;
 }
 #endif /* HAVE_IPV6 */
+
+const char *
+mac2str (const struct ethaddr *mac, char *buf, int size)
+{
+  snprintf (buf, size, "%02x:%02x:%02x:%02x:%02x:%02x",
+            mac->octet[0], mac->octet[1], mac->octet[2],
+            mac->octet[3], mac->octet[4], mac->octet[5]);
+  return buf;
+
+}

@@ -55,6 +55,7 @@
 #include "zebra/zebra_mpls.h"
 #include "zebra/kernel_netlink.h"
 #include "zebra/rt_netlink.h"
+#include "zebra/zebra_vxlan.h"
 
 /* TODO - Temporary definitions, need to refine. */
 #ifndef AF_MPLS
@@ -685,6 +686,135 @@ netlink_route_read (struct zebra_ns *zns)
   return 0;
 }
 
+#ifndef NDA_RTA
+#define NDA_RTA(r) \
+        ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
+#endif
+
+static int
+netlink_neigh_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
+                     ns_id_t ns_id)
+{
+  if (h->nlmsg_type != RTM_NEWNEIGH)
+    return 0;
+
+  return netlink_neigh_change (snl, h, ns_id);
+}
+
+int
+netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
+                      ns_id_t ns_id)
+{
+  int len;
+  struct ndmsg *ndm;
+  struct interface *ifp;
+  struct zebra_if *zif;
+  struct rtattr *tb[NDA_MAX + 1];
+  struct zebra_l2info_brslave *br_slave;
+  struct interface *br_if;
+  struct ethaddr mac;
+  vlanid_t vid = 0;
+  char buf[MACADDR_STRLEN];
+
+  if (!(h->nlmsg_type == RTM_NEWNEIGH || h->nlmsg_type == RTM_DELNEIGH))
+    return 0;
+
+  /* Length validity. */
+  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct ndmsg));
+  if (len < 0)
+    return -1;
+
+  /* We are interested only in AF_BRIDGE notifications. */
+  ndm = NLMSG_DATA (h);
+  if (ndm->ndm_family != AF_BRIDGE)
+    return 0;
+
+  /* The interface should exist. */
+  ifp = if_lookup_by_index_per_ns (zebra_ns_lookup (NS_DEFAULT), ndm->ndm_ifindex);
+  if (!ifp)
+    return 0;
+
+  /* The interface should be something we're interested in. */
+  /* Drop on VxLAN */
+  if (IS_ZEBRA_IF_VXLAN(ifp))
+    return 0;
+  if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp))
+    return 0;
+  if (!ifp->info)
+    return 0;
+
+  zif = (struct zebra_if *)ifp->info;
+  br_slave = (struct zebra_l2info_brslave *)zif->l2if;
+  assert (br_slave);
+  if ((br_if = br_slave->br_if) == NULL)
+    {
+      zlog_warn ("%s family %s IF %s(%u) brIF %u - no bridge master",
+		 nl_msg_type_to_str (h->nlmsg_type),
+                 nl_family_to_str (ndm->ndm_family),
+                 ifp->name, ndm->ndm_ifindex, br_slave->bridge_ifindex);
+      return 0;
+    }
+
+  /* Parse attributes and extract fields of interest. */
+  memset (tb, 0, sizeof tb);
+  netlink_parse_rtattr (tb, NDA_MAX, NDA_RTA (ndm), len);
+
+  if (!tb[NDA_LLADDR])
+    {
+      zlog_warn ("%s family %s IF %s(%u) brIF %u - no LLADDR",
+                 nl_msg_type_to_str (h->nlmsg_type),
+                 nl_family_to_str (ndm->ndm_family),
+                 ifp->name, ndm->ndm_ifindex, br_slave->bridge_ifindex);
+      return 0;
+    }
+
+  if (RTA_PAYLOAD (tb[NDA_LLADDR]) != ETHER_ADDR_LEN)
+    {
+      zlog_warn ("%s family %s IF %s(%u) brIF %u - LLADDR is not MAC, len %d",
+                 nl_msg_type_to_str (h->nlmsg_type),
+                 nl_family_to_str (ndm->ndm_family),
+                 ifp->name, ndm->ndm_ifindex, br_slave->bridge_ifindex,
+                 RTA_PAYLOAD (tb[NDA_LLADDR]));
+      return 0;
+    }
+
+  memcpy (&mac, RTA_DATA (tb[NDA_LLADDR]), ETHER_ADDR_LEN);
+
+  if (tb[NDA_VLAN])
+    vid = *(u_int16_t *) RTA_DATA(tb[NDA_VLAN]);
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_debug ("Rx %s family %s IF %s(%u) VLAN %u MAC %s",
+                nl_msg_type_to_str (h->nlmsg_type),
+                nl_family_to_str (ndm->ndm_family),
+                ifp->name, ndm->ndm_ifindex, vid,
+                mac2str (&mac, buf, sizeof (buf)));
+
+  if (h->nlmsg_type == RTM_NEWNEIGH)
+    return zebra_vxlan_local_mac_add_update (ifp, br_if, &mac, vid);
+
+  return zebra_vxlan_local_mac_del (ifp, br_if, &mac, vid);
+}
+
+/*
+ * Neighbor table read using netlink interface. This is invoked
+ * at startup and we are currently concerned only about the
+ * bridge FDB.
+ */
+int
+netlink_neigh_read (struct zebra_ns *zns)
+{
+  int ret;
+
+  /* Get IPv4 routing table. */
+  ret = netlink_request (AF_BRIDGE, RTM_GETNEIGH, &zns->netlink_cmd, 0);
+  if (ret < 0)
+    return ret;
+  ret = netlink_parse_info (netlink_neigh_table, &zns->netlink_cmd, zns, 0);
+
+  return ret;
+}
+
 static void
 _netlink_route_nl_add_gateway_info (u_char route_family, u_char gw_family,
                                     struct nlmsghdr *nlmsg,
@@ -1226,6 +1356,61 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
   return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
 }
 
+static int
+netlink_neigh_update_af_bridge (struct interface *ifp, struct ethaddr *mac,
+                                struct in_addr vtep_ip, int cmd)
+{
+  struct zebra_ns *zns = zebra_ns_lookup (NS_DEFAULT);
+  struct
+    {
+      struct nlmsghdr         n;
+      struct ndmsg            ndm;
+      char                    buf[256];
+    } req;
+  int dst_alen;
+  struct zebra_if *zif;
+  struct zebra_l2info_brslave *br_slave;
+  struct interface *br_if;
+  char buf[MACADDR_STRLEN];
+
+  zif = ifp->info;
+  br_slave = (struct zebra_l2info_brslave *)zif->l2if;
+  if ((br_if = br_slave->br_if) == NULL)
+    {
+      zlog_warn ("MAC add on IF %s(%u) - no mapping to bridge",
+                 ifp->name, ifp->ifindex);
+      return -1;
+    }
+
+  memset(&req.n, 0, sizeof(req.n));
+  memset(&req.ndm, 0, sizeof(req.ndm));
+
+  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+  req.n.nlmsg_flags = NLM_F_REQUEST;
+  if (cmd == RTM_NEWNEIGH)
+    req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
+  req.n.nlmsg_type = cmd;
+  req.ndm.ndm_family = AF_BRIDGE;
+  req.ndm.ndm_state = NUD_NOARP | NUD_PERMANENT;
+  req.ndm.ndm_flags |= NTF_SELF; // Handle by "self", not "master"
+
+  addattr_l (&req.n, sizeof (req), NDA_LLADDR, mac, 6);
+  req.ndm.ndm_ifindex = ifp->ifindex;
+  dst_alen = 4; // TODO: hardcoded
+  addattr_l (&req.n, sizeof (req), NDA_DST, &vtep_ip, dst_alen);
+  addattr32 (&req.n, sizeof (req), NDA_MASTER, br_if->ifindex);
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_debug ("Tx %s family %s IF %s(%u) MAC %s Remote VTEP %s",
+                nl_msg_type_to_str (cmd),
+                nl_family_to_str (req.ndm.ndm_family),
+                ifp->name, ifp->ifindex,
+                mac2str (mac, buf, sizeof (buf)),
+                inet_ntoa (vtep_ip));
+
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+}
+
 /* Routing table change via netlink interface. */
 /* Update flag indicates whether this is a "replace" or not. */
 static int
@@ -1570,6 +1755,22 @@ kernel_neigh_update (int add, int ifindex, uint32_t addr, char *lla, int llalen)
 {
   return netlink_neigh_update(add ? RTM_NEWNEIGH : RTM_DELNEIGH, ifindex, addr,
 			      lla, llalen);
+}
+
+int
+kernel_add_mac (struct interface *ifp, struct ethaddr *mac,
+                struct in_addr vtep_ip)
+{
+ return netlink_neigh_update_af_bridge (ifp, mac, vtep_ip,
+                                        RTM_NEWNEIGH);
+}
+
+int
+kernel_del_mac (struct interface *ifp, struct ethaddr *mac,
+                struct in_addr vtep_ip)
+{
+ return netlink_neigh_update_af_bridge (ifp, mac, vtep_ip,
+                                        RTM_DELNEIGH);
 }
 
 /*

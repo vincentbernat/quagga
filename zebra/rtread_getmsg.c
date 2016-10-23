@@ -234,3 +234,9 @@ route_read (struct zebra_ns *zns)
 exit:
 	close (dev);
 }
+
+/* Only implemented for netlink method */
+void
+neigh_read (struct zebra_ns *zns)
+{
+}

@@ -417,3 +417,11 @@ kernel_neigh_update (int add, int ifindex, uint32_t addr, char *lla, int llalen)
   /* TODO */
   return 0;
 }
+
+int
+kernel_mac_update (struct interface *ifp, struct ethaddr *mac,
+                   struct in_addr vtep_ip, int add)
+{
+  /* TODO */
+  return 0;
+}

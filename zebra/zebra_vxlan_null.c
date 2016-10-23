@@ -63,10 +63,29 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
   return 0;
 }
 
+int
+zebra_vxlan_local_mac_add_update (struct interface *ifp, struct interface *br_if,
+                                  struct ethaddr *mac, vlanid_t vid)
+{
+  return 0;
+}
+
+int
+zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
+                           struct ethaddr *mac, vlanid_t vid)
+{
+  return 0;
+}
+
 int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
                                u_short length, struct zebra_vrf *zvrf)
 {
   return 0;
+}
+
+void
+zebra_vxlan_print_vni_macs (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
+{
 }
 
 void

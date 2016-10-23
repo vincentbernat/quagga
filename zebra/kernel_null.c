@@ -56,6 +56,21 @@ int kernel_neigh_update (int a, int b, uint32_t c, char *d, int e)
   return 0;
 }
 
+int
+kernel_add_mac (struct interface *ifp, struct ethaddr *mac,
+                struct in_addr vtep_ip)
+{
+  return 0;
+}
+
+int
+kernel_del_mac (struct interface *ifp, struct ethaddr *mac,
+                struct in_addr vtep_ip)
+{
+  return 0;
+}
+
 void kernel_init (struct zebra_ns *zns) { return; }
 void kernel_terminate (struct zebra_ns *zns) { return; }
 void route_read (struct zebra_ns *zns) { return; }
+void neigh_read (struct zebra_ns *zns) { return; }
