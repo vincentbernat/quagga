@@ -101,8 +101,13 @@ build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr mac,
   p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
   memcpy(&p->prefix.mac.octet, &mac.octet, ETHER_ADDR_LEN);
-  SET_FLAG (p->prefix.flags, IP_ADDR_V4);
-  p->prefix.ip.v4_addr = ip;
+  if (!ip.s_addr)
+    SET_FLAG (p->prefix.flags, IP_ADDR_NONE);
+  else
+    {
+      SET_FLAG (p->prefix.flags, IP_ADDR_V4);
+      p->prefix.ip.v4_addr = ip;
+    }
   p->prefix.vni = vni;
 }
 
@@ -1002,7 +1007,9 @@ bgp_evpn_process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   struct prefix_evpn p;
   u_char ipaddr_len;
   u_char macaddr_len;
+#if 0
   vni_t vni;
+#endif
   int ret;
 
   /* Type-2 route should be either 33 or 52 bytes: 
@@ -1044,16 +1051,20 @@ bgp_evpn_process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
 
   /* Get the IP. */
   ipaddr_len = *pfx++;
-  if (ipaddr_len == 4)
+  if (ipaddr_len == 0)
+    p.prefix.flags = IP_ADDR_NONE;
+  else if (ipaddr_len == 4)
     p.prefix.flags = IP_ADDR_V4;
   else
     p.prefix.flags = IP_ADDR_V6;
-  memcpy (&p.prefix.ip, pfx, ipaddr_len);
+  if (p.prefix.flags != IP_ADDR_NONE)
+    memcpy (&p.prefix.ip, pfx, ipaddr_len);
   pfx += ipaddr_len;
 
+#if 0
   /* Get the VNI */
   vni = *pfx;
-  zlog_debug ("%s: Got %d\n", __FUNCTION__, vni);
+#endif
 
   /* Process the route. */
   if (attr)
@@ -1139,21 +1150,8 @@ bgp_zebra_send_remote_mac (struct bgp *bgp, struct bgpevpn *vpn,
   zclient_create_header (s, add ? ZEBRA_REMOTE_MACIP_ADD : ZEBRA_REMOTE_MACIP_DEL,
                          bgp->vrf_id);
   stream_putl(s, vpn->vni);
-  stream_putc(s, 0); // flags - unused
-  /*if (p->prefix.flags & IP_ADDR_V4)
-    {
-      stream_putw(s, AF_INET);
-      stream_putc(s, IPV4_MAX_BITLEN);
-      stream_put_in_addr(s, &p->prefix.ip.v4_addr);
-    }
-  else if (p->prefix.flags & IP_ADDR_V6)
-    {
-      stream_putw(s, AF_INET6);
-      stream_putc(s, IPV6_MAX_BITLEN);
-      stream_put(s, &p->prefix.ip.v6_addr, IPV6_MAX_BYTELEN);
-    }*/
-  stream_put_in_addr(s, &p->prefix.ip.v4_addr);
   stream_put (s, &p->prefix.mac.octet, ETHER_ADDR_LEN); /* Mac Addr */
+  stream_putl(s, 0); /* IP address length. */
   stream_put_in_addr(s, &remote_vtep_ip);
 
   stream_putw_at (s, 0, stream_get_endp (s));
@@ -1457,7 +1455,11 @@ bgp_evpn_uninstall_type2_route (struct bgp *bgp, afi_t afi, safi_t safi,
   /* If this is already a "live" VNI, remove remote VTEP from zebra. */
   vpn = bgp_evpn_lookup_vpn (bgp, route_vni);
   if (vpn && CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
-    return bgp_zebra_send_remote_mac (bgp, vpn, evp, remote_vtep_ip, 0);
+    {
+      remote_vtep_ip = bgp_evpn_get_route_remote_vtep (ri->net);
+      if (!remote_vtep_ip.s_addr) return -1;
+      return bgp_zebra_send_remote_mac (bgp, vpn, evp, remote_vtep_ip, 0);
+    }
 
   return 0;
 }
@@ -2371,14 +2373,22 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
         break;
 
       case BGP_EVPN_MAC_IP_ROUTE:
-        stream_putc (s, 37); // TODO: Hardcoded for now
+        if (evp->prefix.flags & IP_ADDR_V4)
+          stream_putc (s, 37); // TODO: Hardcoded for now
+        else
+          stream_putc (s, 33); // TODO: Hardcoded for now
         stream_put (s, prd->val, 8); /* RD */
         stream_put (s, 0, 10); /* ESI */
         stream_putl (s, 0); /* Ethernet Tag ID */
         stream_putc (s, ETHER_ADDR_LEN); /* Mac Addr Len */
         stream_put (s, evp->prefix.mac.octet, 6); /* Mac Addr */
-        stream_putc (s, 4); /* IP address Length */
-        stream_put_in_addr (s, &evp->prefix.ip.v4_addr);
+        if (evp->prefix.flags & IP_ADDR_V4)
+          {
+            stream_putc (s, 4); /* IP address Length */
+            stream_put_in_addr (s, &evp->prefix.ip.v4_addr);
+          }
+        else
+          stream_putc (s, 0); /* IP address Length */
         stream_put (s, &evp->prefix.vni, 3); /* VNI */
         break;
 
@@ -2630,6 +2640,8 @@ bgp_evpn_update_advertise_vni (struct bgp *bgp)
 char *
 bgp_evpn_route2str (struct prefix_evpn *p, char *buf)
 {
+  char buf1[MACADDR_STRLEN];
+
   if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
     {
       snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[%d]:[%s]",p->prefix.route_type,
@@ -2639,14 +2651,19 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf)
     }
   if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
     {
-      snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[0]:[%d]:["MAC_STR"]:[%d]:[%s]",
-                    p->prefix.route_type,
-                    ETHER_ADDR_LEN,
-                    macaddrtostring(p->prefix.mac.octet),
-                    (p->prefix.flags == IP_ADDR_V4)? 
-                    IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
-                    inet_ntoa(p->prefix.ip.v4_addr));
+      if (p->prefix.flags == IP_ADDR_NONE)
+        snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[0]:[%d]:[%s]",
+                  p->prefix.route_type, ETHER_ADDR_LEN,
+                  mac2str (&p->prefix.mac, buf1, sizeof(buf1)));
+      else
+        snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[0]:[%d]:[%s]:[%d]:[%s]",
+                  p->prefix.route_type, ETHER_ADDR_LEN,
+                  mac2str (&p->prefix.mac, buf1, sizeof(buf1)),
+                  (p->prefix.flags == IP_ADDR_V4)? 
+                  IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
+                  inet_ntoa(p->prefix.ip.v4_addr));
     }
+
   return(buf);
 }
 

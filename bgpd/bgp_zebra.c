@@ -2202,22 +2202,21 @@ bgp_zebra_process_local_macip (int command, struct zclient *zclient,
   struct stream *s;
   vni_t vni;
   struct bgp *bgp;
-  struct in_addr nw_ip;
+  struct in_addr nw_ip = { 0 };
   struct ethaddr mac;
+  char buf[MACADDR_STRLEN];
 
-  zlog_debug("%s: Received MACIP from Zebra\n", __FUNCTION__);
   s = zclient->ibuf;
   vni = stream_getl (s);
-  nw_ip.s_addr = stream_get_ipv4 (s);
   stream_get (&mac.octet, s, ETHER_ADDR_LEN);
   bgp = bgp_lookup_by_vrf_id (vrf_id);
   if (!bgp)
     return 0;
 
   if (BGP_DEBUG (zebra, ZEBRA))
-    zlog_debug("Rx VNI %s VRF %u VNI %u " MAC_STR " ",
-               (command == ZEBRA_MACIP_ADD) ? "add" : "del",  vrf_id, vni,
-               macaddrtostring(mac.octet));
+    zlog_debug ("%u:Recv %s MAC %s VNI %u",
+                vrf_id, (command == ZEBRA_MACIP_ADD) ? "Add" : "Del",
+                mac2str (&mac, buf, sizeof (buf)), vni);
 
   if (command == ZEBRA_MACIP_ADD)
     return bgp_evpn_local_macip_add (bgp, vni, nw_ip, mac);

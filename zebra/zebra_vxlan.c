@@ -131,6 +131,22 @@ struct zebra_macip_t_
     } fwd_info;
 };
 
+/*
+ * Context for MAC-IP hash walk - used by callbacks.
+ */
+struct macip_walk_ctx
+{
+  zebra_vni_t *zvni;          /* VNI hash */
+  struct zebra_vrf *zvrf;     /* VRF - for client notification. */
+  int uninstall;              /* uninstall from kernel? */
+
+#define DEL_LOCAL_MAC    0x1
+#define DEL_REMOTE_MAC   0x2
+#define DEL_ALL_MAC      (DEL_LOCAL_MAC | DEL_REMOTE_MAC)
+  u_int32_t flags;
+};
+
+
 /* static function declarations */
 static unsigned int
 macip_hash_keymake (void *p);
@@ -143,14 +159,30 @@ zvni_macip_add (zebra_vni_t *zvni, struct ethaddr *mac);
 static int
 zvni_macip_del (zebra_vni_t *zvni, zebra_macip_t *macip);
 static int
-zvni_macip_del_hash_entry (struct hash_backet *backet,
-                           zebra_vni_t *zvni);
+zvni_macip_del_hash_entry (struct hash_backet *backet, void *arg);
 static void
-zvni_macip_del_all (zebra_vni_t *zvni);
+zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags);
+static int
+zvni_macip_adv_hash_entry (struct hash_backet *backet, void *arg);
+static void
+zvni_macip_adv_all (struct zebra_vrf *zvrf, zebra_vni_t *zvni);
 static zebra_macip_t *
 zvni_macip_lookup (zebra_vni_t *zvni, struct ethaddr *mac);
+static int
+zvni_macip_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *mac, u_int16_t cmd);
+static int
+zvni_macip_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *mac);
+static int
+zvni_macip_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *mac);
 static zebra_vni_t *
 zvni_map_vlan (struct interface *ifp, struct interface *br_if, vlanid_t vid);
+static int
+zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip);
+static int
+zvni_macip_uninstall (zebra_vni_t *zvni, zebra_macip_t *macip);
 static unsigned int
 vni_hash_keymake (void *p);
 static int
@@ -289,24 +321,70 @@ zvni_macip_del (zebra_vni_t *zvni, zebra_macip_t *macip)
  * Free MAC-IP hash entry (callback)
  */
 static int
-zvni_macip_del_hash_entry (struct hash_backet *backet,
-                           zebra_vni_t *zvni)
+zvni_macip_del_hash_entry (struct hash_backet *backet, void *arg)
 {
-  return zvni_macip_del (zvni, (zebra_macip_t *)backet->data);
+  struct macip_walk_ctx *wctx = arg;
+  zebra_macip_t *macip = backet->data;
+
+  if (wctx->uninstall)
+    zvni_macip_uninstall (wctx->zvni, macip);
+
+  if (((wctx->flags & DEL_LOCAL_MAC) && (macip->flags & ZEBRA_MAC_LOCAL)) ||
+      ((wctx->flags & DEL_REMOTE_MAC) && (macip->flags & ZEBRA_MAC_REMOTE)))
+    return zvni_macip_del (wctx->zvni, macip);
+
+  return 0;
 }
 
 /*
  * Delete all MAC-IP entries for this VNI.
  */
 static void
-zvni_macip_del_all (zebra_vni_t *zvni)
-
+zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags)
 {
+  struct macip_walk_ctx wctx;
+
+  wctx.zvni = zvni;
+  wctx.zvrf = NULL;
+  wctx.uninstall = uninstall;
+  wctx.flags = flags;
+
   hash_iterate (zvni->macip_table,
                 (void (*) (struct hash_backet *, void *))
-                zvni_macip_del_hash_entry, zvni);
+                zvni_macip_del_hash_entry, &wctx);
   hash_free(zvni->macip_table);
   zvni->macip_table = NULL;
+}
+
+/*
+ * Inform MAC-IP hash entry to client (callback)
+ */
+static int
+zvni_macip_adv_hash_entry (struct hash_backet *backet, void *arg)
+{
+  struct macip_walk_ctx *wctx = arg;
+  zebra_macip_t *macip = backet->data;
+
+  return zvni_macip_send_add_to_client (wctx->zvrf, wctx->zvni->vni,
+                                        &macip->emac);
+}
+
+/*
+ * Inform all MAC-IP entries for this VNI to client.
+ */
+static void
+zvni_macip_adv_all (struct zebra_vrf *zvrf, zebra_vni_t *zvni)
+{
+  struct macip_walk_ctx wctx;
+
+  wctx.zvni = zvni;
+  wctx.zvrf = zvrf;
+  wctx.uninstall = 0;
+  wctx.flags = 0;
+
+  hash_iterate (zvni->macip_table,
+                (void (*) (struct hash_backet *, void *))
+                zvni_macip_adv_hash_entry, &wctx);
 }
 
 /*
@@ -323,6 +401,63 @@ zvni_macip_lookup (zebra_vni_t *zvni, struct ethaddr *mac)
   pmac = hash_lookup (zvni->macip_table, &tmp);
 
   return pmac;
+}
+
+static int
+zvni_macip_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *mac, u_int16_t cmd)
+{
+  struct zserv *client;
+  struct stream *s;
+  char buf[MACADDR_STRLEN];
+
+  client = zebra_find_client (ZEBRA_ROUTE_BGP);
+  /* BGP may not be running. */
+  if (!client)
+    return 0;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  zserv_create_header (s, cmd, zvrf->vrf_id);
+  stream_putl (s, vni);
+  stream_put (s, mac->octet, ETHER_ADDR_LEN);
+  stream_putl (s, 0); /* IP address length */
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Send %s MAC %s VNI %u",
+                zvrf->vrf_id, (cmd == ZEBRA_MACIP_ADD) ? "Add" : "Del",
+                mac2str (mac, buf, sizeof (buf)), vni);
+
+  if (cmd == ZEBRA_MACIP_ADD)
+    client->macipadd_cnt++;
+  else
+    client->macipdel_cnt++;
+
+  return zebra_server_send_message(client);
+}
+
+/*
+ * Inform BGP about local MAC addition.
+ */
+static int
+zvni_macip_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *mac)
+{
+  return zvni_macip_send_msg_to_client (zvrf, vni, mac, ZEBRA_MACIP_ADD);
+}
+
+/*
+ * Inform BGP about local MAC deletion.
+ */
+static int
+zvni_macip_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *mac)
+{
+  return zvni_macip_send_msg_to_client (zvrf, vni, mac, ZEBRA_MACIP_DEL);
 }
 
 /*
@@ -377,6 +512,39 @@ zvni_map_vlan (struct interface *ifp, struct interface *br_if, vlanid_t vid)
 
   zvni = zvni_lookup (zvrf, zl2if->vni);
   return zvni;
+}
+
+/*
+ * Install remote MAC-IP into the kernel.
+ */
+static int
+zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip)
+{
+  if (!(macip->flags & ZEBRA_MAC_REMOTE))
+    return 0;
+
+  return kernel_add_mac (zvni->vxlan_if, &macip->emac,
+                         macip->fwd_info.r_vtep_ip);
+}
+
+/*
+ * Uninstall remote MAC-IP from the kernel.
+ */
+static int
+zvni_macip_uninstall (zebra_vni_t *zvni, zebra_macip_t *macip)
+{
+  if (!(macip->flags & ZEBRA_MAC_REMOTE))
+    return 0;
+
+  if (!zvni->vxlan_if)
+    {
+      zlog_err ("VNI %u hash %p couldn't be uninstalled - no intf",
+                zvni->vni, zvni);
+      return -1;
+    }
+
+  return kernel_del_mac (zvni->vxlan_if, &macip->emac,
+                         macip->fwd_info.r_vtep_ip);
 }
 
 /*
@@ -816,6 +984,7 @@ zvni_print_macip (zebra_macip_t *macip, void *ctxt)
     {
       vty_out(vty, " Remote VTEP: %s",
               inet_ntoa (macip->fwd_info.r_vtep_ip));
+      vty_out(vty, "%s", VTY_NEWLINE);
     }
 }
 
@@ -885,7 +1054,7 @@ zvni_cleanup_all (struct hash_backet *backet, void *zvrf)
     return;
 
   /* Free up all MAC-IPs, if any. */
-  zvni_macip_del_all (zvni);
+  zvni_macip_del_all (zvni, 1, DEL_ALL_MAC);
 
   /* Free up all remote VTEPs, if any. */
   zvni_vtep_del_all (zvni, 1);
@@ -953,6 +1122,10 @@ zebra_vxlan_if_up (struct interface *ifp)
     return 0;
 
   zvni_send_add_to_client (zvrf, zvni);
+
+  /* If any local MACs learnt, inform BGP. */
+  zvni_macip_adv_all (zvrf, zvni);
+
   return 0;
 }
 
@@ -995,6 +1168,9 @@ zebra_vxlan_if_down (struct interface *ifp)
   /* Inform BGP if required. */
   if (zvrf->advertise_vni)
     zvni_send_del_to_client (zvrf, zvni->vni);
+
+  /* Free up all MAC-IPs, if any. */
+  zvni_macip_del_all (zvni, 1, DEL_REMOTE_MAC);
 
   /* Free up all remote VTEPs, if any. */
   zvni_vtep_del_all (zvni, 1);
@@ -1122,7 +1298,7 @@ zebra_vxlan_if_del (struct interface *ifp)
     zvni_send_del_to_client (zvrf, zvni->vni);
 
   /* Free up all MAC-IPs, if any. */
-  zvni_macip_del_all (zvni);
+  zvni_macip_del_all (zvni, 0, DEL_ALL_MAC);
 
   /* Free up all remote VTEPs, if any. */
   zvni_vtep_del_all (zvni, 0);
@@ -1192,21 +1368,21 @@ int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
       vtep.prefixlen = stream_getc (s);
       l += 8;
       if (vtep.family == AF_INET)
-	{
-	  vtep.u.prefix4.s_addr = stream_get_ipv4(s);
-	  l += IPV4_MAX_BYTELEN;
-	}
+        {
+          vtep.u.prefix4.s_addr = stream_get_ipv4(s);
+          l += IPV4_MAX_BYTELEN;
+        }
       else if (vtep.family == AF_INET6)
-	{
-	  stream_get(&vtep.u.prefix6, s, IPV6_MAX_BYTELEN);
-	  l += IPV6_MAX_BYTELEN;
-	}
+        {
+          stream_get(&vtep.u.prefix6, s, IPV6_MAX_BYTELEN);
+          l += IPV6_MAX_BYTELEN;
+        }
       else
-	{
-	  zlog_err("remote-vtep-add: Received unknown family type %d\n",
-		   vtep.family);
-	  return -1;
-	}
+        {
+          zlog_err("remote-vtep-add: Received unknown family type %d\n",
+                   vtep.family);
+          return -1;
+        }
 
       if (IS_ZEBRA_DEBUG_VXLAN)
         zlog_debug ("%u:Recv VTEP_ADD %s VNI %u",
@@ -1276,21 +1452,21 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
       vtep.prefixlen = stream_getc (s);
       l += 8;
       if (vtep.family == AF_INET)
-	{
-	  vtep.u.prefix4.s_addr = stream_get_ipv4(s);
-	  l += IPV4_MAX_BYTELEN;
-	}
+        {
+          vtep.u.prefix4.s_addr = stream_get_ipv4(s);
+          l += IPV4_MAX_BYTELEN;
+        }
       else if (vtep.family == AF_INET6)
-	{
-	  stream_get(&vtep.u.prefix6, s, IPV6_MAX_BYTELEN);
-	  l += IPV6_MAX_BYTELEN;
-	}
+        {
+          stream_get(&vtep.u.prefix6, s, IPV6_MAX_BYTELEN);
+          l += IPV6_MAX_BYTELEN;
+        }
       else
-	{
-	  zlog_err("remote-vtep-del: Received unknown family type %d\n",
-		   vtep.family);
-	  return -1;
-	}
+        {
+          zlog_err("remote-vtep-del: Received unknown family type %d\n",
+                   vtep.family);
+          return -1;
+        }
 
       if (IS_ZEBRA_DEBUG_VXLAN)
         zlog_debug ("%u:Recv VTEP_DEL %s VNI %u",
@@ -1361,6 +1537,7 @@ zebra_vxlan_local_mac_add_update (struct interface *ifp, struct interface *br_if
   zebra_macip_t *macip;
   struct zebra_vrf *zvrf;
   char buf[MACADDR_STRLEN];
+  int add = 1;
 
   /* We are interested in MACs only on ports or (port, VLAN) that
    * map to a VNI.
@@ -1368,34 +1545,55 @@ zebra_vxlan_local_mac_add_update (struct interface *ifp, struct interface *br_if
   zvni = zvni_map_vlan (ifp, br_if, vid);
   if (!zvni)
     return 0;
+  if (!zvni->vxlan_if)
+    {
+      zlog_err ("VNI %u hash %p doesn't have intf upon local MAC ADD",
+                zvni->vni, zvni);
+      return -1;
+    }
 
   if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Add/Update MAC %s intf %s(%u) VID %u",
+    zlog_debug ("%u:Add/Update MAC %s intf %s(%u) VID %u -> VNI %u",
                 ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
-                ifp->name, ifp->ifindex, vid);
+                ifp->name, ifp->ifindex, vid, zvni->vni);
 
-  /* If entry already exists, nothing to do. */
+  /* If same entry already exists, nothing to do. */
   macip = zvni_macip_lookup (zvni, mac);
   if (macip)
-    return 0;
+    {
+      if (macip->fwd_info.local.ifindex == ifp->ifindex &&
+          macip->fwd_info.local.vid == vid)
+        return 0;
+      add = 0; /* This is an update. */
+    }
 
   /* Locate VRF corresponding to interface. */
   zvrf = vrf_info_lookup(zvni->vxlan_if->vrf_id);
   assert(zvrf);
 
-  macip = zvni_macip_add (zvni, mac);
   if (!macip)
     {
-      zlog_err ("%u:Failed to add MAC %s intf %s(%u) VID %u",
-                  ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
+      macip = zvni_macip_add (zvni, mac);
+      if (!macip)
+        {
+          zlog_err ("%u:Failed to add MAC %s intf %s(%u) VID %u",
+                    ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
                   ifp->name, ifp->ifindex, vid);
-      return -1;
+          return -1;
+        }
     }
 
   /* Set "local" forwarding info. */
   SET_FLAG (macip->flags, ZEBRA_MAC_LOCAL);
   macip->fwd_info.local.ifindex = ifp->ifindex;
   macip->fwd_info.local.vid = vid;
+
+  /* Inform BGP if required. */
+  if (add)
+    {
+      if (if_is_operative (zvni->vxlan_if) && zvrf->advertise_vni)
+        return zvni_macip_send_add_to_client (zvrf, zvni->vni, mac);
+    }
 
   return 0;
 }
@@ -1409,6 +1607,7 @@ zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
 {
   zebra_vni_t *zvni;
   zebra_macip_t *macip;
+  struct zebra_vrf *zvrf;
   char buf[MACADDR_STRLEN];
 
   /* We are interested in MACs only on ports or (port, VLAN) that
@@ -1417,19 +1616,34 @@ zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
   zvni = zvni_map_vlan (ifp, br_if, vid);
   if (!zvni)
     return 0;
+  if (!zvni->vxlan_if)
+    {
+      zlog_err ("VNI %u hash %p doesn't have intf upon local MAC DEL",
+                zvni->vni, zvni);
+      return -1;
+    }
 
   if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Del MAC %s intf %s(%u) VID %u",
+    zlog_debug ("%u:Del MAC %s intf %s(%u) VID %u -> VNI %u",
                 ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
-                ifp->name, ifp->ifindex, vid);
+                ifp->name, ifp->ifindex, vid, zvni->vni);
 
   /* If entry doesn't exist, nothing to do. */
   macip = zvni_macip_lookup (zvni, mac);
   if (!macip)
     return 0;
 
+  /* Locate VRF corresponding to interface. */
+  zvrf = vrf_info_lookup(zvni->vxlan_if->vrf_id);
+  assert(zvrf);
+
+  /* Inform BGP if required. */
+  if (zvrf->advertise_vni)
+    zvni_macip_send_del_to_client (zvrf, zvni->vni, mac);
+
   /* Delete this MAC-IP entry. */
   zvni_macip_del (zvni, macip);
+
   return 0;
 }
 
@@ -1440,54 +1654,96 @@ int
 zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
                               u_short length, struct zebra_vrf *zvrf)
 {
-#if 0
   struct stream *s;
   vni_t vni;
-  struct in_addr ip, remote_vtep_ip;
-  zebra_vni_t *zvni;
   struct ethaddr mac;
-  zebra_macip_t *pmac;
+  struct prefix r_vtep;
+  zebra_vni_t *zvni;
+  zebra_macip_t *macip;
+  u_short l = 0;
+  char buf[MACADDR_STRLEN];
 
   s = client->ibuf;
 
-  /* Obtain each remote VTEP and process. */
-  vni = (vni_t) stream_getl (s);
-  stream_getc (s); // flags, currently unused
-  ip.s_addr = stream_get_ipv4 (s);
-  stream_get (&mac.octet, s, ETHER_ADDR_LEN);
-  remote_vtep_ip.s_addr = stream_get_ipv4 (s);
-
-  if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Recv VTEP_ADD %s VNI %u " MAC_STR " %s\n",
-                zvrf->vrf_id, inet_ntoa (ip), vni,
-                macaddrtostring(mac.octet), inet_ntoa(remote_vtep_ip));
-
-  /* Locate VNI hash entry - expected to exist. */
-  zvni = zvni_lookup (zvrf, vni);
-  if (!zvni)
+  while (l < length)
     {
-      zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
-                zvrf->vrf_id, vni);
-      return 0;
-    }
-  if (!zvni->vxlan_if)
-    {
-      zlog_err ("VNI %u hash %p doesn't have intf upon remote VTEP add",
-                zvni->vni, zvni);
-      return 0;
-    }
+      /* Obtain each remote MAC-IP and process. */
+      /* Note: Only MAC address right now, not MAC+IP */
+      /* Message contains VNI, followed by MAC followed by IP (not set
+       * now), followed by remote VTEP IP.
+       */
+      vni = (vni_t) stream_getl (s);
+      stream_get (&mac.octet, s, ETHER_ADDR_LEN);
+      stream_getl (s); // IP address length, unused
+      l += 8 + ETHER_ADDR_LEN;
+      r_vtep.family = AF_INET;
+      r_vtep.prefixlen = IPV4_MAX_BITLEN;
+      r_vtep.u.prefix4.s_addr = stream_get_ipv4(s);
+      l += IPV4_MAX_BYTELEN;
 
-  if (!if_is_operative (zvni->vxlan_if))
-    return 0;
+      if (IS_ZEBRA_DEBUG_VXLAN)
+        zlog_debug ("%u:Recv Add MAC %s VNI %u Remote VTEP %s",
+                    zvrf->vrf_id, mac2str (&mac, buf, sizeof (buf)),
+                    vni, inet_ntoa (r_vtep.u.prefix4));
 
-  /* If the remote MAC/IP already exists, or the local VxLAN interface is
-   * not up (should be a transient event),  there's nothing more to do.
-   * Otherwise, add and install the entry.
-   */
-  pmac = zvni_macip_lookup (zvni, mac);
-  if (!pmac)
-    zebra_evpn_new_macip (zvni, mac, ip, remote_vtep_ip, FALSE);
-#endif
+      /* Locate VNI hash entry - expected to exist. */
+      zvni = zvni_lookup (zvrf, vni);
+      if (!zvni)
+        {
+          zlog_err ("Failed to locate VNI hash upon remote MAC-IP add, VRF %d VNI %u",
+                    zvrf->vrf_id, vni);
+          continue;
+        }
+      if (!zvni->vxlan_if)
+        {
+          zlog_err ("VNI %u hash %p doesn't have intf upon remote MAC-IP add",
+                    vni, zvni);
+          continue;
+        }
+      /* The remote VTEP specified is expected to exist. */
+      if (!zvni_vtep_find (zvni, &r_vtep))
+        {
+          zlog_err ("VNI %u VTEP %s does not exist upon remote MAC-IP add",
+                    vni, inet_ntoa (r_vtep.u.prefix4));
+          continue;
+        }
+      /* If the local VxLAN interface is not up (should be a transient
+       * event),  there's nothing more to do.
+       */
+      if (!if_is_operative (zvni->vxlan_if))
+        continue;
+
+      /* If the remote MAC/IP already exists and there is no change,
+       * there is nothing more to do. Otherwise, add/update and install
+       * the entry.
+       */
+      macip = zvni_macip_lookup (zvni, &mac);
+      if (macip)
+        {
+          if (IPV4_ADDR_SAME(&macip->fwd_info.r_vtep_ip,
+                             &r_vtep.u.prefix4))
+            continue;
+        }
+
+      if (!macip)
+        {
+          macip = zvni_macip_add (zvni, &mac);
+          if (!macip)
+            {
+              zlog_debug ("%u:Failed to add MAC %s VNI %u Remote VTEP %s",
+                          zvrf->vrf_id, mac2str (&mac, buf, sizeof (buf)),
+                          vni, inet_ntoa (r_vtep.u.prefix4));
+              return -1;
+            }
+        }
+
+      /* Set "remote" forwarding info. */
+      SET_FLAG (macip->flags, ZEBRA_MAC_REMOTE);
+      macip->fwd_info.r_vtep_ip = r_vtep.u.prefix4;
+
+      /* Install the entry. */
+      zvni_macip_install (zvni, macip);
+    }
 
   return 0;
 }
@@ -1496,45 +1752,76 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
  * Handle message from client to delete a remote MAC/IP for a VNI.
  */
 int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
-                                 u_short length, struct zebra_vrf *zvrf)
+                                  u_short length, struct zebra_vrf *zvrf)
 {
-#if 0
   struct stream *s;
   vni_t vni;
-  struct in_addr ip;
-  zebra_vni_t *zvni;
   struct ethaddr mac;
-  zebra_macip_t *pmac;
+  struct prefix r_vtep;
+  zebra_vni_t *zvni;
+  zebra_macip_t *macip;
+  u_short l = 0;
+  char buf[MACADDR_STRLEN];
 
   s = client->ibuf;
 
-  /* Obtain each remote VTEP and process. */
-  vni = (vni_t) stream_getl (s);
-  stream_getc (s); // flags, currently unused
-  ip.s_addr = stream_get_ipv4 (s);
-  stream_get (&mac.octet, s, ETHER_ADDR_LEN);
-
-  if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Recv VTEP_DEL %s VNI %u " MAC_STR " ",
-                zvrf->vrf_id, inet_ntoa (ip), vni,
-                macaddrtostring(mac.octet));
-
-  /* Locate VNI hash entry - expected to exist. */
-  zvni = zvni_lookup (zvrf, vni);
-  if (!zvni)
+  while (l < length)
     {
-      zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
-                zvrf->vrf_id, vni);
-      return 0;
-    }
+      /* Obtain each remote MAC-IP and process. */
+      /* Note: Only MAC address right now, not MAC+IP */
+      /* Message contains VNI, followed by MAC followed by IP (not set
+       * now), followed by remote VTEP IP.
+       */
+      vni = (vni_t) stream_getl (s);
+      stream_get (&mac.octet, s, ETHER_ADDR_LEN);
+      stream_getl (s); // IP address length, unused
+      l += 8 + ETHER_ADDR_LEN;
+      r_vtep.family = AF_INET;
+      r_vtep.prefixlen = IPV4_MAX_BITLEN;
+      r_vtep.u.prefix4.s_addr = stream_get_ipv4(s);
+      l += IPV4_MAX_BYTELEN;
 
-  /* If the remote MAC/IP does not exist, there's nothing more to do.
-   * Otherwise, uninstall the entry and remove it.
-   */
-  pmac = zvni_macip_lookup (zvni, mac);
-  if (pmac)
-    zvni_macip_del (zvni, pmac);
-#endif
+      if (IS_ZEBRA_DEBUG_VXLAN)
+        zlog_debug ("%u:Recv Del MAC %s VNI %u Remote VTEP %s",
+                    zvrf->vrf_id, mac2str (&mac, buf, sizeof (buf)),
+                    vni, inet_ntoa (r_vtep.u.prefix4));
+
+      /* Locate VNI hash entry - expected to exist. */
+      zvni = zvni_lookup (zvrf, vni);
+      if (!zvni)
+        {
+          zlog_err ("Failed to locate VNI hash upon remote MAC-IP del, VRF %d VNI %u",
+                    zvrf->vrf_id, vni);
+          continue;
+        }
+      if (!zvni->vxlan_if)
+        {
+          zlog_err ("VNI %u hash %p doesn't have intf upon remote MAC-IP del",
+                    vni, zvni);
+          continue;
+        }
+      /* The remote VTEP specified is expected to exist. */
+      if (!zvni_vtep_find (zvni, &r_vtep))
+        {
+          zlog_err ("VNI %u VTEP %s does not exist upon remote MAC-IP del",
+                    vni, inet_ntoa (r_vtep.u.prefix4));
+          continue;
+        }
+      /* If the local VxLAN interface is not up (should be a transient
+       * event),  there's nothing more to do.
+       */
+      if (!if_is_operative (zvni->vxlan_if))
+        continue;
+
+      /* If the remote MAC/IP doesn't exist there is nothing more to do.
+       * Otherwise, uninstall the entry and then remove it.
+       */
+      macip = zvni_macip_lookup (zvni, &mac);
+      if (!macip)
+        continue;
+      zvni_macip_uninstall (zvni, macip);
+      zvni_macip_del (zvni, macip);
+    }
 
   return 0;
 }
