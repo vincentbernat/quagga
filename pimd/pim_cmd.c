@@ -3448,7 +3448,7 @@ DEFUN (ip_pim_rp_keep_alive,
        "Seconds\n")
 {
   VTY_GET_INTEGER_RANGE ("keep-alive-timer", qpim_rp_keep_alive_time,
-			 argv[0], 31, 600);
+			 argv[0], 31, 60000);
   return CMD_SUCCESS;
 }
 
