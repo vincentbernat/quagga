@@ -161,13 +161,13 @@ igmp_v2_recv_leave (struct igmp_sock *igmp,
     return -1;
   }
 
+  memcpy(&group_addr, igmp_msg + 4, sizeof(struct in_addr));
+
   if (PIM_DEBUG_IGMP_PACKETS) {
     pim_inet4_dump("<dst?>", group_addr, group_str, sizeof(group_str));
     zlog_debug("Recv IGMPv2 LEAVE from %s on %s for %s",
                from_str, ifp->name, group_str);
   }
-
-  memcpy(&group_addr, igmp_msg + 4, sizeof(struct in_addr));
 
   /*
    * RFC 3376
