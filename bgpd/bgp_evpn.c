@@ -1851,31 +1851,6 @@ bgp_evpn_display_rt (struct vty *vty, struct ecommunity_val rt,
     }
 }
 
-#if 0
-/*
- * stringtomacaddr
- *
- * Function to convert string to mac address
- */
-static void
-stringtomacaddr (const char *mac_str, unsigned char *mac_addr)
-{
-    unsigned int mac[6];
-    int ret;
-
-    ret = sscanf(mac_str, "%02x:%02x:%02x:%02x:%02x:%02x",
-                 &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
-                 &mac[5]);
-    if (!ret) {
-        printf("Failed to copy mac_str into mac\n");
-        return;
-    }
-    mac_addr[0] = mac[0]; mac_addr[1] = mac[1]; mac_addr[2] = mac[2];
-    mac_addr[3] = mac[3]; mac_addr[4] = mac[4]; mac_addr[5] = mac[5];
-    return;
-}
-#endif
-
 /*
  * bgp_evpn_config_write_vpn
  *
@@ -2636,11 +2611,14 @@ bgp_evpn_update_advertise_vni (struct bgp *bgp)
  * bgp_evpn_route2str
  *
  * Function to convert evpn route to string.
+ * NOTE: We don't use prefix2str as the output here is a bit
+ * different.
  */
 char *
 bgp_evpn_route2str (struct prefix_evpn *p, char *buf)
 {
   char buf1[MACADDR_STRLEN];
+  char buf2[PREFIX2STR_BUFFER];
 
   if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
     {
@@ -2651,17 +2629,23 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf)
     }
   if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
     {
-      if (p->prefix.flags == IP_ADDR_NONE)
+      if (p->prefix.flags & IP_ADDR_NONE)
         snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[0]:[%d]:[%s]",
                   p->prefix.route_type, ETHER_ADDR_LEN,
                   mac2str (&p->prefix.mac, buf1, sizeof(buf1)));
       else
-        snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[0]:[%d]:[%s]:[%d]:[%s]",
-                  p->prefix.route_type, ETHER_ADDR_LEN,
-                  mac2str (&p->prefix.mac, buf1, sizeof(buf1)),
-                  (p->prefix.flags == IP_ADDR_V4)? 
-                  IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
-                  inet_ntoa(p->prefix.ip.v4_addr));
+        {
+          u_char family;
+
+          family = (p->prefix.flags & IP_ADDR_V4) ? \
+                   AF_INET : AF_INET6;
+          snprintf (buf, EVPN_ROUTE_LEN, "[%d]:[0]:[0]:[%d]:[%s]:[%d]:[%s]",
+                    p->prefix.route_type, ETHER_ADDR_LEN,
+                    mac2str (&p->prefix.mac, buf1, sizeof(buf1)),
+                    family == AF_INET ? IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
+                    inet_ntop (family, &p->prefix.ip.addr,
+                               buf2, PREFIX2STR_BUFFER));
+        }
     }
 
   return(buf);
