@@ -1659,6 +1659,7 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
   struct ethaddr mac;
   struct prefix r_vtep;
   zebra_vni_t *zvni;
+  zebra_vtep_t *zvtep;
   zebra_macip_t *macip;
   u_short l = 0;
   char buf[MACADDR_STRLEN];
@@ -1700,18 +1701,28 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
                     vni, zvni);
           continue;
         }
-      /* The remote VTEP specified is expected to exist. */
-      if (!zvni_vtep_find (zvni, &r_vtep))
-        {
-          zlog_err ("VNI %u VTEP %s does not exist upon remote MAC-IP add",
-                    vni, inet_ntoa (r_vtep.u.prefix4));
-          continue;
-        }
       /* If the local VxLAN interface is not up (should be a transient
        * event),  there's nothing more to do.
        */
       if (!if_is_operative (zvni->vxlan_if))
         continue;
+
+      /* The remote VTEP specified should normally exist, but it is possible
+       * that when peering comes up, peer may advertise MAC routes before
+       * advertising type-3 routes.
+       */
+      zvtep = zvni_vtep_find (zvni, &r_vtep);
+      if (!zvtep)
+        {
+          if (zvni_vtep_add (zvni, &r_vtep) == NULL)
+            {
+              zlog_err ("Failed to add remote VTEP, VRF %d VNI %u zvni %p",
+                        zvrf->vrf_id, vni, zvni);
+              continue;
+            }
+
+          zvni_vtep_install (zvni, &r_vtep);
+        }
 
       /* If the remote MAC/IP already exists and there is no change,
        * there is nothing more to do. Otherwise, add/update and install

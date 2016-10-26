@@ -61,9 +61,6 @@ struct bgpevpn
   /* Route type 3 field */
   struct in_addr            originator_ip;
 
-  /* List of MAC/IP */
-  struct hash *macip_table;
-  
   /* Import and Export RTs. */
   struct list               *import_rtl;
   /* TODO: Only 1 supported. */
@@ -109,8 +106,8 @@ extern void bgp_evpn_check_uninstall_evpn_route (struct bgp *, afi_t, safi_t,
                                                  struct prefix_evpn *, struct bgp_info *);
 extern void bgp_config_write_advertise_vni (struct vty *, struct bgp *, afi_t, 
                                             safi_t, int *);
-extern int bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni, struct in_addr ip, 
-                                     struct ethaddr mac);
-extern int bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni, struct in_addr ip, 
-                                     struct ethaddr mac);
+extern int bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
+                                     struct ethaddr *mac);
+extern int bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
+                                     struct ethaddr *mac);
 #endif /* _QUAGGA_BGP_EVPN_H */
