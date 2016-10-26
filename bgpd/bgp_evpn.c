@@ -2456,6 +2456,7 @@ bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *pack
                           peer->bgp->vrf_id, peer->host, psize);
                 return -1;
               }
+            break;
 
           case BGP_EVPN_MAC_IP_ROUTE:
             if (bgp_evpn_process_type2_route (peer, afi, safi, attr,
