@@ -2202,7 +2202,6 @@ bgp_zebra_process_local_macip (int command, struct zclient *zclient,
   struct stream *s;
   vni_t vni;
   struct bgp *bgp;
-  struct in_addr nw_ip = { 0 };
   struct ethaddr mac;
   char buf[MACADDR_STRLEN];
 
@@ -2219,9 +2218,9 @@ bgp_zebra_process_local_macip (int command, struct zclient *zclient,
                 mac2str (&mac, buf, sizeof (buf)), vni);
 
   if (command == ZEBRA_MACIP_ADD)
-    return bgp_evpn_local_macip_add (bgp, vni, nw_ip, mac);
+    return bgp_evpn_local_macip_add (bgp, vni, &mac);
   else
-    return bgp_evpn_local_macip_del (bgp, vni, nw_ip, mac);
+    return bgp_evpn_local_macip_del (bgp, vni, &mac);
 }
 
 void

@@ -915,7 +915,7 @@ prefix2str (union prefixconstptr pu, char *str, int size)
       case AF_ETHERNET:
         if (p->u.prefix_evpn.route_type == 3)
           {
-            family = (p->u.prefix_evpn.flags & IP_ADDR_V4) ? \
+            family = IS_EVPN_PREFIX_IPADDR_V4((struct prefix_evpn *)p) ? \
                      AF_INET : AF_INET6;
             snprintf (str, size, "[%d]:[%s]/%d",
                       p->u.prefix_evpn.route_type,
@@ -925,14 +925,14 @@ prefix2str (union prefixconstptr pu, char *str, int size)
           }
         else if (p->u.prefix_evpn.route_type == 2)
           {
-            if (p->u.prefix_evpn.flags & IP_ADDR_NONE)
+            if (IS_EVPN_PREFIX_IPADDR_NONE((struct prefix_evpn *)p))
               snprintf (str, size, "[%d]:[%s]/%d",
                         p->u.prefix_evpn.route_type,
                         mac2str (&p->u.prefix_evpn.mac, buf2, sizeof (buf2)),
                         p->prefixlen);
             else
               {
-                family = (p->u.prefix_evpn.flags & IP_ADDR_V4) ? \
+                family = IS_EVPN_PREFIX_IPADDR_V4((struct prefix_evpn *)p) ? \
                          AF_INET : AF_INET6;
                 snprintf (str, size, "[%d]:[%s]:[%s]/%d",
                           p->u.prefix_evpn.route_type,
