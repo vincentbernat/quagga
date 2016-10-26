@@ -770,7 +770,7 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   if (RTA_PAYLOAD (tb[NDA_LLADDR]) != ETHER_ADDR_LEN)
     {
-      zlog_warn ("%s family %s IF %s(%u) brIF %u - LLADDR is not MAC, len %d",
+      zlog_warn ("%s family %s IF %s(%u) brIF %u - LLADDR is not MAC, len %ld",
                  nl_msg_type_to_str (h->nlmsg_type),
                  nl_family_to_str (ndm->ndm_family),
                  ifp->name, ndm->ndm_ifindex, br_slave->bridge_ifindex,
