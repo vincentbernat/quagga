@@ -1758,12 +1758,15 @@ bgp_evpn_update_vni (struct bgp *bgp, vni_t vni, int add)
     }
   else
     {
-      if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
-        {
-          bgp_evpn_free(bgp, vpn);
-          return (NULL);
-        }
-      UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
+      if (vpn)
+	{
+	  if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
+	    {
+	      bgp_evpn_free(bgp, vpn);
+	      return (NULL);
+	    }
+	  UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
+	}
     }
   return (vpn);
 }
