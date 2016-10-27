@@ -444,7 +444,7 @@ int pim_mroute_msg(int fd, const char *buf, int buf_size)
     ifaddr = pim_find_primary_addr(ifp);
     igmp = pim_igmp_sock_lookup_ifaddr(pim_ifp->igmp_socket_list, ifaddr);
 
-    if (PIM_DEBUG_MOUTE) {
+    if (PIM_DEBUG_MROUTE) {
       pim_inet4_dump("<src?>", ip_hdr->ip_src, ip_src_str, sizeof(ip_src_str));
       pim_inet4_dump("<dst?>", ip_hdr->ip_dst, ip_dst_str, sizeof(ip_dst_str));
 
