@@ -344,14 +344,17 @@ zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags)
 {
   struct macip_walk_ctx wctx;
 
+  if (!zvni->macip_table)
+    return;
+
   wctx.zvni = zvni;
   wctx.zvrf = NULL;
   wctx.uninstall = uninstall;
   wctx.flags = flags;
 
   hash_iterate (zvni->macip_table,
-                (void (*) (struct hash_backet *, void *))
-                zvni_macip_del_hash_entry, &wctx);
+		(void (*) (struct hash_backet *, void *))
+		zvni_macip_del_hash_entry, &wctx);
   hash_free(zvni->macip_table);
   zvni->macip_table = NULL;
 }
