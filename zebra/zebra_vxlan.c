@@ -717,10 +717,15 @@ zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt)
 {
   zebra_vni_t *zvni;
   struct zebra_vrf *zvrf;
+  struct interface *ifp;
 
   zvni = (zebra_vni_t *) backet->data;
   zvrf = (struct zebra_vrf *)ctxt;
-  zvni_send_add_to_client (zvrf, zvni);
+  ifp = zvni->vxlan_if;
+
+  /* Propagate only if interface is up. */
+  if (ifp && if_is_operative (ifp))
+    zvni_send_add_to_client (zvrf, zvni);
 }
 
 /*
