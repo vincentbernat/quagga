@@ -355,8 +355,6 @@ zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags)
   hash_iterate (zvni->macip_table,
                 (void (*) (struct hash_backet *, void *))
                 zvni_macip_del_hash_entry, &wctx);
-  hash_free(zvni->macip_table);
-  zvni->macip_table = NULL;
 }
 
 /*
