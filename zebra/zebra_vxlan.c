@@ -353,8 +353,8 @@ zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags)
   wctx.flags = flags;
 
   hash_iterate (zvni->macip_table,
-		(void (*) (struct hash_backet *, void *))
-		zvni_macip_del_hash_entry, &wctx);
+                (void (*) (struct hash_backet *, void *))
+                zvni_macip_del_hash_entry, &wctx);
   hash_free(zvni->macip_table);
   zvni->macip_table = NULL;
 }
@@ -379,6 +379,9 @@ static void
 zvni_macip_adv_all (struct zebra_vrf *zvrf, zebra_vni_t *zvni)
 {
   struct macip_walk_ctx wctx;
+
+  if (!zvni->macip_table)
+    return;
 
   wctx.zvni = zvni;
   wctx.zvrf = zvrf;
@@ -632,6 +635,10 @@ zvni_del (struct zebra_vrf *zvrf, zebra_vni_t *zvni)
   zebra_vni_t *tmp_zvni;
 
   zvni->vxlan_if = NULL;
+
+  /* Free the MACIP hash table. */
+  hash_free(zvni->macip_table);
+  zvni->macip_table = NULL;
 
   /* Free the VNI hash entry and allocated memory. */
   tmp_zvni = hash_release (zvrf->vni_table, zvni);
