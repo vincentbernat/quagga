@@ -200,9 +200,9 @@ zvni_send_add_to_client (struct zebra_vrf *zvrf, zebra_vni_t *zvni);
 static int
 zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni);
 static void
-zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt);
+zvni_propagate_this_vni_info (struct hash_backet *backet, void *ctxt);
 static void
-zvni_propagate_vnis (struct zebra_vrf *zvrf);
+zvni_propagate_vni_info (struct zebra_vrf *zvrf);
 static int
 zvni_vtep_match (struct prefix *vtep, zebra_vtep_t *zvtep);
 static zebra_vtep_t *
@@ -710,10 +710,10 @@ zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni)
 }
 
 /*
- * Propagate a VNI to client.
+ * Propagate a VNI and its info (MACIP) to client.
  */
 static void
-zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt)
+zvni_propagate_this_vni_info (struct hash_backet *backet, void *ctxt)
 {
   zebra_vni_t *zvni;
   struct zebra_vrf *zvrf;
@@ -725,16 +725,21 @@ zvni_propagate_this_vni (struct hash_backet *backet, void *ctxt)
 
   /* Propagate only if interface is up. */
   if (ifp && if_is_operative (ifp))
-    zvni_send_add_to_client (zvrf, zvni);
+    {
+      zvni_send_add_to_client (zvrf, zvni);
+
+      /* If any local MACs learnt, inform BGP. */
+      zvni_macip_adv_all (zvrf, zvni);
+    }
 }
 
 /*
- * Propagate all known VNIs to client.
+ * Propagate all known VNIs and related info (MACIP) to client.
  */
 static void
-zvni_propagate_vnis (struct zebra_vrf *zvrf)
+zvni_propagate_vni_info (struct zebra_vrf *zvrf)
 {
-  hash_iterate(zvrf->vni_table, zvni_propagate_this_vni, (void *)zvrf);
+  hash_iterate(zvrf->vni_table, zvni_propagate_this_vni_info, (void *)zvrf);
 }
 
 #if 0
@@ -1533,7 +1538,7 @@ int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
     {
       zvrf->advertise_vni = advertise;
       if (zvrf->advertise_vni)
-        zvni_propagate_vnis (zvrf);
+        zvni_propagate_vni_info (zvrf);
     }
 
   return 0;
