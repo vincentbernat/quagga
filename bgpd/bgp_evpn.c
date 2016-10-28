@@ -77,6 +77,8 @@ bgp_evpn_uninstall_existing_type3_routes (struct bgp *bgp, struct bgpevpn *vpn,
 static int
 bgp_evpn_uninstall_existing_type2_routes (struct bgp *bgp, struct bgpevpn *vpn,
                                           struct ecommunity_val val);
+static int
+bgp_evpn_extract_vni_from_rt (struct attr *attr, vni_t *vni);
 
 /*
  * Private functions.
@@ -788,8 +790,71 @@ bgp_evpn_update_type3_route (struct bgp *bgp, struct bgpevpn *vpn)
   return 0;
 }
 
+/*
+ * Delete all type-2 (MACIP) routes for this VNI - these should also
+ * be scheduled for withdraw from peers.
+ */
 static int
-bgp_evpn_delete_type3_route (struct bgp *bgp, struct bgpevpn *vpn)
+bgp_evpn_delete_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  vni_t vni;
+  afi_t afi;
+  safi_t safi;
+  struct bgp_node *rd_rn, *rn;
+  struct bgp_table *table;
+  struct bgp_info *ri;
+  vni_t route_vni;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+  vni = vpn->vni;
+
+  /* TODO: We're walking entire table, this should be optimized later. */
+  /* EVPN routes are a 2-level table. */
+  for (rd_rn = bgp_table_top(bgp->rib[afi][safi]); rd_rn; rd_rn = bgp_route_next (rd_rn))
+    {
+      table = (struct bgp_table *)(rd_rn->info);
+      if (table)
+        {
+          for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
+            {
+              struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+              if (evp->prefix.route_type != BGP_EVPN_MAC_IP_ROUTE)
+                continue;
+
+              for (ri = rn->info; ri; ri = ri->next)
+                {
+                  if (CHECK_FLAG (ri->flags, BGP_INFO_SELECTED)
+                      && ri->type == ZEBRA_ROUTE_BGP
+                      && ri->sub_type == BGP_ROUTE_STATIC)
+                    {
+                      /* Extract VNI from RT */
+                      if (bgp_evpn_extract_vni_from_rt (ri->attr, &route_vni))
+                        {
+                          zlog_err ("%u: Failed to extract VNI from RT in type-3 route",
+                                    bgp->vrf_id);
+                          return -1;
+                        }
+
+                      /* If route doesn't match this VNI, skip. */
+                      if (route_vni != vni)
+                        continue;
+
+                      /* Mark route for delete and schedule for processing. */
+                      bgp_info_delete (rn, ri);
+                      bgp_process (bgp, rn, afi, safi);
+                    }
+                }
+            }
+        }
+    }
+
+  return 0;
+}
+
+static int
+bgp_evpn_delete_type3_routes (struct bgp *bgp, struct bgpevpn *vpn)
 {
   struct prefix_evpn p;
   struct bgp_node *rn;
@@ -1216,13 +1281,12 @@ bgp_evpn_install_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,
   return 0;
 }
 
-#if 0
 /*
  * VNI is known locally, install any existing type-2 routes (remote MAC/IPs)
  * for this VNI.
  */
 static int
-bgp_evpn_install_existing_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
+bgp_evpn_install_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 {
   vni_t vni;
   afi_t afi;
@@ -1263,7 +1327,6 @@ bgp_evpn_install_existing_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 
   return 0;
 }
-#endif
 
 /*
  * Uninstall type-2 route from zebra.
@@ -1339,7 +1402,7 @@ bgp_evpn_uninstall_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,
  * for this VNI.
  */
 static int
-bgp_evpn_install_existing_type3_routes (struct bgp *bgp, struct bgpevpn *vpn)
+bgp_evpn_install_type3_routes (struct bgp *bgp, struct bgpevpn *vpn)
 {
   vni_t vni;
   afi_t afi;
@@ -1424,6 +1487,42 @@ bgp_evpn_uninstall_existing_type2_routes (struct bgp *bgp, struct bgpevpn *vpn,
 }
 
 /*
+ * VNI is known locally, install any existing remote routes for this VNI.
+ */
+static int
+bgp_evpn_install_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  int ret;
+
+  /* Install type-3 routes followed by type-2 routes - the ones applicable
+   * for this VNI.
+   */
+  ret = bgp_evpn_install_type3_routes (bgp, vpn);
+  if (ret)
+    return ret;
+
+  return bgp_evpn_install_type2_routes (bgp, vpn);
+}
+
+/*
+ * VNI is deleted, delete (and withdraw) local routes.
+ */
+static int
+bgp_evpn_delete_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  int ret;
+
+  /* Delete and withdraw locally learnt type-2 routes (MACIP)
+   * followed by type-3 routes (only one) - for this VNI.
+   */
+  ret = bgp_evpn_delete_type2_routes (bgp, vpn);
+  if (ret)
+    return ret;
+
+  return bgp_evpn_delete_type3_routes (bgp, vpn);
+}
+
+/*
  * bgp_evpn_update_vni_config_flag
  *
  * If VNI_FLAG_CONFIGURED was set (say admin just configured vni x)
@@ -1480,7 +1579,7 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
                        * If there are existing routes that match this RT and
                        * were not pushed to Zebra, do it now.
                        */
-                      bgp_evpn_install_existing_type3_routes (bgp, vpn);
+                      bgp_evpn_install_routes (bgp, vpn);
                     }
                 }
               return;
@@ -1498,7 +1597,7 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
                * If there are existing routes that match this RT and 
                * were not pushed to Zebra, do it now. 
                */
-              bgp_evpn_install_existing_type3_routes (bgp, vpn);
+              bgp_evpn_install_routes (bgp, vpn);
             }
 
           /*
@@ -1554,7 +1653,7 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
                    * If there are existing routes that match this RT and
                    * were not pushed to Zebra, do it now.
                    */
-                  bgp_evpn_install_existing_type3_routes (bgp, vpn);
+                  bgp_evpn_install_routes (bgp, vpn);
                 }
             }
         }
@@ -1793,8 +1892,17 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
       return -1;
     }
 
-  /* Add VNI hash (or update, if already present (e.g., configured) */
+  /* Lookup VNI. If present and no change, exit. */
   vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  if (vpn)
+    {
+      if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL) &&
+          IPV4_ADDR_SAME (&vpn->originator_ip, &originator_ip))
+        /* Probably some other param has changed that we don't care about. */
+        return 0;
+    }
+
+  /* Create or update as appropriate. */
   if (!vpn)
     {
       vpn = bgp_evpn_new (bgp, vni, originator_ip);
@@ -1807,21 +1915,20 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
     }
   else
     {
-      if (!IPV4_ADDR_SAME (&vpn->originator_ip, &originator_ip))
+      /* If VNI was already local, withdraw route from peer */
+      if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
         {
-          /* If VNI was already local, withdraw route from peer */
-          if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
-            {
-              /* Remove EVPN type-3 route and schedule for processing. */
-              bgp_evpn_delete_type3_route (bgp, vpn);
-            }
-          vpn->originator_ip = originator_ip;
+          /* Need to withdraw (and subsequently re-advertise) type-3 route
+           * as the originator IP is part of the key.
+           */
+          bgp_evpn_delete_type3_routes (bgp, vpn);
         }
+
+      vpn->originator_ip = originator_ip;
     }
 
-  /* Mark as locally "learnt" */
+  /* Mark as locally "learnt", update RD-RT flags */
   SET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
-
   bgp_evpn_update_vni_config_flag (vpn);
 
   /* Create EVPN type-3 route and schedule for processing. */
@@ -1832,8 +1939,14 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
       return -1;
     }
 
-  /* If we have already learnt remote VTEPs for this VNI, install them. */
-  bgp_evpn_install_existing_type3_routes (bgp, vpn);
+  /* TODO: If there is a VTEP local IP change, we would need to re-advertise
+   * locally learnt MACs (as this field will be the next hop).
+   */
+
+  /* If we have learnt and retained remote routes (VTEPs, MACs) for this VNI,
+   * install them.
+   */
+  bgp_evpn_install_routes (bgp, vpn);
 
   return 0;
 }
@@ -1860,7 +1973,7 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
       return -1;
     }
 
-  /* Lookup VNI hash */
+  /* Lookup VNI hash - should exist. */
   vpn = bgp_evpn_lookup_vpn (bgp, vni);
   if (!vpn)
     {
@@ -1923,7 +2036,7 @@ bgp_evpn_withdraw_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
     }
 
   /* Remove EVPN type-3 route and schedule for processing. */
-  bgp_evpn_delete_type3_route (bgp, vpn);
+  bgp_evpn_delete_type3_routes (bgp, vpn);
   return;
 }
 
@@ -1973,8 +2086,10 @@ bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni)
       return 0;
     }
 
-  /* Remove EVPN type-3 route and schedule for processing. */
-  bgp_evpn_delete_type3_route (bgp, vpn);
+  /* Remove all local EVPN routes and schedule for processing (to
+   * withdraw from peers).
+   */
+  bgp_evpn_delete_routes (bgp, vpn);
 
   /* Clear locally "learnt" flag and see if hash needs to be freed. */
   UNSET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
@@ -2000,11 +2115,7 @@ bgp_evpn_delete_type2_route (struct bgp *bgp, struct bgpevpn *vpn,
                          (struct prefix *)&p, &vpn->prd);
 
   if (!rn)
-    {
-      /* TODO: Temporary, can ignore entry not found at delete. */
-      zlog_err ("Could not find type-2 route for VNI %u at Del", vpn->vni);
-      return -1;
-    }
+    return 0;
 
   /* Now, find matching route. */
   for (ri = rn->info; ri; ri = ri->next)
@@ -2015,11 +2126,8 @@ bgp_evpn_delete_type2_route (struct bgp *bgp, struct bgpevpn *vpn,
 
   if (!ri)
     {
-      /* TODO: Temporary, can ignore entry not found at delete. */
-      zlog_err ("Could not find type-2 route info for VNI %u at Del, RN %p",
-                vpn->vni, rn);
       bgp_unlock_node (rn);
-      return -1;
+      return 0;
     }
 
   /* Mark route for delete and schedule for processing. */
@@ -2051,7 +2159,7 @@ bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
       return -1;
     }
 
-  /* Lookup VNI hash */
+  /* Lookup VNI hash - should exist. */
   vpn = bgp_evpn_lookup_vpn (bgp, vni);
   if (!vpn)
     {
@@ -2372,7 +2480,7 @@ bgp_evpn_cleanup_local_vni_and_withdraw_route_iterator (struct hash_backet *back
   struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
   
   /* Remove EVPN type-3 route and schedule for processing. */
-  bgp_evpn_delete_type3_route (bgp, vpn);
+  bgp_evpn_delete_type3_routes (bgp, vpn);
 
   /* Clear locally "learnt" flag and see if hash needs to be freed. */
   UNSET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
@@ -2497,7 +2605,7 @@ bgp_evpn_update_rd (struct bgp *bgp, struct bgpevpn *vpn, struct prefix_rd *rd,
 
   if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
     /* Remove EVPN type-3 route and schedule for processing. */
-    bgp_evpn_delete_type3_route (bgp, vpn);
+    bgp_evpn_delete_type3_routes (bgp, vpn);
 
   if (auto_rd)
     {

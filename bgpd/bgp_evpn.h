@@ -53,7 +53,6 @@ struct bgpevpn
 #define RD_AUTO               0x04
 #define RT_IMPORT_AUTO        0x08
 #define RT_EXPORT_AUTO        0x10
-#define MAC_FLAG_LOCAL        0x20
 
   /* RD for this VNI. */
   struct prefix_rd          prd;
@@ -63,6 +62,7 @@ struct bgpevpn
 
   /* Import and Export RTs. */
   struct list               *import_rtl;
+
   /* TODO: Only 1 supported. */
   struct ecommunity_val     export_rt;
 
