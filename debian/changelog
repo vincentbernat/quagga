@@ -1,3 +1,9 @@
+quagga (0.99.24+cl3eau5) RELEASED; urgency=medium
+
+  * New Enabled: Fix PIM to work with new kernel
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 28 Oct 2016 20:46:33 -0700
+
 quagga (0.99.24+cl3eau4) RELEASED; urgency=medium
 
   * New Enabled: PIM-SM Unnumbered functionality
