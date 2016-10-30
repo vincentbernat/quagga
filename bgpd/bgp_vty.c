@@ -6285,26 +6285,6 @@ DEFUN (no_bgp_evpn_vni_rd,
   return CMD_SUCCESS;
 }
 
-DEFUN (bgp_evpn_vni_rd_auto,
-       bgp_evpn_vni_rd_auto_cmd,
-       "rd auto",
-       "Route Distinguisher\n"
-       "Auto derive RD\n")
-{
-  struct prefix_rd prd;
-  struct bgp *bgp;
-  VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
-
-  bgp = vty->index;
-
-  if (!bgp || !vpn)
-    return CMD_WARNING;
-
-  if (!bgp_evpn_check_auto_rd_flag(vpn))
-    bgp_evpn_update_rd (bgp, vpn, &prd, TRUE);
-  return CMD_SUCCESS;
-}
-
 DEFUN (bgp_evpn_vni_rt,
        bgp_evpn_vni_rt_cmd,
        "route-target WORD ASN:nn_or_IP-address:nn",
@@ -6356,25 +6336,6 @@ DEFUN (no_bgp_evpn_vni_rt,
       return CMD_WARNING;
     }
   return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], FALSE, FALSE));
-}
-
-DEFUN (bgp_evpn_vni_rt_auto,
-       bgp_evpn_vni_rt_auto_cmd,
-       "route-target WORD auto",
-       "Route Target\n"
-       "import/export/both\n"
-       "Auto derive RT\n")
-{
-  struct bgp *bgp;
-  VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
-  struct prefix_rd prd;
-
-  bgp = vty->index;
-
-  if (!bgp || !vpn) 
-    return CMD_WARNING;
-
-  return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], TRUE, TRUE));
 }
 
 DEFUN (bgp_evpn_advertise_vni,
@@ -16219,9 +16180,7 @@ bgp_vty_init (void)
   install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
   install_element (BGP_EVPN_NODE, &bgp_evpn_advertise_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
-  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_auto_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
-  install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_auto_cmd);
   install_element (BGP_EVPN_VNI_NODE, &exit_vni_cmd);
 
   /* "no" EVPN commands */
