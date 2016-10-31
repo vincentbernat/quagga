@@ -2071,18 +2071,29 @@ bgp_evpn_display_vni (struct vty *vty, struct bgpevpn *vpn)
   struct listnode *node, *nnode;
   struct import_rt_node *irt;
 
-  vty_out (vty, "VNI: %d%s", vpn->vni, VTY_NEWLINE);
-  vty_out (vty, "  RD: %s%s", prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN), 
-                VTY_NEWLINE);
-  vty_out (vty, "  Originator IP: %s%s", inet_ntoa(vpn->originator_ip),
-                VTY_NEWLINE);
-  vty_out (vty, "  Import Route Target:%s", VTY_NEWLINE);
+  vty_out (vty, "VNI: %d", vpn->vni);
+  if (is_vni_live (vpn))
+    vty_out (vty, " (defined in the kernel)");
+  vty_out (vty, "%s", VTY_NEWLINE);
+
+  vty_out (vty, "  RD: %s%s",
+           prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN),
+           is_rd_configured (vpn) ? " (configured)" : "");
+  vty_out (vty, "%s", VTY_NEWLINE);
+
+  vty_out (vty, "  Originator IP: %s%s",
+           inet_ntoa(vpn->originator_ip), VTY_NEWLINE);
+
+  vty_out (vty, "  Import Route Target:%s%s",
+           is_import_rt_configured (vpn) ? " (configured)" : "",
+           VTY_NEWLINE);
   for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, irt))
     bgp_evpn_display_rt(vty, irt->import_rt, irt->vpn->vni, FALSE, FALSE, FALSE);
-  vty_out (vty, "  Export Route Target:%s", VTY_NEWLINE);
+
+  vty_out (vty, "  Export Route Target:%s%s",
+           is_export_rt_configured (vpn) ? " (configured)" : "",
+           VTY_NEWLINE);
   bgp_evpn_display_rt(vty, vpn->export_rt, 0, FALSE, FALSE, FALSE);
-  if (bgp_evpn_is_vni_configured (vpn))
-    vty_out (vty, "  VNI information is CLI configured%s", VTY_NEWLINE);
 }
 
 /*
