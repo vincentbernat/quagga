@@ -6230,21 +6230,26 @@ DEFUN (no_bgp_evpn_vni,
   if (!bgp) 
     return CMD_WARNING;
 
-  /* If VNI doesn't exist or is not "configured", silently return. */
+  /* If VNI doesn't exist, silently return. */
   vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (!vpn)
     return CMD_SUCCESS;
-  if (!bgp_evpn_is_vni_configured (vpn))
-    return CMD_SUCCESS;
 
-  /* If VNI is "live", it cannot be deleted without disabling. */
+  /* If VNI is "live", but doesn't really have any user configuration, we're
+   * done. Otherwise, it cannot be deleted without disabling first (in the
+   * kernel).
+   */
   if (is_vni_live (vpn))
     {
+      if (!bgp_evpn_is_vni_configured (vpn))
+        return CMD_SUCCESS;
+
       vty_out (vty, "%% VNI must be disabled before unconfiguring%s",
                VTY_NEWLINE);
       return CMD_WARNING;
     }
 
+  /* The VNI is not "live", delete it. */
   bgp_evpn_delete_vni (bgp, vpn);
   return CMD_SUCCESS;
 }
