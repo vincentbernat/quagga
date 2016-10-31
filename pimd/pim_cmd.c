@@ -2719,10 +2719,10 @@ DEFUN (show_ip_pim_state,
 
   if (uj)
     {
-      if (strcmp(src_or_group, "json") == 0)
+      if (!src_or_group || strcmp(src_or_group, "json") == 0)
         src_or_group = NULL;
 
-      if (strcmp(group, "json") == 0)
+      if (!group || strcmp(group, "json") == 0)
         group = NULL;
     }
 
