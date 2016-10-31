@@ -48,11 +48,10 @@ struct bgpevpn
 {
   vni_t                     vni;
   u_int32_t                 flags;
-#define VNI_FLAG_CONFIGURED   0x01
-#define VNI_FLAG_LOCAL        0x02
-#define RD_AUTO               0x04
-#define RT_IMPORT_AUTO        0x08
-#define RT_EXPORT_AUTO        0x10
+#define VNI_FLAG_LIVE              0x1  /* VNI is "live" */
+#define VNI_FLAG_RD_CFGD           0x2  /* RD is configured. */
+#define VNI_FLAG_IMPRT_CFGD        0x4  /* Import RT is configured */
+#define VNI_FLAG_EXPRT_CFGD        0x8  /* Export RT is configured */
 
   /* RD for this VNI. */
   struct prefix_rd          prd;
@@ -72,10 +71,41 @@ struct bgpevpn
 DECLARE_QOBJ_TYPE(bgpevpn)
 
 #define EVPN_ROUTE_LEN 50
-#define macaddrtostring(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-#define MAC_STR "%02x:%02x:%02x:%02x:%02x:%02x"
 
-extern struct bgpevpn *bgp_evpn_update_vni (struct bgp*, vni_t, int);
+static inline int
+is_vni_live (struct bgpevpn *vpn)
+{
+  return (CHECK_FLAG (vpn->flags, VNI_FLAG_LIVE));
+}
+
+static inline int
+is_rd_configured (struct bgpevpn *vpn)
+{
+  return (CHECK_FLAG (vpn->flags, VNI_FLAG_RD_CFGD));
+}
+
+static inline int
+bgp_evpn_rd_matches_existing (struct bgpevpn *vpn, struct prefix_rd *prd)
+{
+  return(memcmp (&vpn->prd.val, prd->val, ECOMMUNITY_SIZE) == 0);
+}
+
+static inline int
+is_import_rt_configured (struct bgpevpn *vpn)
+{
+  return (CHECK_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD));
+}
+
+static inline int
+is_export_rt_configured (struct bgpevpn *vpn)
+{
+  return (CHECK_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD));
+}
+
+extern struct bgpevpn *bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni);
+extern struct bgpevpn *bgp_evpn_create_vni (struct bgp *bgp, vni_t vni);
+extern int bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn);
+extern int bgp_evpn_is_vni_configured (struct bgpevpn *vpn);
 extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr);
 extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
 extern void bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty);

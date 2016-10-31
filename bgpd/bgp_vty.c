@@ -6196,7 +6196,19 @@ DEFUN (bgp_evpn_vni,
 
   if (!bgp)
     return CMD_WARNING;
-  vpn = bgp_evpn_update_vni(bgp, vni, TRUE);
+
+  /* If VNI doesn't already exist, create it. */
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  if (!vpn)
+    {
+      vpn = bgp_evpn_create_vni (bgp, vni);
+      if (!vpn)
+        {
+          vty_out (vty, "%% Failed to create VNI %s", VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+    }
+
   VTY_PUSH_CONTEXT_SUB (BGP_EVPN_VNI_NODE, vpn);
   return CMD_SUCCESS;
 }
@@ -6210,13 +6222,30 @@ DEFUN (no_bgp_evpn_vni,
 {
   vni_t vni;
   struct bgp *bgp;
+  struct bgpevpn *vpn;
 
   VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
   bgp = vty->index;
 
   if (!bgp) 
     return CMD_WARNING;
-  bgp_evpn_update_vni(bgp, vni, FALSE);
+
+  /* If VNI doesn't exist or is not "configured", silently return. */
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  if (!vpn)
+    return CMD_SUCCESS;
+  if (!bgp_evpn_is_vni_configured (vpn))
+    return CMD_SUCCESS;
+
+  /* If VNI is "live", it cannot be deleted without disabling. */
+  if (is_vni_live (vpn))
+    {
+      vty_out (vty, "%% VNI must be disabled before unconfiguring%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  bgp_evpn_delete_vni (bgp, vpn);
   return CMD_SUCCESS;
 }
 

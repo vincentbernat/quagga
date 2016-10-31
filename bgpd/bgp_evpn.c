@@ -286,28 +286,6 @@ bgp_evpn_lookup_import_rt (struct bgp *bgp, u_char *import_rt)
 }
 
 /*
- * bgp_evpn_set_auto_rt_import_flag
- *
- * Set RT_IMPORT_AUTO flag.
- */
-static void
-bgp_evpn_set_auto_rt_import_flag (struct bgpevpn *vpn)
-{
-  SET_FLAG (vpn->flags, RT_IMPORT_AUTO);
-}
-
-/*
- * bgp_evpn_set_auto_rt_export_flag
- *
- * Set RT_EXPORT_AUTO flag.
- */
-static void
-bgp_evpn_set_auto_rt_export_flag (struct bgpevpn *vpn)
-{
-  SET_FLAG (vpn->flags, RT_EXPORT_AUTO);
-}
-
-/*
  * bgp_evpn_set_auto_rt_import
  *
  * RT = AS:VNI
@@ -318,7 +296,7 @@ bgp_evpn_set_auto_rt_import (struct bgp *bgp, struct bgpevpn *vpn)
   struct ecommunity_val import_rt;
 
   bgp_evpn_get_auto_rt (bgp, vpn, &import_rt);
-  bgp_evpn_set_auto_rt_import_flag(vpn);
+  UNSET_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD);
 
   /* Add import rt to the bgp->import_rt_hash and vpn->import_rtl*/
   if (!bgp_evpn_import_rt_new (bgp, vpn, import_rt))
@@ -335,73 +313,7 @@ static void
 bgp_evpn_set_auto_rt_export (struct bgp *bgp, struct bgpevpn *vpn)
 {
   bgp_evpn_get_auto_rt (bgp, vpn, &vpn->export_rt);
-  bgp_evpn_set_auto_rt_export_flag(vpn);
-}
-
-/*
- * bgp_evpn_set_auto_rd_flag
- *
- * Set RD_AUTO flag.
- */
-static void
-bgp_evpn_set_auto_rd_flag (struct bgpevpn *vpn)
-{
-  SET_FLAG (vpn->flags, RD_AUTO);
-}
-
-/*
- * bgp_evpn_unset_auto_rd_flag
- *
- * UNSet RD_AUTO flag.
- */
-static void
-bgp_evpn_unset_auto_rd_flag (struct bgpevpn *vpn)
-{
-  UNSET_FLAG (vpn->flags, RD_AUTO);
-}
-
-/*
- * bgp_evpn_check_auto_rt_import_flag
- *
- * Check RT_IMPORT_AUTO flag.
- */
-static int
-bgp_evpn_check_auto_rt_import_flag (struct bgpevpn *vpn)
-{
-  return (CHECK_FLAG (vpn->flags, RT_IMPORT_AUTO));
-}
-
-/*
- * bgp_evpn_unset_auto_rt_import_flag
- *
- * UNSet RT_IMPORT_AUTO flag.
- */
-static void
-bgp_evpn_unset_auto_rt_import_flag (struct bgpevpn *vpn)
-{
-  UNSET_FLAG (vpn->flags, RT_IMPORT_AUTO);
-}
-
-/*
- * bgp_evpn_check_auto_rt_export_flag
- *
- * Check RT_EXPORT_AUTO flag.
- */
-static int
-bgp_evpn_check_auto_rt_export_flag (struct bgpevpn *vpn)
-{
-  return (CHECK_FLAG (vpn->flags, RT_EXPORT_AUTO));
-}
-
-/*
- * bgp_evpn_unset_auto_rt_export_flag
- *
- * UNSet RT_EXPORT_AUTO flag.
- */
-static void
-bgp_evpn_unset_auto_rt_export_flag (struct bgpevpn *vpn)
-{
-  UNSET_FLAG (vpn->flags, RT_EXPORT_AUTO);
+  UNSET_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD);
 }
 
 /*
@@ -418,7 +330,7 @@ bgp_evpn_set_auto_rd (struct bgp *bgp, struct bgpevpn *vpn)
   vpn->prd.prefixlen = 64;
   sprintf (buf, "%s:%u", inet_ntoa (bgp->router_id), vpn->vni);
   str2prefix_rd (buf, &vpn->prd);
-  bgp_evpn_set_auto_rd_flag(vpn);
+  UNSET_FLAG (vpn->flags, VNI_FLAG_RD_CFGD);
 }
 
 /*
@@ -560,7 +472,7 @@ bgp_evpn_cleanup_config_rt_import (struct bgp *bgp, struct bgpevpn *vpn)
        * If there are existing routes that match this RT,
        * delete them from Zebra.
        */
-      if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+      if (is_vni_live (vpn))
         bgp_evpn_uninstall_existing_type3_routes (bgp, vpn, irt->import_rt);
       bgp_evpn_import_rt_free (bgp, irt);
     }
@@ -583,23 +495,6 @@ bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn)
     QOBJ_UNREG (vpn);
     XFREE(MTYPE_BGP_EVPN, vpn);
   }
-}
-
-/*
- * bgp_evpn_lookup_vpn
- *
- * Function to lookup vpn for the given vni
- */
-static struct bgpevpn *
-bgp_evpn_lookup_vpn (struct bgp *bgp, vni_t vni)
-{
-  struct bgpevpn *vpn;
-  struct bgpevpn tmp;
-
-  memset(&tmp, 0, sizeof(struct bgpevpn));
-  tmp.vni = vni;
-  vpn = hash_lookup(bgp->vnihash, &tmp);
-  return(vpn);
 }
 
 /*
@@ -1200,12 +1095,12 @@ bgp_evpn_install_type2_route (struct bgp *bgp, afi_t afi, safi_t safi,
       return -1;
     }
 
-  /* If a VNI is specified to match on, it means it is already known locally
+  /* If a VNI is specified to match on, it means it is already "live"
    * and we want to install only matching routes.
    */
   if (vni && vni == route_vni)
     {
-      vpn = bgp_evpn_lookup_vpn (bgp, vni);
+      vpn = bgp_evpn_lookup_vni (bgp, vni);
       assert (vpn);
       remote_vtep_ip = bgp_evpn_get_route_remote_vtep (ri->net);
       if (!remote_vtep_ip.s_addr) return -1;
@@ -1213,10 +1108,10 @@ bgp_evpn_install_type2_route (struct bgp *bgp, afi_t afi, safi_t safi,
     }
 
   /* We are dealing with a received type-2 route. Inform zebra if this
-   * is a "live" VNI - i.e., known locally.
+   * is a "live" VNI
    */
-  vpn = bgp_evpn_lookup_vpn (bgp, route_vni);
-  if (vpn && CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  vpn = bgp_evpn_lookup_vni (bgp, route_vni);
+  if (vpn && is_vni_live (vpn))
     {
       remote_vtep_ip = bgp_evpn_get_route_remote_vtep (ri->net);
       if (!remote_vtep_ip.s_addr) return -1;
@@ -1261,28 +1156,28 @@ bgp_evpn_install_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,
       return -1;
     }
 
-  /* If a VNI is specified to match on, it means it is already known locally
+  /* If a VNI is specified to match on, it means it is already "live"
    * and we want to install only matching routes.
    */
   if (vni && vni == route_vni)
     {
-      vpn = bgp_evpn_lookup_vpn (bgp, vni);
+      vpn = bgp_evpn_lookup_vni (bgp, vni);
       assert (vpn);
       return bgp_zebra_send_remote_vtep (bgp, vpn, evp, 1);
     }
 
   /* We are dealing with a received type-3 route. Inform zebra if this
-   * is a "live" VNI - i.e., known locally.
+   * is a "live" VNI
    */
-  vpn = bgp_evpn_lookup_vpn (bgp, route_vni);
-  if (vpn && CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  vpn = bgp_evpn_lookup_vni (bgp, route_vni);
+  if (vpn && is_vni_live (vpn))
     return bgp_zebra_send_remote_vtep (bgp, vpn, evp, 1);
 
   return 0;
 }
 
 /*
- * VNI is known locally, install any existing type-2 routes (remote MAC/IPs)
+ * VNI is "live", install any existing type-2 routes (remote MAC/IPs)
  * for this VNI.
  */
 static int
@@ -1354,8 +1249,8 @@ bgp_evpn_uninstall_type2_route (struct bgp *bgp, afi_t afi, safi_t safi,
     }
 
   /* If this is already a "live" VNI, remove remote VTEP from zebra. */
-  vpn = bgp_evpn_lookup_vpn (bgp, route_vni);
-  if (vpn && CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  vpn = bgp_evpn_lookup_vni (bgp, route_vni);
+  if (vpn && is_vni_live (vpn))
     {
       remote_vtep_ip = bgp_evpn_get_route_remote_vtep (ri->net);
       if (!remote_vtep_ip.s_addr) return -1;
@@ -1390,15 +1285,15 @@ bgp_evpn_uninstall_type3_route (struct bgp *bgp, afi_t afi, safi_t safi,
     }
 
   /* If this is already a "live" VNI, remove remote VTEP from zebra. */
-  vpn = bgp_evpn_lookup_vpn (bgp, route_vni);
-  if (vpn && CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  vpn = bgp_evpn_lookup_vni (bgp, route_vni);
+  if (vpn && is_vni_live (vpn))
     return bgp_zebra_send_remote_vtep (bgp, vpn, evp, 0);
 
   return 0;
 }
 
 /*
- * VNI is known locally, install any existing type-3 routes (remote VTEPs)
+ * VNI is "live", install any existing type-3 routes (remote VTEPs)
  * for this VNI.
  */
 static int
@@ -1487,7 +1382,7 @@ bgp_evpn_uninstall_existing_type2_routes (struct bgp *bgp, struct bgpevpn *vpn,
 }
 
 /*
- * VNI is known locally, install any existing remote routes for this VNI.
+ * VNI is "live", install any existing remote routes for this VNI.
  */
 static int
 bgp_evpn_install_routes (struct bgp *bgp, struct bgpevpn *vpn)
@@ -1523,31 +1418,6 @@ bgp_evpn_delete_routes (struct bgp *bgp, struct bgpevpn *vpn)
 }
 
 /*
- * bgp_evpn_update_vni_config_flag
- *
- * If VNI_FLAG_CONFIGURED was set (say admin just configured vni x)
- * and none of the import/export were configured and VNI_FLAG_LOCAL
- * is set (means learnt from zebra) then clear the VNI_FLAG_CONFIGURED.
- * If the (non-default) RD/RT is configured then set the VNI_FLAG_CONFIGURED
- * if not already set.
- */
-static void
-bgp_evpn_update_vni_config_flag (struct bgpevpn *vpn)
-{
-  if (!vpn)
-    return;
-
-  if (bgp_evpn_check_auto_rd_flag (vpn) &&
-      bgp_evpn_check_auto_rt_import_flag (vpn) &&
-      bgp_evpn_check_auto_rt_export_flag (vpn) &&
-      CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
-    UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
-  else 
-    SET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
-  return;
-}
-
-/*
  * bgp_evpn_update_import_rt
  *
  * Function to handle configured import route targets.
@@ -1568,12 +1438,12 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
         {
           if (auto_rt)
             {
-              if (!bgp_evpn_check_auto_rt_import_flag (vpn))
+              if (is_import_rt_configured (vpn))
                 {
                   bgp_evpn_cleanup_config_rt_import (bgp, vpn);
                   bgp_evpn_set_auto_rt_import (bgp, vpn);
 
-                  if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+                  if (is_vni_live (vpn))
                     {
                       /*
                        * If there are existing routes that match this RT and
@@ -1591,7 +1461,7 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
               return;
             }
 
-          if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+          if (is_vni_live (vpn))
             {
               /*
                * If there are existing routes that match this RT and 
@@ -1603,11 +1473,11 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
           /*
            * If auto RT is set, remove it now.
            */
-          if (bgp_evpn_check_auto_rt_import_flag (vpn))
+          if (!is_import_rt_configured (vpn))
             {
               bgp_evpn_get_auto_rt (bgp, vpn, &import_rt);
 
-              if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+              if (is_vni_live (vpn))
                 {
                   /*
                    * If there are existing routes that match this RT,
@@ -1623,14 +1493,14 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
       /*
        * If configured value is auto RT value then just clear the flag.
        */
-      if (!auto_rt && bgp_evpn_check_auto_rt_import_flag(vpn))
-        bgp_evpn_unset_auto_rt_import_flag(vpn);
+      if (!auto_rt)
+        SET_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD);
     }
   else
     {
       if (irt)
         {
-          if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+          if (is_vni_live (vpn))
             {
               /*
                * If there are existing routes that match this RT,
@@ -1647,7 +1517,7 @@ bgp_evpn_update_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
             {
               bgp_evpn_set_auto_rt_import (bgp, vpn);
 
-              if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+              if (is_vni_live (vpn))
                 {
                   /*
                    * If there are existing routes that match this RT and
@@ -1676,11 +1546,11 @@ bgp_evpn_update_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
     {
       if (auto_rt)
         {
-          if (!bgp_evpn_check_auto_rt_export_flag(vpn))
+          if (is_export_rt_configured (vpn))
             {
               bgp_evpn_set_auto_rt_export (bgp, vpn);
 
-              if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+              if (is_vni_live (vpn))
                 {
                   /* Export RT changed, this needs to be informed to the peers */
                   bgp_evpn_update_type3_route (bgp, vpn);
@@ -1689,7 +1559,7 @@ bgp_evpn_update_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
           return;
         }
       memcpy (vpn->export_rt.val, rt_conf.val, ECOMMUNITY_SIZE);
-      bgp_evpn_unset_auto_rt_export_flag (vpn);
+      SET_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD);
       export_rt_changed = TRUE;
     }
   else
@@ -1699,7 +1569,7 @@ bgp_evpn_update_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
     }
 
  /* Update local route and inform peer */
-  if (export_rt_changed && CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  if (export_rt_changed && is_vni_live (vpn))
     {
       /* Export RT changed, this needs to be informed to the peers */
       bgp_evpn_update_type3_route (bgp, vpn);
@@ -1802,21 +1672,18 @@ bgp_evpn_config_write_vpn (struct vty *vty, struct bgpevpn *vpn, int *write)
   afi_t afi = AFI_L2VPN;
   safi_t safi = SAFI_EVPN;
 
-  if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED) ||
-      !bgp_evpn_check_auto_rd_flag (vpn) ||
-      !bgp_evpn_check_auto_rt_import_flag (vpn) ||
-      !bgp_evpn_check_auto_rt_export_flag (vpn))
+  if (bgp_evpn_is_vni_configured (vpn))
     {
       bgp_config_write_family_header (vty, afi, safi, write);
       vty_out (vty, "  vni %d%s", vpn->vni, VTY_NEWLINE);
-      if (!bgp_evpn_check_auto_rd_flag (vpn))
+      if (is_rd_configured (vpn))
           vty_out (vty, "   rd %s%s",
                         prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN),
                         VTY_NEWLINE);
-      if (!bgp_evpn_check_auto_rt_import_flag (vpn))
+      if (is_import_rt_configured (vpn))
         for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, irt))
           bgp_evpn_display_rt (vty, irt->import_rt, vpn->vni, FALSE, TRUE, TRUE);
-      if (!bgp_evpn_check_auto_rt_export_flag (vpn))
+      if (is_export_rt_configured (vpn))
         bgp_evpn_display_rt (vty, vpn->export_rt, vpn->vni, FALSE, TRUE, FALSE);
       vty_out (vty, "  exit-vni%s", VTY_NEWLINE);
     }
@@ -1834,40 +1701,59 @@ bgp_config_write_vxlan_info (struct hash_backet *backet, struct evpn_config_writ
  */
 
 /*
- * bgp_evpn_update_vni
- *
- * Create vpn for the given vni if not already created.
+ * Lookup VNI.
  */
 struct bgpevpn *
-bgp_evpn_update_vni (struct bgp *bgp, vni_t vni, int add)
+bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni)
+{
+  struct bgpevpn *vpn;
+  struct bgpevpn tmp;
+
+  memset(&tmp, 0, sizeof(struct bgpevpn));
+  tmp.vni = vni;
+  vpn = hash_lookup (bgp->vnihash, &tmp);
+  return vpn;
+}
+
+/*
+ * Create VNI, if not already present (VTY handler)
+ */
+struct bgpevpn *
+bgp_evpn_create_vni (struct bgp *bgp, vni_t vni)
 {
   struct bgpevpn *vpn;
 
   if (!bgp->vnihash)
-    return (NULL);
+    return NULL;
 
-  vpn = bgp_evpn_lookup_vpn(bgp, vni);
-  if (add)
-    {
-      if (!vpn)
-        {
-          vpn = bgp_evpn_new(bgp, vni, bgp->router_id);
-          SET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
-        }
-    }
-  else
-    {
-      if (vpn)
-	{
-	  if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
-	    {
-	      bgp_evpn_free(bgp, vpn);
-	      return (NULL);
-	    }
-	  UNSET_FLAG (vpn->flags, VNI_FLAG_CONFIGURED);
-	}
-    }
-  return (vpn);
+  /* Create VNI; we don't mark as "configured" yet as no VNI param has
+   * yet been configured.
+   */
+  vpn = bgp_evpn_new (bgp, vni, bgp->router_id);
+  return vpn;
+}
+
+/*
+ * Delete VNI; it must be present and not "live".
+ */
+int
+bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  assert (bgp->vnihash);
+
+  bgp_evpn_free (bgp, vpn);
+  return 0;
+}
+
+/*
+ * Does this VNI have configuration?
+ */
+int
+bgp_evpn_is_vni_configured (struct bgpevpn *vpn)
+{
+  return (is_rd_configured (vpn) ||
+          is_import_rt_configured (vpn) ||
+          is_export_rt_configured (vpn));
 }
 
 /*
@@ -1893,10 +1779,10 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
     }
 
   /* Lookup VNI. If present and no change, exit. */
-  vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (vpn)
     {
-      if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL) &&
+      if (is_vni_live (vpn) &&
           IPV4_ADDR_SAME (&vpn->originator_ip, &originator_ip))
         /* Probably some other param has changed that we don't care about. */
         return 0;
@@ -1915,8 +1801,8 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
     }
   else
     {
-      /* If VNI was already local, withdraw route from peer */
-      if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+      /* If VNI is "live", withdraw route from peer */
+      if (is_vni_live (vpn))
         {
           /* Need to withdraw (and subsequently re-advertise) type-3 route
            * as the originator IP is part of the key.
@@ -1927,9 +1813,8 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
       vpn->originator_ip = originator_ip;
     }
 
-  /* Mark as locally "learnt", update RD-RT flags */
-  SET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
-  bgp_evpn_update_vni_config_flag (vpn);
+  /* Mark as "live", update RD-RT flags */
+  SET_FLAG (vpn->flags, VNI_FLAG_LIVE);
 
   /* Create EVPN type-3 route and schedule for processing. */
   if (bgp_evpn_update_type3_route (bgp, vpn))
@@ -1974,7 +1859,7 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
     }
 
   /* Lookup VNI hash - should exist. */
-  vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (!vpn)
     {
       zlog_warn ("%u: VNI hash entry for VNI %u not found at MACIP ADD",
@@ -2078,7 +1963,7 @@ bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni)
     }
 
   /* Locate VNI hash */
-  vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (!vpn)
     {
       zlog_warn ("%u: VNI hash entry for VNI %u not found at DEL",
@@ -2091,9 +1976,9 @@ bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni)
    */
   bgp_evpn_delete_routes (bgp, vpn);
 
-  /* Clear locally "learnt" flag and see if hash needs to be freed. */
-  UNSET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
-  if (!CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
+  /* Clear "live" flag and see if hash needs to be freed. */
+  UNSET_FLAG (vpn->flags, VNI_FLAG_LIVE);
+  if (!bgp_evpn_is_vni_configured (vpn))
     bgp_evpn_free(bgp, vpn);
 
   return 0;
@@ -2160,7 +2045,7 @@ bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
     }
 
   /* Lookup VNI hash - should exist. */
-  vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (!vpn)
     {
       zlog_warn ("%u: VNI hash entry for VNI %u not found at MACIP DEL",
@@ -2196,7 +2081,7 @@ bgp_evpn_display_vni (struct vty *vty, struct bgpevpn *vpn)
     bgp_evpn_display_rt(vty, irt->import_rt, irt->vpn->vni, FALSE, FALSE, FALSE);
   vty_out (vty, "  Export Route Target:%s", VTY_NEWLINE);
   bgp_evpn_display_rt(vty, vpn->export_rt, 0, FALSE, FALSE, FALSE);
-  if (CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
+  if (bgp_evpn_is_vni_configured (vpn))
     vty_out (vty, "  VNI information is CLI configured%s", VTY_NEWLINE);
 }
 
@@ -2210,7 +2095,7 @@ bgp_evpn_show_one_vni (struct vty *vty, struct bgp *bgp, vni_t vni)
 {
   struct bgpevpn *vpn;
 
-  vpn = bgp_evpn_lookup_vpn (bgp, vni);
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (!vpn)
     {
       vty_out (vty, "VNI not found%s", VTY_NEWLINE);
@@ -2482,9 +2367,9 @@ bgp_evpn_cleanup_local_vni_and_withdraw_route_iterator (struct hash_backet *back
   /* Remove EVPN type-3 route and schedule for processing. */
   bgp_evpn_delete_type3_routes (bgp, vpn);
 
-  /* Clear locally "learnt" flag and see if hash needs to be freed. */
-  UNSET_FLAG (vpn->flags, VNI_FLAG_LOCAL);
-  if (!CHECK_FLAG (vpn->flags, VNI_FLAG_CONFIGURED))
+  /* Clear "live" flag and see if hash needs to be freed. */
+  UNSET_FLAG (vpn->flags, VNI_FLAG_LIVE);
+  if (!bgp_evpn_is_vni_configured (vpn))
     bgp_evpn_free(bgp, vpn);
 }
 
@@ -2570,17 +2455,6 @@ bgp_evpn_print_prefix (struct vty *vty, struct prefix_evpn *p)
 }
 
 /*
- * bgp_evpn_check_auto_rd_flag
- *
- * Check RD_AUTO flag.
- */
-int
-bgp_evpn_check_auto_rd_flag (struct bgpevpn *vpn)
-{
-  return (CHECK_FLAG (vpn->flags, RD_AUTO));
-}
-
-/*
  * bgp_evpn_check_configured_rd
  *
  * Check configured prd with VPN prd.
@@ -2603,7 +2477,7 @@ bgp_evpn_update_rd (struct bgp *bgp, struct bgpevpn *vpn, struct prefix_rd *rd,
   if (!bgp || !vpn)
     return;
 
-  if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  if (is_vni_live (vpn))
     /* Remove EVPN type-3 route and schedule for processing. */
     bgp_evpn_delete_type3_routes (bgp, vpn);
 
@@ -2614,17 +2488,16 @@ bgp_evpn_update_rd (struct bgp *bgp, struct bgpevpn *vpn, struct prefix_rd *rd,
   else
     {
       memcpy(&vpn->prd, rd, sizeof (struct prefix_rd));
-      bgp_evpn_unset_auto_rd_flag(vpn);
+      SET_FLAG (vpn->flags, VNI_FLAG_RD_CFGD);
     }
 
-  if (CHECK_FLAG (vpn->flags, VNI_FLAG_LOCAL))
+  if (is_vni_live (vpn))
     {
       /* Create EVPN type-3 route and schedule for processing. */
       if (bgp_evpn_update_type3_route (bgp, vpn))
         zlog_err ("%u: Type3 route creation failure for VNI %u",
                   bgp->vrf_id, vpn->vni);
     }
-  bgp_evpn_update_vni_config_flag (vpn);
 }
 
 /*
@@ -2700,11 +2573,6 @@ bgp_evpn_process_rt_config (struct vty *vty, struct bgp *bgp, struct bgpevpn *vp
       vty_out (vty, "Enter valid option (import/export/both)");
       return CMD_WARNING;
     }
-
-  /*
-   * Update VNI_FLAG_CONFIGURED based on RD/RT configs.
-   */
-  bgp_evpn_update_vni_config_flag (vpn);
 
   return CMD_SUCCESS;
 }
