@@ -1672,7 +1672,7 @@ bgp_evpn_config_write_vpn (struct vty *vty, struct bgpevpn *vpn, int *write)
   afi_t afi = AFI_L2VPN;
   safi_t safi = SAFI_EVPN;
 
-  if (bgp_evpn_is_vni_configured (vpn))
+  if (is_vni_configured (vpn))
     {
       bgp_config_write_family_header (vty, afi, safi, write);
       vty_out (vty, "  vni %d%s", vpn->vni, VTY_NEWLINE);
@@ -1716,44 +1716,68 @@ bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni)
 }
 
 /*
- * Create VNI, if not already present (VTY handler)
+ * Create VNI, if not already present (VTY handler). Mark as configured.
  */
 struct bgpevpn *
-bgp_evpn_create_vni (struct bgp *bgp, vni_t vni)
+bgp_evpn_create_update_vni (struct bgp *bgp, vni_t vni)
 {
   struct bgpevpn *vpn;
 
   if (!bgp->vnihash)
     return NULL;
 
-  /* Create VNI; we don't mark as "configured" yet as no VNI param has
-   * yet been configured.
-   */
-  vpn = bgp_evpn_new (bgp, vni, bgp->router_id);
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  if (!vpn)
+    {
+      vpn = bgp_evpn_new (bgp, vni, bgp->router_id);
+      if (!vpn)
+        {
+          zlog_err ("%u: Failed to allocate VNI entry for VNI %u - at Config",
+                    bgp->vrf_id, vni);
+          return NULL;
+        }
+    }
+
+  /* Mark as configured. */
+  SET_FLAG (vpn->flags, VNI_FLAG_CFGD);
   return vpn;
 }
 
 /*
- * Delete VNI; it must be present and not "live".
+ * Delete VNI; either free it or mark as unconfigured.
  */
 int
 bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn)
 {
   assert (bgp->vnihash);
 
-  bgp_evpn_free (bgp, vpn);
+  UNSET_FLAG (vpn->flags, VNI_FLAG_CFGD);
+  if (!is_vni_live (vpn))
+    bgp_evpn_free (bgp, vpn);
   return 0;
 }
 
 /*
- * Does this VNI have configuration?
+ * Configure RD for a VNI (vty handler)
  */
-int
-bgp_evpn_is_vni_configured (struct bgpevpn *vpn)
+void
+bgp_evpn_configure_rd (struct bgp *bgp, struct bgpevpn *vpn,
+                       struct prefix_rd *rd)
 {
-  return (is_rd_configured (vpn) ||
-          is_import_rt_configured (vpn) ||
-          is_export_rt_configured (vpn));
+  /* update RD */
+  memcpy(&vpn->prd, rd, sizeof (struct prefix_rd));
+  SET_FLAG (vpn->flags, VNI_FLAG_RD_CFGD);
+}
+
+/*
+ * Unconfigure RD for a VNI (vty handler)
+ */
+void
+bgp_evpn_unconfigure_rd (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  /* reset RD to default */
+  UNSET_FLAG (vpn->flags, VNI_FLAG_RD_CFGD);
+  bgp_evpn_set_auto_rd (bgp, vpn);
 }
 
 /*
@@ -1794,7 +1818,7 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
       vpn = bgp_evpn_new (bgp, vni, originator_ip);
       if (!vpn)
         {
-          zlog_err ("%u: Failed to allocate VNI entry for VNI %u",
+          zlog_err ("%u: Failed to allocate VNI entry for VNI %u - at Add",
                     bgp->vrf_id, vni);
           return -1;
         }
@@ -1978,7 +2002,7 @@ bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni)
 
   /* Clear "live" flag and see if hash needs to be freed. */
   UNSET_FLAG (vpn->flags, VNI_FLAG_LIVE);
-  if (!bgp_evpn_is_vni_configured (vpn))
+  if (!is_vni_configured (vpn))
     bgp_evpn_free(bgp, vpn);
 
   return 0;
@@ -2072,6 +2096,8 @@ bgp_evpn_display_vni (struct vty *vty, struct bgpevpn *vpn)
   struct import_rt_node *irt;
 
   vty_out (vty, "VNI: %d", vpn->vni);
+  if (is_vni_configured (vpn))
+    vty_out (vty, " (configured)");
   if (is_vni_live (vpn))
     vty_out (vty, " (defined in the kernel)");
   vty_out (vty, "%s", VTY_NEWLINE);
@@ -2380,7 +2406,7 @@ bgp_evpn_cleanup_local_vni_and_withdraw_route_iterator (struct hash_backet *back
 
   /* Clear "live" flag and see if hash needs to be freed. */
   UNSET_FLAG (vpn->flags, VNI_FLAG_LIVE);
-  if (!bgp_evpn_is_vni_configured (vpn))
+  if (!is_vni_configured (vpn))
     bgp_evpn_free(bgp, vpn);
 }
 
@@ -2463,52 +2489,6 @@ bgp_evpn_print_prefix (struct vty *vty, struct prefix_evpn *p)
 
   len = vty_out (vty, "%s", bgp_evpn_route2str(p, buf));
   return len;
-}
-
-/*
- * bgp_evpn_check_configured_rd
- *
- * Check configured prd with VPN prd.
- */
-int
-bgp_evpn_check_configured_rd (struct bgpevpn *vpn, struct prefix_rd *prd)
-{
-  return(memcmp (&vpn->prd.val, prd->val, ECOMMUNITY_SIZE));
-}
-
-/*
- * bgp_evpn_update_rd
- *
- * Update CLI configured RD into VPN
- */
-void
-bgp_evpn_update_rd (struct bgp *bgp, struct bgpevpn *vpn, struct prefix_rd *rd,
-                    int auto_rd)
-{
-  if (!bgp || !vpn)
-    return;
-
-  if (is_vni_live (vpn))
-    /* Remove EVPN type-3 route and schedule for processing. */
-    bgp_evpn_delete_type3_routes (bgp, vpn);
-
-  if (auto_rd)
-    {
-      bgp_evpn_set_auto_rd (bgp, vpn);
-    }
-  else
-    {
-      memcpy(&vpn->prd, rd, sizeof (struct prefix_rd));
-      SET_FLAG (vpn->flags, VNI_FLAG_RD_CFGD);
-    }
-
-  if (is_vni_live (vpn))
-    {
-      /* Create EVPN type-3 route and schedule for processing. */
-      if (bgp_evpn_update_type3_route (bgp, vpn))
-        zlog_err ("%u: Type3 route creation failure for VNI %u",
-                  bgp->vrf_id, vpn->vni);
-    }
 }
 
 /*

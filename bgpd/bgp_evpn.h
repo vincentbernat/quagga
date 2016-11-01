@@ -48,10 +48,11 @@ struct bgpevpn
 {
   vni_t                     vni;
   u_int32_t                 flags;
-#define VNI_FLAG_LIVE              0x1  /* VNI is "live" */
-#define VNI_FLAG_RD_CFGD           0x2  /* RD is configured. */
-#define VNI_FLAG_IMPRT_CFGD        0x4  /* Import RT is configured */
-#define VNI_FLAG_EXPRT_CFGD        0x8  /* Export RT is configured */
+#define VNI_FLAG_CFGD              0x1  /* VNI is user configured */
+#define VNI_FLAG_LIVE              0x2  /* VNI is "live" */
+#define VNI_FLAG_RD_CFGD           0x4  /* RD is user configured. */
+#define VNI_FLAG_IMPRT_CFGD        0x8  /* Import RT is user configured */
+#define VNI_FLAG_EXPRT_CFGD        0x10 /* Export RT is user configured */
 
   /* RD for this VNI. */
   struct prefix_rd          prd;
@@ -71,6 +72,12 @@ struct bgpevpn
 DECLARE_QOBJ_TYPE(bgpevpn)
 
 #define EVPN_ROUTE_LEN 50
+
+static inline int
+is_vni_configured (struct bgpevpn *vpn)
+{
+  return (CHECK_FLAG (vpn->flags, VNI_FLAG_CFGD));
+}
 
 static inline int
 is_vni_live (struct bgpevpn *vpn)
@@ -102,10 +109,17 @@ is_export_rt_configured (struct bgpevpn *vpn)
   return (CHECK_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD));
 }
 
+static inline int
+is_vni_param_configured (struct bgpevpn *vpn)
+{
+  return (is_rd_configured (vpn) ||
+          is_import_rt_configured (vpn) ||
+          is_export_rt_configured (vpn));
+}
+
 extern struct bgpevpn *bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni);
-extern struct bgpevpn *bgp_evpn_create_vni (struct bgp *bgp, vni_t vni);
+extern struct bgpevpn *bgp_evpn_create_update_vni (struct bgp *bgp, vni_t vni);
 extern int bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn);
-extern int bgp_evpn_is_vni_configured (struct bgpevpn *vpn);
 extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr);
 extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
 extern void bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty);
@@ -126,9 +140,9 @@ extern int bgp_evpn_print_prefix (struct vty *, struct prefix_evpn *);
 extern void bgp_evpn_show_one_vni (struct vty *, struct bgp *, vni_t);
 extern char *bgp_evpn_route2str (struct prefix_evpn *, char *);
 extern void bgp_evpn_handle_router_id_update (struct bgp *, int);
-extern void bgp_evpn_update_rd (struct bgp *, struct bgpevpn *, struct prefix_rd *, int);
-extern int bgp_evpn_check_configured_rd (struct bgpevpn *, struct prefix_rd *);
-extern int bgp_evpn_check_auto_rd_flag (struct bgpevpn *);
+extern void bgp_evpn_configure_rd (struct bgp *, struct bgpevpn *,
+                                   struct prefix_rd *);
+extern void bgp_evpn_unconfigure_rd (struct bgp *, struct bgpevpn *);
 extern int bgp_evpn_process_rt_config (struct vty *, struct bgp *, struct bgpevpn *,
                                        struct prefix_rd *, const char *, int, int);
 extern void bgp_evpn_show_import_rt (struct hash_backet *, struct vty *);
