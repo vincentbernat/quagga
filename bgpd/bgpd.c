@@ -3250,7 +3250,6 @@ bgp_delete (struct bgp *bgp)
   }
 
   update_bgp_group_free (bgp);
-  bgp_evpn_cleanup (bgp);
 
   /* TODO - Other memory may need to be freed - e.g., NHT */
 
@@ -3334,6 +3333,8 @@ bgp_free (struct bgp *bgp)
       }
 
   bgp_address_destroy (bgp);
+
+  bgp_evpn_cleanup (bgp);
 
   /* If Default instance or VRF, unlink from the VRF structure. */
   vrf = bgp_vrf_lookup_by_instance_type (bgp);

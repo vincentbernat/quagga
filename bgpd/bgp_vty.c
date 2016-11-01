@@ -6197,16 +6197,12 @@ DEFUN (bgp_evpn_vni,
   if (!bgp)
     return CMD_WARNING;
 
-  /* If VNI doesn't already exist, create it. */
-  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  /* Create VNI, or mark as configured. */
+  vpn = bgp_evpn_create_update_vni (bgp, vni);
   if (!vpn)
     {
-      vpn = bgp_evpn_create_vni (bgp, vni);
-      if (!vpn)
-        {
-          vty_out (vty, "%% Failed to create VNI %s", VTY_NEWLINE);
-          return CMD_WARNING;
-        }
+      vty_out (vty, "%% Failed to create VNI %s", VTY_NEWLINE);
+      return CMD_WARNING;
     }
 
   VTY_PUSH_CONTEXT_SUB (BGP_EVPN_VNI_NODE, vpn);
@@ -6230,26 +6226,25 @@ DEFUN (no_bgp_evpn_vni,
   if (!bgp) 
     return CMD_WARNING;
 
-  /* If VNI doesn't exist, silently return. */
+  /* Check if we should disallow. */
   vpn = bgp_evpn_lookup_vni (bgp, vni);
   if (!vpn)
-    return CMD_SUCCESS;
-
-  /* If VNI is "live", but doesn't really have any user configuration, we're
-   * done. Otherwise, it cannot be deleted without disabling first (in the
-   * kernel).
-   */
-  if (is_vni_live (vpn))
     {
-      if (!bgp_evpn_is_vni_configured (vpn))
-        return CMD_SUCCESS;
-
-      vty_out (vty, "%% VNI must be disabled before unconfiguring%s",
+      vty_out (vty, "%% Specified VNI does not exist%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  if (!is_vni_configured (vpn))
+    {
+      vty_out (vty, "%% Specified VNI is not configured%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  if (is_vni_live (vpn) && is_vni_param_configured (vpn))
+    {
+      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before unconfiguring%s",
                VTY_NEWLINE);
       return CMD_WARNING;
     }
 
-  /* The VNI is not "live", delete it. */
   bgp_evpn_delete_vni (bgp, vpn);
   return CMD_SUCCESS;
 }
@@ -6276,14 +6271,21 @@ DEFUN (bgp_evpn_vni_rd,
       vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if (bgp_evpn_check_configured_rd(vpn, &prd) != 0)
-    bgp_evpn_update_rd (bgp, vpn, &prd, FALSE);
-  else
+
+  /* If same as existing value, there is nothing more to do. */
+  if (bgp_evpn_rd_matches_existing (vpn, &prd))
+    return CMD_SUCCESS;
+
+  /* RD value can be changed only if the VNI is not "live" */
+  if (is_vni_live (vpn))
     {
-      vty_out (vty, "%%Entered RD value same as already configured%s",
-                    VTY_NEWLINE);
+      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before configuring%s",
+               VTY_NEWLINE);
       return CMD_WARNING;
     }
+
+  /* Configure or update the RD. */
+  bgp_evpn_configure_rd (bgp, vpn, &prd);
   return CMD_SUCCESS;
 }
 
@@ -6310,12 +6312,60 @@ DEFUN (no_bgp_evpn_vni_rd,
       vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if (bgp_evpn_check_configured_rd(vpn, &prd) != 0)
+
+  /* Check if we should disallow. */
+  if (!is_rd_configured (vpn))
     {
-      vty_out (vty, "%% RD doesnt match the VPN RD%s", VTY_NEWLINE);
+      vty_out (vty, "%% RD is not configured for this VNI%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  bgp_evpn_update_rd (bgp, vpn, &prd, TRUE);
+
+  if (!bgp_evpn_rd_matches_existing(vpn, &prd))
+    {
+      vty_out (vty, "%% RD specified does not match configuration for this VNI%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (is_vni_live (vpn))
+    {
+      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before unconfiguring%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  bgp_evpn_unconfigure_rd (bgp, vpn);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_evpn_vni_rd_without_val,
+       no_bgp_evpn_vni_rd_without_val_cmd,
+       "no rd",
+       NO_STR
+       "Route Distinguisher\n")
+{
+  struct bgp *bgp;
+  VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
+
+  bgp = vty->index;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  /* Check if we should disallow. */
+  if (!is_rd_configured (vpn))
+    {
+      vty_out (vty, "%% RD is not configured for this VNI%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (is_vni_live (vpn))
+    {
+      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before unconfiguring%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  bgp_evpn_unconfigure_rd (bgp, vpn);
   return CMD_SUCCESS;
 }
 
@@ -16220,6 +16270,7 @@ bgp_vty_init (void)
   install_element (BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);
   install_element (BGP_EVPN_NODE, &no_bgp_evpn_advertise_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_without_val_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);
 
   /* "clear ip bgp commands" */
