@@ -1737,14 +1737,6 @@ AC_DEFINE_UNQUOTED(ISIS_VTYSH_PATH, "$quagga_statedir/isisd.vty",isisd vty socke
 AC_DEFINE_UNQUOTED(PIM_VTYSH_PATH, "$quagga_statedir/pimd.vty",pimd vty socket)
 AC_DEFINE_UNQUOTED(DAEMON_VTY_DIR, "$quagga_statedir",daemon vty directory)
 
-dnl -------------------------------
-dnl Quagga sources should always be 
-dnl current wrt interfaces. Dont
-dnl allow deprecated interfaces to
-dnl be exposed.
-dnl -------------------------------
-AC_DEFINE(QUAGGA_NO_DEPRECATED_INTERFACES, 1, Hide deprecated interfaces)
-
 dnl ---------------------------
 dnl Check htonl works correctly
 dnl ---------------------------
