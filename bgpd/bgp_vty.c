@@ -1111,6 +1111,12 @@ bgp_maxpaths_config_vty (struct vty *vty, int peer_type, const char *mpaths,
     {
       VTY_GET_INTEGER_RANGE ("maximum-paths", maxpaths, mpaths, 1,
                              MULTIPATH_NUM);
+      if (maxpaths > multipath_num)
+	{
+	  vty_out (vty,
+		   "%% Maxpaths Specified: %d is > than multipath num specified on bgp command line %d",
+		   maxpaths, multipath_num);
+	}
       ret = bgp_maximum_paths_set (bgp, afi, safi, peer_type, maxpaths,
 				   options);
     }

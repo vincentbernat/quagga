@@ -84,7 +84,7 @@ do {\
 #define BGP_INFO_ATTR_BUF_COPY(info_src, info_dst)\
 do { \
   *info_dst = *info_src; \
-  assert(attr_index != MULTIPATH_NUM);\
+  assert(attr_index != multipath_num);\
   attr_cp[attr_index].extra = &attr_extra_cp[attr_index]; \
   bgp_attr_dup (&attr_cp[attr_index], info_src->attr); \
   bgp_attr_deep_dup (&attr_cp[attr_index], info_src->attr); \
