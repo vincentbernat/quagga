@@ -140,10 +140,13 @@ struct macip_walk_ctx
   struct zebra_vrf *zvrf;     /* VRF - for client notification. */
   int uninstall;              /* uninstall from kernel? */
 
-#define DEL_LOCAL_MAC    0x1
-#define DEL_REMOTE_MAC   0x2
-#define DEL_ALL_MAC      (DEL_LOCAL_MAC | DEL_REMOTE_MAC)
   u_int32_t flags;
+#define DEL_LOCAL_MAC              0x1
+#define DEL_REMOTE_MAC             0x2
+#define DEL_ALL_MAC                (DEL_LOCAL_MAC | DEL_REMOTE_MAC)
+#define DEL_REMOTE_MAC_FROM_VTEP   0x4
+
+  struct in_addr r_vtep_ip;   /* To walk MACs from specific VTEP */
 };
 
 
@@ -160,6 +163,9 @@ static int
 zvni_macip_del (zebra_vni_t *zvni, zebra_macip_t *macip);
 static int
 zvni_macip_del_hash_entry (struct hash_backet *backet, void *arg);
+static void
+zvni_macip_del_from_vtep (zebra_vni_t *zvni, int uninstall,
+                          struct in_addr *r_vtep_ip);
 static void
 zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags);
 static int
@@ -326,14 +332,43 @@ zvni_macip_del_hash_entry (struct hash_backet *backet, void *arg)
   struct macip_walk_ctx *wctx = arg;
   zebra_macip_t *macip = backet->data;
 
-  if (wctx->uninstall)
-    zvni_macip_uninstall (wctx->zvni, macip);
-
   if (((wctx->flags & DEL_LOCAL_MAC) && (macip->flags & ZEBRA_MAC_LOCAL)) ||
-      ((wctx->flags & DEL_REMOTE_MAC) && (macip->flags & ZEBRA_MAC_REMOTE)))
-    return zvni_macip_del (wctx->zvni, macip);
+      ((wctx->flags & DEL_REMOTE_MAC) && (macip->flags & ZEBRA_MAC_REMOTE)) ||
+      ((wctx->flags & DEL_REMOTE_MAC_FROM_VTEP) &&
+       (macip->flags & ZEBRA_MAC_REMOTE) &&
+       IPV4_ADDR_SAME(&macip->fwd_info.r_vtep_ip, &wctx->r_vtep_ip)
+      ))
+    {
+      if (wctx->uninstall)
+        zvni_macip_uninstall (wctx->zvni, macip);
+
+      return zvni_macip_del (wctx->zvni, macip);
+    }
 
   return 0;
+}
+
+/*
+ * Delete all MAC-IP entries from specific VTEP for a particular VNI.
+ */
+static void
+zvni_macip_del_from_vtep (zebra_vni_t *zvni, int uninstall,
+                          struct in_addr *r_vtep_ip)
+{
+  struct macip_walk_ctx wctx;
+
+  if (!zvni->macip_table)
+    return;
+
+  memset (&wctx, 0, sizeof (struct macip_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.uninstall = uninstall;
+  wctx.flags = DEL_REMOTE_MAC_FROM_VTEP;
+  wctx.r_vtep_ip = *r_vtep_ip;
+
+  hash_iterate (zvni->macip_table,
+                (void (*) (struct hash_backet *, void *))
+                zvni_macip_del_hash_entry, &wctx);
 }
 
 /*
@@ -347,8 +382,8 @@ zvni_macip_del_all (zebra_vni_t *zvni, int uninstall, u_int32_t flags)
   if (!zvni->macip_table)
     return;
 
+  memset (&wctx, 0, sizeof (struct macip_walk_ctx));
   wctx.zvni = zvni;
-  wctx.zvrf = NULL;
   wctx.uninstall = uninstall;
   wctx.flags = flags;
 
@@ -381,10 +416,9 @@ zvni_macip_adv_all (struct zebra_vrf *zvrf, zebra_vni_t *zvni)
   if (!zvni->macip_table)
     return;
 
+  memset (&wctx, 0, sizeof (struct macip_walk_ctx));
   wctx.zvni = zvni;
   wctx.zvrf = zvrf;
-  wctx.uninstall = 0;
-  wctx.flags = 0;
 
   hash_iterate (zvni->macip_table,
                 (void (*) (struct hash_backet *, void *))
@@ -1338,13 +1372,13 @@ int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
       zvni = zvni_lookup (zvrf, vni);
       if (!zvni)
         {
-          zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
+          zlog_err ("Failed to locate VNI hash upon remote VTEP ADD, VRF %d VNI %u",
                     zvrf->vrf_id, vni);
           continue;
         }
       if (!zvni->vxlan_if)
         {
-          zlog_err ("VNI %u hash %p doesn't have intf upon remote VTEP add",
+          zlog_err ("VNI %u hash %p doesn't have intf upon remote VTEP ADD",
                     zvni->vni, zvni);
           continue;
         }
@@ -1422,18 +1456,21 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
       zvni = zvni_lookup (zvrf, vni);
       if (!zvni)
         {
-          zlog_err ("Failed to locate VNI hash upon remote VTEP add, VRF %d VNI %u",
+          zlog_err ("Failed to locate VNI hash upon remote VTEP DEL, VRF %d VNI %u",
                     zvrf->vrf_id, vni);
           continue;
         }
 
       /* If the remote VTEP does not exist, there's nothing more to do.
-       * Otherwise, uninstall the entry and remove it.
+       * Otherwise, uninstall any remote MACs pointing to this VTEP and
+       * then, the VTEP entry itself and remove it.
        */
       zvtep = zvni_vtep_find (zvni, &vtep);
       if (!zvtep)
         continue;
 
+      /* TODO: Assumes VTEP IP can only be IPv4 */
+      zvni_macip_del_from_vtep (zvni, 1, &vtep.u.prefix4);
       zvni_vtep_uninstall (zvni, &vtep);
       zvni_vtep_del (zvni, zvtep);
     }
@@ -1637,7 +1674,7 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
       zvni = zvni_lookup (zvrf, vni);
       if (!zvni)
         {
-          zlog_err ("Failed to locate VNI hash upon remote MAC-IP add, VRF %d VNI %u",
+          zlog_err ("Failed to locate VNI hash upon remote MAC-IP ADD, VRF %d VNI %u",
                     zvrf->vrf_id, vni);
           continue;
         }
@@ -1747,23 +1784,25 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
       zvni = zvni_lookup (zvrf, vni);
       if (!zvni)
         {
-          zlog_err ("Failed to locate VNI hash upon remote MAC-IP del, VRF %d VNI %u",
+          zlog_err ("Failed to locate VNI hash upon remote MAC-IP DEL, VRF %d VNI %u",
                     zvrf->vrf_id, vni);
           continue;
         }
       if (!zvni->vxlan_if)
         {
-          zlog_err ("VNI %u hash %p doesn't have intf upon remote MAC-IP del",
+          zlog_err ("VNI %u hash %p doesn't have intf upon remote MAC-IP DEL",
                     vni, zvni);
           continue;
         }
-      /* The remote VTEP specified is expected to exist. */
+
+      /* The remote VTEP specified is normally expected to exist, but it is
+       * possible that the peer may delete the VTEP before deleting any MACIPs
+       * referring to the VTEP, in which case the handler (see remote_vtep_del)
+       * would have already deleted the MACIPs.
+       */
       if (!zvni_vtep_find (zvni, &r_vtep))
-        {
-          zlog_err ("VNI %u VTEP %s does not exist upon remote MAC-IP del",
-                    vni, inet_ntoa (r_vtep.u.prefix4));
-          continue;
-        }
+        continue;
+
       /* If the local VxLAN interface is not up (should be a transient
        * event),  there's nothing more to do.
        */
