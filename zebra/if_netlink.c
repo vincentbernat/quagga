@@ -466,21 +466,14 @@ netlink_interface_af_bridge (struct nlmsghdr *h, int len,
 
   /* We are only interested in the access VLAN i.e., AF_SPEC */
   if (!tb[IFLA_AF_SPEC])
-    {
-      zlog_warn ("netlink_interface_af_bridge: No AF_SPEC for VxLAN IF %s(%u)",
-                 name, ifi->ifi_index);
-      return 0;
-    }
+    return 0;
+
   /* There is a 1-to-1 mapping of VLAN to VxLAN - hence
    * only 1 access VLAN is accepted.
    */
   parse_rtattr_nested(aftb, IFLA_BRIDGE_MAX, tb[IFLA_AF_SPEC]);
   if (!aftb[IFLA_BRIDGE_VLAN_INFO])
-    {
-      zlog_warn ("netlink_interface_af_bridge: No VLAN info for VxLAN IF %s(%u)",
-                 name, ifi->ifi_index);
-      return 0;
-    }
+    return 0;
 
   vinfo = RTA_DATA(aftb[IFLA_BRIDGE_VLAN_INFO]);
   if (!(vinfo->flags & BRIDGE_VLAN_INFO_PVID))
@@ -488,8 +481,8 @@ netlink_interface_af_bridge (struct nlmsghdr *h, int len,
 
   access_vlan = (vlanid_t) vinfo->vid;
   if (IS_ZEBRA_DEBUG_KERNEL)
-    zlog_err ("netlink_interface_af_bridge: Access VLAN %u for VxLAN IF %s(%u)",
-              access_vlan, name, ifi->ifi_index);
+    zlog_debug ("netlink_interface_af_bridge: Access VLAN %u for VxLAN IF %s(%u)",
+                access_vlan, name, ifi->ifi_index);
   zebra_vxlan_update_access_vlan (ifp, access_vlan);
   return 0;
 }
