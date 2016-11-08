@@ -199,6 +199,25 @@ is_vni_present_in_irt_vnis (struct list *vnis, struct bgpevpn *vpn)
 }
 
 /*
+ * Mask off global-admin field of specified extended community (RT)
+ */
+static inline void
+mask_ecom_global_admin (struct ecommunity_val *dst,
+                        struct ecommunity_val *src)
+{
+  u_char type;
+
+  type = src->val[0];
+  if (type == ECOMMUNITY_ENCODE_AS)
+    dst->val[2] = dst->val[3] = 0;
+  else if (type == ECOMMUNITY_ENCODE_AS4)
+    {
+      dst->val[2] = dst->val[3] = 0;
+      dst->val[4] = dst->val[5] = 0;
+    }
+}
+
+/*
  * Map one RT to specified VNI.
  */
 static void
@@ -206,8 +225,16 @@ map_vni_to_rt (struct bgp *bgp, struct bgpevpn *vpn,
                struct ecommunity_val *eval)
 {
   struct irt_node *irt;
+  struct ecommunity_val eval_tmp;
 
-  irt = lookup_import_rt (bgp, eval);
+  /* If using "automatic" RT, we only care about the local-admin sub-field.
+   * This is to facilitate using VNI as the RT for EBGP peering too.
+   */
+  memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
+  if (!is_import_rt_configured (vpn))
+    mask_ecom_global_admin (&eval_tmp, eval);
+
+  irt = lookup_import_rt (bgp, &eval_tmp);
   if (irt && irt->vnis)
     if (is_vni_present_in_irt_vnis (irt->vnis, vpn))
       /* Already mapped. */
@@ -215,7 +242,7 @@ map_vni_to_rt (struct bgp *bgp, struct bgpevpn *vpn,
 
   if (!irt)
     {
-      irt = import_rt_new (bgp, eval);
+      irt = import_rt_new (bgp, &eval_tmp);
       assert (irt);
     }
 
@@ -862,16 +889,11 @@ is_route_matching_for_vni (struct bgp *bgp, struct bgpevpn *vpn,
        * VNI as the RT for EBGP peering too.
        */
       irt = NULL;
-      memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
-      if (type == ECOMMUNITY_ENCODE_AS)
+      if (type == ECOMMUNITY_ENCODE_AS ||
+          type == ECOMMUNITY_ENCODE_AS4)
         {
-          eval_tmp.val[2] = eval_tmp.val[3] = 0;
-          irt = lookup_import_rt (bgp, &eval_tmp);
-        }
-      else if (type == ECOMMUNITY_ENCODE_AS4)
-        {
-          eval_tmp.val[2] = eval_tmp.val[3] = 0;
-          eval_tmp.val[4] = eval_tmp.val[5] = 0;
+          memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
+          mask_ecom_global_admin (&eval_tmp, eval);
           irt = lookup_import_rt (bgp, &eval_tmp);
         }
       if (irt && irt->vnis)
@@ -1080,16 +1102,11 @@ install_uninstall_evpn_route (struct bgp *bgp, afi_t afi, safi_t safi,
        * VNI as the RT for EBGP peering too.
        */
       irt = NULL;
-      memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
-      if (type == ECOMMUNITY_ENCODE_AS)
+      if (type == ECOMMUNITY_ENCODE_AS ||
+          type == ECOMMUNITY_ENCODE_AS4)
         {
-          eval_tmp.val[2] = eval_tmp.val[3] = 0;
-          irt = lookup_import_rt (bgp, &eval_tmp);
-        }
-      else if (type == ECOMMUNITY_ENCODE_AS4)
-        {
-          eval_tmp.val[2] = eval_tmp.val[3] = 0;
-          eval_tmp.val[4] = eval_tmp.val[5] = 0;
+          memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
+          mask_ecom_global_admin (&eval_tmp, eval);
           irt = lookup_import_rt (bgp, &eval_tmp);
         }
       if (irt && irt->vnis)
@@ -1324,9 +1341,17 @@ bgp_evpn_unmap_vni_from_its_rts (struct bgp *bgp, struct bgpevpn *vpn)
   for (i = 0; i < ecom->size; i++)
     {
       struct irt_node *irt;
+      struct ecommunity_val eval_tmp;
 
       eval = (struct ecommunity_val *) (ecom->val + (i * ECOMMUNITY_SIZE));
-      irt = lookup_import_rt (bgp, eval);
+      /* If using "automatic" RT, we only care about the local-admin sub-field.
+       * This is to facilitate using VNI as the RT for EBGP peering too.
+       */
+      memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
+      if (!is_import_rt_configured (vpn))
+        mask_ecom_global_admin (&eval_tmp, eval);
+
+      irt = lookup_import_rt (bgp, &eval_tmp);
       if (irt)
         unmap_vni_from_rt (bgp, vpn, irt);
     }
