@@ -6293,6 +6293,19 @@ route_vty_out (struct vty *vty, struct prefix *p,
           else
             vty_out(vty, "?");
         }
+      else if (safi == SAFI_EVPN)
+        {
+          if (json_paths)
+            {
+              json_nexthop_global = json_object_new_object();
+
+              json_object_string_add(json_nexthop_global, "ip", inet_ntoa (attr->nexthop));
+              json_object_string_add(json_nexthop_global, "afi", "ipv4");
+              json_object_boolean_true_add(json_nexthop_global, "used");
+            }
+          else
+            vty_out (vty, "%-16s", inet_ntoa (attr->nexthop));
+        }
       /* IPv4 Next Hop */
       else if (p->family == AF_INET && !BGP_ATTR_NEXTHOP_AFI_IP6(attr))
 	{
