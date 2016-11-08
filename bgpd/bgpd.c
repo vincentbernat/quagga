@@ -7293,7 +7293,7 @@ bgp_config_write_family (struct vty *vty, struct bgp *bgp, afi_t afi,
   bgp_config_write_table_map (vty, bgp, afi, safi, &write);
 
   if (safi == SAFI_EVPN)
-    bgp_config_write_advertise_vni (vty, bgp, afi, safi, &write);
+    bgp_config_write_evpn_info (vty, bgp, afi, safi, &write);
 
   if (write)
     vty_out (vty, " exit-address-family%s", VTY_NEWLINE);

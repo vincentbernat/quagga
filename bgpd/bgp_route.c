@@ -2604,6 +2604,30 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	}
     }
 #endif
+      /* Special handling for EVPN update of an existing route. If the
+       * extended community attribute has changed, we need to process the
+       * route for uninstall with its existing extended community before
+       * modifying the attribute and doing the usual processing.
+       */
+      if (safi == SAFI_EVPN && !same_attr)
+        {
+          if ((ri->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES)) &&
+              (attr_new->flag & ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES)))
+            {
+              int cmp;
+
+              cmp = ecommunity_cmp (ri->attr->extra->ecommunity,
+                                    attr_new->extra->ecommunity);
+              if (!cmp)
+                {
+                  if (bgp_debug_update(peer, p, NULL, 1))
+                    zlog_debug ("Change in EXT-COMM, existing %s new %s",
+                                ecommunity_str (ri->attr->extra->ecommunity),
+                                ecommunity_str (attr_new->extra->ecommunity));
+                  bgp_evpn_uninstall_route (bgp, afi, safi, p, ri);
+                }
+            }
+        }
 	
       /* Update to new attribute.  */
       bgp_attr_unintern (&ri->attr);
@@ -2613,14 +2637,6 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       if (safi == SAFI_MPLS_VPN)
         memcpy ((bgp_info_extra_get (ri))->tag, tag, 3);
 
-      /* Handle EVPN route update */
-      if (!same_attr && safi == SAFI_EVPN)
-        {
-          zlog_debug("%s: EVPN attributes are not the same, check to remove"
-                     " the route", __FUNCTION__);
-          bgp_evpn_check_uninstall_evpn_route (bgp, afi, safi,
-                                               (struct prefix_evpn *)p, ri);
-        }
 #if ENABLE_BGP_VNC
       if ((afi == AFI_IP || afi == AFI_IP6) && (safi == SAFI_UNICAST)) 
         {
@@ -6119,7 +6135,8 @@ route_vty_out_route (struct prefix *p, struct vty *vty)
     }
   else if (p->family == AF_ETHERNET)
     {
-      len = bgp_evpn_print_prefix(vty, (struct prefix_evpn *)p);
+      len = vty_out (vty, "%s",
+                     bgp_evpn_route2str((struct prefix_evpn *)p, buf, BUFSIZ));
     }
   else
     len = vty_out (vty, "%s/%d", inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
@@ -6965,7 +6982,7 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
   attr = binfo->attr;
   if (safi == SAFI_EVPN)
     vty_out (vty, "Route %s%s",
-	          bgp_evpn_route2str((struct prefix_evpn *)p, buf2),
+	          bgp_evpn_route2str((struct prefix_evpn *)p, buf2, sizeof (buf2)),
 	          VTY_NEWLINE);
   if (attr)
     {

@@ -6377,55 +6377,216 @@ DEFUN (no_bgp_evpn_vni_rd_without_val,
 
 DEFUN (bgp_evpn_vni_rt,
        bgp_evpn_vni_rt_cmd,
-       "route-target WORD ASN:nn_or_IP-address:nn",
+       "route-target (import|export) .RTLIST",
        "Route Target\n"
-       "import/export/both\n"
-       "ASN:XX or A.B.C.D:XX\n")
+       "import\n"
+       "export\n"
+       "Space separated route target list (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
 {
-  struct prefix_rd prd;
   struct bgp *bgp;
   VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
-  int ret;
+  int rt_type, max_rts;
+  struct ecommunity *ecom = NULL;
+  struct ecommunity *ecomadd = NULL;
+  char *str;
 
   bgp = vty->index;
 
   if (!bgp || !vpn)
     return CMD_WARNING;
 
-  ret = str2prefix_rd (argv[1], &prd);
-  if (! ret)
+  if (!strcmp (argv[0], "import"))
     {
-      vty_out (vty, "%% Malformed Route Target%s", VTY_NEWLINE);
+      rt_type = RT_TYPE_IMPORT;
+      max_rts = 5; /* Only a max of 5 import RTs supported. */
+      ecom = vpn->import_rtl;
+    }
+  else if (!strcmp (argv[0], "export"))
+    {
+      rt_type = RT_TYPE_EXPORT;
+      max_rts = 1; /* Only 1 export RT supported. */
+      ecom = vpn->export_rtl;
+    }
+  else
+    {
+      vty_out (vty, "%% Invalid Route Target type%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], TRUE, FALSE));
+
+  if (argc > (max_rts + 1))
+    {
+      vty_out (vty, "%% Only %d %s RT(s) are allowed%s",
+               max_rts, rt_type == RT_TYPE_IMPORT ? "Import" : "Export",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  str = argv_concat (argv, argc, 1);
+  ecomadd = ecommunity_str2com (str, ECOMMUNITY_ROUTE_TARGET, 0);
+  XFREE (MTYPE_TMP, str);
+  if (!ecomadd)
+    {
+      vty_out (vty, "%% Malformed Route Target list%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* If same as existing value, there is nothing more to do. */
+  if (bgp_evpn_rt_matches_existing (ecom, ecomadd))
+    return CMD_SUCCESS;
+
+  /* Configure or update the RT. */
+  if (rt_type == RT_TYPE_IMPORT)
+    bgp_evpn_configure_import_rt (bgp, vpn, ecomadd);
+  else
+    bgp_evpn_configure_export_rt (bgp, vpn, ecomadd);
+
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_bgp_evpn_vni_rt,
        no_bgp_evpn_vni_rt_cmd,
-       "no route-target WORD ASN:nn_or_IP-address:nn",
+       "no route-target (import|export) .RTLIST",
        NO_STR
        "Route Target\n"
-       "import/export/both\n"
+       "import\n"
+       "export\n"
        "ASN:XX or A.B.C.D:XX\n")
 {
-  struct prefix_rd prd;
   struct bgp *bgp;
   VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
-  int ret;
+  int rt_type, max_rts;
+  struct ecommunity *ecom = NULL;
+  struct ecommunity *ecomdel = NULL;
+  char *str;
 
   bgp = vty->index;
 
   if (!bgp || !vpn)
     return CMD_WARNING;
 
-  ret = str2prefix_rd (argv[1], &prd);
-  if (! ret)
+  if (!strcmp (argv[0], "import"))
     {
-      vty_out (vty, "%% Malformed Route Target%s", VTY_NEWLINE);
+      rt_type = RT_TYPE_IMPORT;
+      max_rts = 5; /* Only a max of 5 import RTs supported. */
+      ecom = vpn->import_rtl;
+    }
+  else if (!strcmp (argv[0], "export"))
+    {
+      rt_type = RT_TYPE_EXPORT;
+      max_rts = 1; /* Only 1 export RT supported. */
+      ecom = vpn->export_rtl;
+    }
+  else
+    {
+      vty_out (vty, "%% Invalid Route Target type%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  return (bgp_evpn_process_rt_config (vty, bgp, vpn, &prd, argv[0], FALSE, FALSE));
+
+  if (argc > (max_rts + 1))
+    {
+      vty_out (vty, "%% Only %d %s RT(s) are allowed%s",
+               max_rts, rt_type == RT_TYPE_IMPORT ? "Import" : "Export",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  str = argv_concat (argv, argc, 1);
+  ecomdel = ecommunity_str2com (str, ECOMMUNITY_ROUTE_TARGET, 0);
+  XFREE (MTYPE_TMP, str);
+  if (!ecomdel)
+    {
+      vty_out (vty, "%% Malformed Route Target list%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Check if we should disallow. */
+  if (rt_type == RT_TYPE_IMPORT)
+    {
+      if (!is_import_rt_configured (vpn))
+        {
+          vty_out (vty, "%% Import RT is not configured for this VNI%s", VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+    }
+  else
+    {
+      if (!is_export_rt_configured (vpn))
+        {
+          vty_out (vty, "%% Export RT is not configured for this VNI%s", VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+    }
+
+  if (!bgp_evpn_rt_matches_existing (ecom, ecomdel))
+    {
+      vty_out (vty, "%% RT specified does not match configuration for this VNI%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Unconfigure the RT. */
+  if (rt_type == RT_TYPE_IMPORT)
+    bgp_evpn_unconfigure_import_rt (bgp, vpn, ecomdel);
+  else
+    bgp_evpn_unconfigure_export_rt (bgp, vpn, ecomdel);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_evpn_vni_rt_without_val,
+       no_bgp_evpn_vni_rt_without_val_cmd,
+       "no route-target (import|export)",
+       NO_STR
+       "Route Target\n"
+       "import\n"
+       "export\n")
+{
+  struct bgp *bgp;
+  VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
+  int rt_type;
+
+  bgp = vty->index;
+
+  if (!bgp || !vpn)
+    return CMD_WARNING;
+
+  if (!strcmp (argv[0], "import"))
+    {
+      rt_type = RT_TYPE_IMPORT;
+    }
+  else if (!strcmp (argv[0], "export"))
+    {
+      rt_type = RT_TYPE_EXPORT;
+    }
+  else
+    {
+      vty_out (vty, "%% Invalid Route Target type%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Check if we should disallow. */
+  if (rt_type == RT_TYPE_IMPORT)
+    {
+      if (!is_import_rt_configured (vpn))
+        {
+          vty_out (vty, "%% Import RT is not configured for this VNI%s", VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+    }
+  else
+    {
+      if (!is_export_rt_configured (vpn))
+        {
+          vty_out (vty, "%% Export RT is not configured for this VNI%s", VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+    }
+
+  /* Unconfigure the RT. */
+  if (rt_type == RT_TYPE_IMPORT)
+    bgp_evpn_unconfigure_import_rt (bgp, vpn, NULL);
+  else
+    bgp_evpn_unconfigure_export_rt (bgp, vpn, NULL);
+  return CMD_SUCCESS;
 }
 
 DEFUN (bgp_evpn_advertise_vni,
@@ -6437,10 +6598,9 @@ DEFUN (bgp_evpn_advertise_vni,
 
   bgp = vty->index;
 
-  if (!bgp || bgp->advertise_vni)
+  if (!bgp)
     return CMD_WARNING;
-  bgp->advertise_vni = TRUE;
-  bgp_evpn_update_advertise_vni(bgp);
+  bgp_evpn_set_advertise_vni (bgp);
   return CMD_SUCCESS;
 }
 
@@ -6454,10 +6614,9 @@ DEFUN (no_bgp_evpn_advertise_vni,
 
   bgp = vty->index;
 
-  if (!bgp || !bgp->advertise_vni)
+  if (!bgp)
     return CMD_WARNING;
-  bgp->advertise_vni = FALSE;
-  bgp_evpn_update_advertise_vni(bgp);
+  bgp_evpn_unset_advertise_vni (bgp);
   return CMD_SUCCESS;
 }
 
@@ -14310,16 +14469,13 @@ DEFUN (show_bgp_evpn_vni,
   struct bgp *bgp;
   bgp = bgp_get_default ();
 
-  if (bgp)
-    {
-      vty_out (vty, "Advertise VNI flag: %s%s", 
-                    (bgp->advertise_vni)? "Enabled":"Disabled", VTY_NEWLINE);
+  if (!bgp)
+    return CMD_SUCCESS;
 
-      hash_iterate (bgp->vnihash,
-                    (void (*) (struct hash_backet *, void *))
-                    bgp_evpn_show_vni,
-                    vty);
-    }
+  vty_out (vty, "Advertise VNI flag: %s%s",
+           bgp->advertise_vni? "Enabled" : "Disabled", VTY_NEWLINE);
+
+  bgp_evpn_show_all_vnis (vty, bgp);
   return CMD_SUCCESS;
 }
 
@@ -14339,7 +14495,7 @@ DEFUN (show_bgp_evpn_vni_num,
   VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
 
   if (bgp)
-    bgp_evpn_show_one_vni (vty, bgp, vni);
+    bgp_evpn_show_vni (vty, bgp, vni);
   return CMD_SUCCESS;
 }
 
@@ -14354,15 +14510,7 @@ DEFUN (show_bgp_evpn_import_rt,
   struct bgp *bgp;
   bgp = bgp_get_default ();
 
-  if (bgp)
-    {
-      vty_out (vty, "BGP EVPN IMPORT RT LIST%s", VTY_NEWLINE);
-      vty_out (vty, "Import Route Target        VNI%s", VTY_NEWLINE);
-      hash_iterate (bgp->import_rt_hash,
-                    (void (*) (struct hash_backet *, void *))
-                    bgp_evpn_show_import_rt,
-                    vty);
-    }
+  bgp_evpn_show_import_rts (vty, bgp);
   return CMD_SUCCESS;
 }
 
@@ -16278,6 +16426,7 @@ bgp_vty_init (void)
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_without_val_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);
+  install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_without_val_cmd);
 
   /* "clear ip bgp commands" */
   install_element (ENABLE_NODE, &clear_ip_bgp_all_cmd);

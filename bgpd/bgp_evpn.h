@@ -61,17 +61,31 @@ struct bgpevpn
   struct in_addr            originator_ip;
 
   /* Import and Export RTs. */
-  struct list               *import_rtl;
-
-  /* TODO: Only 1 supported. */
-  struct ecommunity_val     export_rt;
+  struct ecommunity         *import_rtl;
+  struct ecommunity         *export_rtl;
 
   QOBJ_FIELDS
 };
 
 DECLARE_QOBJ_TYPE(bgpevpn)
 
+/* Mapping of Import RT to VNIs.
+ * The Import RTs of all VNIs are maintained in a hash table with each
+ * RT linking to all VNIs that will import routes matching this RT.
+ */
+struct irt_node
+{
+  /* RT */
+  struct ecommunity_val rt;
+
+  /* List of VNIs importing routes matching this RT. */
+  struct list *vnis;
+};
+
 #define EVPN_ROUTE_LEN 50
+
+#define RT_TYPE_IMPORT 1
+#define RT_TYPE_EXPORT 2
 
 static inline int
 is_vni_configured (struct bgpevpn *vpn)
@@ -98,6 +112,13 @@ bgp_evpn_rd_matches_existing (struct bgpevpn *vpn, struct prefix_rd *prd)
 }
 
 static inline int
+bgp_evpn_rt_matches_existing (struct ecommunity *ecom,
+                              struct ecommunity *ecomadd)
+{
+  return (ecommunity_match (ecom, ecomadd));
+}
+
+static inline int
 is_import_rt_configured (struct bgpevpn *vpn)
 {
   return (CHECK_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD));
@@ -117,41 +138,100 @@ is_vni_param_configured (struct bgpevpn *vpn)
           is_export_rt_configured (vpn));
 }
 
-extern struct bgpevpn *bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni);
-extern struct bgpevpn *bgp_evpn_create_update_vni (struct bgp *bgp, vni_t vni);
-extern int bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn);
-extern int bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr);
-extern int bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
-extern void bgp_evpn_show_vni (struct hash_backet *backet, struct vty *vty);
-extern void bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
-           struct prefix_rd *prd, int addpath_encode, u_int32_t addpath_tx_id);
-extern int bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
-                                 u_char *pnt, bgp_size_t length, int *numpfx);
-extern int bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr,
-                                struct bgp_nlri *packet);
-extern int bgp_evpn_install_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                                   struct prefix *p, struct bgp_info *ri);
-extern int bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                                     struct prefix *p, struct bgp_info *ri);
-extern void bgp_evpn_update_advertise_vni (struct bgp *);
-extern void bgp_evpn_init (struct bgp *);
-extern void bgp_evpn_cleanup (struct bgp *bgp);
-extern int bgp_evpn_print_prefix (struct vty *, struct prefix_evpn *);
-extern void bgp_evpn_show_one_vni (struct vty *, struct bgp *, vni_t);
-extern char *bgp_evpn_route2str (struct prefix_evpn *, char *);
-extern void bgp_evpn_handle_router_id_update (struct bgp *, int);
-extern void bgp_evpn_configure_rd (struct bgp *, struct bgpevpn *,
-                                   struct prefix_rd *);
-extern void bgp_evpn_unconfigure_rd (struct bgp *, struct bgpevpn *);
-extern int bgp_evpn_process_rt_config (struct vty *, struct bgp *, struct bgpevpn *,
-                                       struct prefix_rd *, const char *, int, int);
-extern void bgp_evpn_show_import_rt (struct hash_backet *, struct vty *);
-extern void bgp_evpn_check_uninstall_evpn_route (struct bgp *, afi_t, safi_t,
-                                                 struct prefix_evpn *, struct bgp_info *);
-extern void bgp_config_write_advertise_vni (struct vty *, struct bgp *, afi_t, 
-                                            safi_t, int *);
-extern int bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
-                                     struct ethaddr *mac);
-extern int bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
-                                     struct ethaddr *mac);
+extern char *
+bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len);
+extern void
+bgp_evpn_map_vni_to_its_rts (struct bgp *bgp, struct bgpevpn *vpn);
+extern void
+bgp_evpn_unmap_vni_from_its_rts (struct bgp *bgp, struct bgpevpn *vpn);
+extern void
+bgp_evpn_derive_auto_rt_import (struct bgp *bgp, struct bgpevpn *vpn);
+extern void
+bgp_evpn_derive_auto_rt_export (struct bgp *bgp, struct bgpevpn *vpn);
+extern void
+bgp_evpn_derive_auto_rd (struct bgp *bgp, struct bgpevpn *vpn);
+extern struct bgpevpn *
+bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni);
+extern struct bgpevpn *
+bgp_evpn_new (struct bgp *bgp, vni_t vni, struct in_addr originator_ip);
+extern void
+bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn);
+extern void
+bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
+                        struct prefix_rd *prd, int addpath_encode,
+                        u_int32_t addpath_tx_id);
+extern int
+bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
+                            u_char *pnt, bgp_size_t length, int *numpfx);
+extern int
+bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *packet);
+extern int
+bgp_evpn_install_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                        struct prefix *p, struct bgp_info *ri);
+extern int
+bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                          struct prefix *p, struct bgp_info *ri);
+extern void
+bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw) ;
+extern int
+bgp_evpn_install_routes (struct bgp *bgp, struct bgpevpn *vpn);
+extern int
+bgp_evpn_uninstall_routes (struct bgp *bgp, struct bgpevpn *vpn);
+extern int
+bgp_evpn_handle_export_rt_change (struct bgp *bgp, struct bgpevpn *vpn);
+extern int
+bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
+                          struct ethaddr *mac);
+extern int
+bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
+                          struct ethaddr *mac);
+extern int
+bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip);
+extern int
+bgp_evpn_local_vni_del (struct bgp *bgp, vni_t vni);
+extern void
+bgp_evpn_init (struct bgp *bgp);
+extern void
+bgp_evpn_cleanup_on_disable (struct bgp *bgp);
+extern void
+bgp_evpn_cleanup (struct bgp *bgp);
+
+
+/* UI functions */
+
+extern void
+bgp_evpn_configure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
+                              struct ecommunity *ecomadd);
+extern void
+bgp_evpn_unconfigure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
+                                struct ecommunity *ecomadd);
+extern void
+bgp_evpn_configure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
+                              struct ecommunity *ecomadd);
+extern void
+bgp_evpn_unconfigure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
+                                struct ecommunity *ecomadd);
+extern void
+bgp_evpn_configure_rd (struct bgp *bgp, struct bgpevpn *vpn,
+                       struct prefix_rd *rd);
+extern void
+bgp_evpn_unconfigure_rd (struct bgp *bgp, struct bgpevpn *vpn);
+extern struct bgpevpn *
+bgp_evpn_create_update_vni (struct bgp *bgp, vni_t vni);
+extern int
+bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn);
+extern void
+bgp_config_write_evpn_info (struct vty *vty, struct bgp *bgp, afi_t afi,
+                            safi_t safi, int *write);
+extern void
+bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp);
+extern void
+bgp_evpn_show_vni (struct vty *vty, struct bgp *bgp, vni_t vni);
+extern void
+bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp);
+extern void
+bgp_evpn_set_advertise_vni (struct bgp *bgp);
+extern void
+bgp_evpn_unset_advertise_vni (struct bgp *bgp);
+
 #endif /* _QUAGGA_BGP_EVPN_H */

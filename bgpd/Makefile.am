@@ -76,7 +76,8 @@ libbgp_a_SOURCES = \
 	bgp_dump.c bgp_snmp.c bgp_ecommunity.c bgp_mplsvpn.c bgp_nexthop.c \
 	bgp_damp.c bgp_table.c bgp_advertise.c bgp_vty.c bgp_mpath.c \
         bgp_nht.c bgp_updgrp.c bgp_updgrp_packet.c bgp_updgrp_adv.c bgp_bfd.c \
-	bgp_encap.c bgp_encap_tlv.c bgp_evpn.c bgp_rd.c $(BGP_VNC_RFAPI_SRC)
+	bgp_encap.c bgp_encap_tlv.c bgp_evpn.c bgp_evpn_ui.c bgp_rd.c \
+	$(BGP_VNC_RFAPI_SRC)
 
 noinst_HEADERS = \
 	bgp_memory.h \
