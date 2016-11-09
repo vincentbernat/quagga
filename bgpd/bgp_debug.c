@@ -409,6 +409,9 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
         snprintf (buf + strlen (buf), size - strlen (buf), "(%s)",
                   inet_ntop (AF_INET6, &attr->extra->mp_nexthop_local, 
                              addrbuf, BUFSIZ));
+
+      if (attr->extra->mp_nexthop_len == BGP_ATTR_NHLEN_IPV4)
+        snprintf (buf, size, "nexthop %s", inet_ntoa (attr->nexthop));
     }
 #endif /* HAVE_IPV6 */
 
