@@ -222,13 +222,13 @@ vty_out_cpu_thread_history(struct vty* vty,
 			   struct cpu_thread_history *a)
 {
 #ifdef HAVE_RUSAGE
-  vty_out(vty, "%10ld.%03ld %9d %8ld %9ld %8ld %9ld",
-	  a->cpu.total/1000, a->cpu.total%1000, a->total_calls,
+  vty_out(vty, "%5d %10ld.%03ld %9d %8ld %9ld %8ld %9ld",
+	  a->total_active, a->cpu.total/1000, a->cpu.total%1000, a->total_calls,
 	  a->cpu.total/a->total_calls, a->cpu.max,
 	  a->real.total/a->total_calls, a->real.max);
 #else
-  vty_out(vty, "%10ld.%03ld %9d %8ld %9ld",
-	  a->real.total/1000, a->real.total%1000, a->total_calls,
+  vty_out(vty, "%5d %10ld.%03ld %9d %8ld %9ld",
+	  a->total_active, a->real.total/1000, a->real.total%1000, a->total_calls,
 	  a->real.total/a->total_calls, a->real.max);
 #endif
   vty_out(vty, " %c%c%c%c%c%c %s%s",
@@ -253,6 +253,7 @@ cpu_record_hash_print(struct hash_backet *bucket,
   if ( !(a->types & *filter) )
        return;
   vty_out_cpu_thread_history(vty,a);
+  totals->total_active += a->total_active;
   totals->total_calls += a->total_calls;
   totals->real.total += a->real.total;
   if (totals->real.max < a->real.max)
@@ -278,7 +279,7 @@ cpu_record_print(struct vty *vty, thread_type filter)
   vty_out(vty, "%21s %18s %18s%s",
   	  "", "CPU (user+system):", "Real (wall-clock):", VTY_NEWLINE);
 #endif
-  vty_out(vty, "   Runtime(ms)   Invoked Avg uSec Max uSecs");
+  vty_out(vty, "Active   Runtime(ms)   Invoked Avg uSec Max uSecs");
 #ifdef HAVE_RUSAGE
   vty_out(vty, " Avg uSec Max uSecs");
 #endif
@@ -575,6 +576,7 @@ thread_add_unuse (struct thread_master *m, struct thread *thread)
   assert (thread->prev == NULL);
 
   thread->type = THREAD_UNUSED;
+  thread->hist->total_active--;
   thread_list_add (&m->unuse, thread);
 }
 
@@ -729,6 +731,7 @@ thread_get (struct thread_master *m, u_char type,
       thread->hist = hash_get (cpu_record, &tmp,
 			       (void * (*) (void *))cpu_record_hash_alloc);
     }
+  thread->hist->total_active++;
   thread->func = func;
   thread->funcname = funcname;
   thread->schedfrom = schedfrom;
