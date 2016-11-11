@@ -91,14 +91,9 @@ static int
 zl2if_del (struct interface *ifp)
 {
   struct zebra_if *zif;
-  struct zebra_vrf *zvrf;
 
   zif = ifp->info;
   assert(zif);
-
-  /* Locate VRF corresponding to interface. */
-  zvrf = vrf_info_lookup(ifp->vrf_id);
-  assert(zvrf);
 
   /* Free the L2 interface */
   if (zif->l2if)
@@ -132,15 +127,10 @@ zebra_l2_bridge_add_update (struct interface *ifp,
                             struct zebra_l2if_bridge *zl2if)
 {
   struct zebra_if *zif;
-  struct zebra_vrf *zvrf;
   struct zebra_l2if_bridge *_zl2if;
 
   zif = ifp->info;
   assert(zif);
-
-  /* Locate VRF corresponding to interface. */
-  zvrf = vrf_info_lookup(ifp->vrf_id);
-  assert(zvrf);
 
   /* Allocate/update L2 interface */
   if (!zif->l2if)
@@ -209,15 +199,10 @@ zebra_l2_vlanif_add_update (struct interface *ifp,
                             struct zebra_l2if_vlan *zl2if)
 {
   struct zebra_if *zif;
-  struct zebra_vrf *zvrf;
   struct zebra_l2if_vlan *_zl2if;
 
   zif = ifp->info;
   assert(zif);
-
-  /* Locate VRF corresponding to interface. */
-  zvrf = vrf_info_lookup(ifp->vrf_id);
-  assert(zvrf);
 
   /* Allocate/update L2 interface */
   if (!zif->l2if)
