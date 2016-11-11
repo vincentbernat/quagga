@@ -699,6 +699,8 @@ netlink_request (int family, int type, struct nlsock *nl,
   int ret;
   struct sockaddr_nl snl;
   int save_errno;
+  size_t size;
+  void *ptr = NULL;
 
   struct
   {
@@ -706,6 +708,12 @@ netlink_request (int family, int type, struct nlsock *nl,
     struct ifinfomsg ifm;
     struct rtattr ext_req;
     u_int32_t ext_filter_mask;
+  } reqfilter;
+
+  struct
+  {
+    struct nlmsghdr nlh;
+    struct rtgenmsg g;
   } req;
 
   /* Check netlink socket. */
@@ -719,18 +727,33 @@ netlink_request (int family, int type, struct nlsock *nl,
   snl.nl_family = AF_NETLINK;
 
   memset (&req, 0, sizeof req);
-  req.nlh.nlmsg_len = sizeof req;
-  req.nlh.nlmsg_type = type;
-  req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
-  req.nlh.nlmsg_pid = nl->snl.nl_pid;
-  req.nlh.nlmsg_seq = ++nl->seq;
-  req.ifm.ifi_family = family;
 
-  if (filter_mask)
+  if (!filter_mask)
     {
-      req.ext_req.rta_type = IFLA_EXT_MASK;
-      req.ext_req.rta_len = RTA_LENGTH(sizeof(__u32));
-      req.ext_filter_mask = filter_mask;
+      memset (&req, 0, sizeof req);
+      req.nlh.nlmsg_len = sizeof req;
+      req.nlh.nlmsg_type = type;
+      req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
+      req.nlh.nlmsg_pid = nl->snl.nl_pid;
+      req.nlh.nlmsg_seq = ++nl->seq;
+      req.g.rtgen_family = family;
+      size = sizeof req;
+      ptr = &req;
+    }
+  else
+    {
+      memset (&reqfilter, 0, sizeof reqfilter);
+      reqfilter.nlh.nlmsg_len = sizeof req;
+      reqfilter.nlh.nlmsg_type = type;
+      reqfilter.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
+      reqfilter.nlh.nlmsg_pid = nl->snl.nl_pid;
+      reqfilter.nlh.nlmsg_seq = ++nl->seq;
+      reqfilter.ifm.ifi_family = family;
+      reqfilter.ext_req.rta_type = IFLA_EXT_MASK;
+      reqfilter.ext_req.rta_len = RTA_LENGTH(sizeof(__u32));
+      reqfilter.ext_filter_mask = filter_mask;
+      size = sizeof reqfilter;
+      ptr = &reqfilter;
     }
 
   /* linux appears to check capabilities on every message
@@ -742,7 +765,8 @@ netlink_request (int family, int type, struct nlsock *nl,
       return -1;
     }
 
-  ret = sendto (nl->sock, (void *) &req, sizeof req, 0,
+
+  ret = sendto (nl->sock, ptr, size, 0,
 		(struct sockaddr *) &snl, sizeof snl);
   save_errno = errno;
 
