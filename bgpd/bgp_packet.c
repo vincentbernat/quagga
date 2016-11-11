@@ -1537,7 +1537,7 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
        * indexing later in this function!
        *
        */
-      if(!bgp_afi_safi_valid_indices (nlris[i].afi, &nlris[i].safi))
+      if(!bgp_afi_safi_valid_indices (nlris[i].afi, nlris[i].safi))
         {
           zlog_info ("%s [Info] UPDATE with unsupported AFI/SAFI %u/%u",
                      peer->host, nlris[i].afi, nlris[i].safi);
@@ -1604,7 +1604,7 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
       else if (attr.flag & ATTR_FLAG_BIT (BGP_ATTR_MP_UNREACH_NLRI)
                && nlris[NLRI_MP_WITHDRAW].length == 0
                && bgp_afi_safi_valid_indices (nlris[NLRI_MP_WITHDRAW].afi,
-                                              &nlris[NLRI_MP_WITHDRAW].safi))
+                                              nlris[NLRI_MP_WITHDRAW].safi))
         {
           afi = nlris[NLRI_MP_WITHDRAW].afi;
           safi = nlris[NLRI_MP_WITHDRAW].safi;
