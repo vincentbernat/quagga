@@ -552,7 +552,10 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
   if (mroute)
     m = mroute;
   else
-    m = &mr;
+    {
+      memset (&mr, 0, sizeof (mr));
+      m = &mr;
+    }
 
   rtm = NLMSG_DATA (h);
 
