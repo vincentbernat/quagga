@@ -61,7 +61,8 @@ map_slaves_to_bridge (struct interface *br_if, int link)
         {
           struct zebra_l2info_brslave *br_slave;
 
-          if (!ifp->info)
+          if (ifp->ifindex == IFINDEX_INTERNAL ||
+              !ifp->info)
             continue;
           if (!IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
             continue;
@@ -101,6 +102,10 @@ zl2if_del (struct interface *ifp)
       XFREE (MTYPE_ZEBRA_L2IF, zif->l2if);
       zif->l2if = NULL;
     }
+
+  /* Reset some zebra interface params to default values. */
+  zif->zif_type = ZEBRA_IF_OTHER;
+  zif->zif_slave_type = ZEBRA_IF_SLAVE_NONE;
 
   return 0;
 }
