@@ -839,6 +839,27 @@ withdraw_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
 }
 
 /*
+ * There is a tunnel endpoint IP address change for this VNI,
+ * need to re-advertise routes with the new nexthop.
+ */
+static int
+handle_tunnel_ip_change (struct bgp *bgp, struct bgpevpn *vpn,
+                         struct in_addr originator_ip)
+{
+  struct prefix_evpn p;
+
+  /* Need to withdraw type-3 route as the originator IP is part
+   * of the key.
+   */
+  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  delete_evpn_route (bgp, vpn, &p);
+
+  /* Update the tunnel IP and re-advertise all routes for this VNI. */
+  vpn->originator_ip = originator_ip;
+  return update_routes_for_vni (bgp, vpn);
+}
+
+/*
  * Given a route entry and a VNI, see if this route entry should be
  * imported into the VNI i.e., RTs match.
  */
@@ -1777,7 +1798,6 @@ int
 bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
 {
   struct bgpevpn *vpn;
-  int local_ip_change = 0;
   struct prefix_evpn p;
 
   if (!bgp->vnihash)
@@ -1800,7 +1820,9 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
       if (IPV4_ADDR_SAME (&vpn->originator_ip, &originator_ip))
         /* Probably some other param has changed that we don't care about. */
         return 0;
-      local_ip_change = 1;
+
+      /* Local tunnel endpoint IP address has changed */
+      return handle_tunnel_ip_change (bgp, vpn, originator_ip);
     }
 
   /* Create or update as appropriate. */
@@ -1814,20 +1836,6 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
           return -1;
         }
     }
-  else
-    {
-      /* If VNI is "live", withdraw route from peer */
-      if (local_ip_change)
-        {
-          /* Need to withdraw (and subsequently re-advertise) type-3 route
-           * as the originator IP is part of the key.
-           */
-          build_evpn_type3_prefix (&p, vpn->originator_ip);
-          delete_evpn_route (bgp, vpn, &p);
-        }
-
-      vpn->originator_ip = originator_ip;
-    }
 
   /* Mark as "live" */
   SET_FLAG (vpn->flags, VNI_FLAG_LIVE);
@@ -1839,14 +1847,6 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
       zlog_err ("%u: Type3 route creation failure for VNI %u",
                 bgp->vrf_id, vni);
       return -1;
-    }
-
-  /* If there is a VTEP local IP change, we would need to re-advertise
-   * locally learnt MACs (as this field will be the next hop).
-   */
-  if (local_ip_change)
-    {
-      /* TODO */
     }
 
   /* If we have learnt and retained remote routes (VTEPs, MACs) for this VNI,
