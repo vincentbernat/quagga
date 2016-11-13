@@ -803,8 +803,8 @@ update_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
 
   if (!vpn)
     {
-      zlog_warn ("%s: VNI hash entry for VNI %u not found",
-                 __FUNCTION__, vpn->vni);
+      zlog_warn ("%s: VNI hash entry for VNI not found",
+                 __FUNCTION__);
       return;
     }
 
@@ -828,8 +828,8 @@ withdraw_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
 
   if (!vpn)
     {
-      zlog_warn ("%s: VNI hash entry for VNI %u not found",
-                 __FUNCTION__, vpn->vni);
+      zlog_warn ("%s: VNI hash entry for VNI not found",
+                 __FUNCTION__);
       return;
     }
 
@@ -1204,9 +1204,9 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
         p.prefix.ipa_type = IP_ADDR_V6;
       memcpy (&p.prefix.ip, pfx, ipaddr_len);
     }
+#if 0
   pfx += ipaddr_len;
 
-#if 0
   /* Get the VNI */
   vni = *pfx;
 #endif
