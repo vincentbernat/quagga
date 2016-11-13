@@ -585,7 +585,7 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 {
   afi_t afi;
   safi_t safi;
-  struct bgp_node *rn;
+  struct bgp_node *rdrn, *rn;
   struct bgp_table *table;
   struct bgp_info *ri;
   struct attr attr;
@@ -606,17 +606,17 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 
   /* TODO: We're walking entire table for this VNI, this should be optimized later. */
   /* EVPN routes are a 2-level table, first get the RD table. */
-  rn = bgp_node_lookup (bgp->rib[afi][safi], (struct prefix *) &vpn->prd);
-  if (!rn)
+  rdrn = bgp_node_lookup (bgp->rib[afi][safi], (struct prefix *) &vpn->prd);
+  if (!rdrn)
     return -1;
 
-  if (rn->info == NULL)
+  if (rdrn->info == NULL)
     {
-      bgp_unlock_node (rn);
+      bgp_unlock_node (rdrn);
       return -1;
     }
 
-  table = (struct bgp_table *)rn->info;
+  table = (struct bgp_table *)rdrn->info;
   for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
     {
       struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
@@ -640,13 +640,6 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
             {
               /* Unintern newly created. */
               bgp_attr_unintern (&attr_new);
-
-              /* Unintern temporary. */
-              aspath_unintern (&attr.aspath);
-              bgp_attr_extra_free (&attr);
-
-              /* unlock - for the lookup */
-              bgp_unlock_node (rn);
             }
           else
             {
@@ -662,9 +655,6 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
               ri->attr = attr_new;
               ri->uptime = bgp_clock ();
 
-              /* unlock - for the lookup */
-              bgp_unlock_node (rn);
-
               /* Schedule for processing. */
               bgp_process (bgp, rn, afi, safi);
             }
@@ -674,6 +664,9 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
   /* Unintern temporary. */
   aspath_unintern (&attr.aspath);
   bgp_attr_extra_free (&attr);
+
+  /* unlock - for the lookup */
+  bgp_unlock_node (rdrn);
 
   return 0;
 }
@@ -687,7 +680,7 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 {
   afi_t afi;
   safi_t safi;
-  struct bgp_node *rn;
+  struct bgp_node *rdrn, *rn;
   struct bgp_table *table;
   struct bgp_info *ri;
 
@@ -696,17 +689,17 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 
   /* TODO: We're walking entire table for this VNI, this should be optimized later. */
   /* EVPN routes are a 2-level table, first get the RD table. */
-  rn = bgp_node_lookup (bgp->rib[afi][safi], (struct prefix *) &vpn->prd);
-  if (!rn)
+  rdrn = bgp_node_lookup (bgp->rib[afi][safi], (struct prefix *) &vpn->prd);
+  if (!rdrn)
     return -1;
 
-  if (rn->info == NULL)
+  if (rdrn->info == NULL)
     {
-      bgp_unlock_node (rn);
+      bgp_unlock_node (rdrn);
       return -1;
     }
 
-  table = (struct bgp_table *)rn->info;
+  table = (struct bgp_table *)rdrn->info;
   for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
     {
       struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
@@ -726,10 +719,10 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
           bgp_info_delete (rn, ri);
           bgp_process (bgp, rn, afi, safi);
         }
-
-      /* unlock - for the lookup */
-      bgp_unlock_node (rn);
     }
+
+  /* unlock - for the lookup */
+  bgp_unlock_node (rdrn);
 
   return 0;
 }
