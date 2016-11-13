@@ -796,11 +796,11 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
    * be 0 and would always win over the other path. If originator id is
    * used for the comparision, it will decide which path is better.
    */
-  if (newattr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
+  if (newattr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID) && newattre)
     new_id.s_addr = newattre->originator_id.s_addr;
   else
     new_id.s_addr = new->peer->remote_id.s_addr;
-  if (existattr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
+  if (existattr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID) && existattre)
     exist_id.s_addr = existattre->originator_id.s_addr;
   else
     exist_id.s_addr = exist->peer->remote_id.s_addr;

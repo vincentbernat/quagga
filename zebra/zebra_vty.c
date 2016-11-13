@@ -3670,7 +3670,7 @@ DEFUN (show_ip_route_vrf_all_summary_prefix,
 
 /* Write IPv4 static route configuration. */
 static int
-static_config_ipv4 (struct vty *vty, safi_t safi, const char *cmd)
+static_config (struct vty *vty, afi_t afi, safi_t safi, const char *cmd)
 {
   struct route_node *rn;
   struct static_route *si;
@@ -3682,7 +3682,7 @@ static_config_ipv4 (struct vty *vty, safi_t safi, const char *cmd)
 
   for (ALL_LIST_ELEMENTS_RO (zvrf_list, node, zvrf))
     {
-      if ((stable = zvrf->stable[AFI_IP][safi]) == NULL)
+      if ((stable = zvrf->stable[afi][safi]) == NULL)
         continue;
 
       for (rn = route_top (stable); rn; rn = route_next (rn))
@@ -3701,6 +3701,14 @@ static_config_ipv4 (struct vty *vty, safi_t safi, const char *cmd)
               case STATIC_BLACKHOLE:
                 vty_out (vty, " Null0");
                 break;
+	      case STATIC_IPV6_GATEWAY:
+		vty_out (vty, " %s", inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ));
+		break;
+	      case STATIC_IPV6_GATEWAY_IFINDEX:
+		vty_out (vty, " %s %s",
+			 inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ),
+			 ifindex2ifname_vrf (si->ifindex, si->vrf_id));
+		break;
               }
 
             /* flags are incompatible with STATIC_BLACKHOLE */
@@ -5775,80 +5783,6 @@ DEFUN (show_ipv6_route_vrf_all_summary_prefix,
   return CMD_SUCCESS;
 }
 
-/* Write IPv6 static route configuration. */
-static int
-static_config_ipv6 (struct vty *vty)
-{
-  struct route_node *rn;
-  struct static_route *si;
-  int write = 0;
-  char buf[PREFIX_STRLEN];
-  struct route_table *stable;
-  struct zebra_vrf *zvrf;
-  struct listnode *node;
-
-  for (ALL_LIST_ELEMENTS_RO (zvrf_list, node, zvrf))
-    {
-      if ((stable = zvrf->stable[AFI_IP6][SAFI_UNICAST]) == NULL)
-        continue;
-
-      for (rn = route_top (stable); rn; rn = route_next (rn))
-        for (si = rn->info; si; si = si->next)
-          {
-            vty_out (vty, "ipv6 route %s", prefix2str (&rn->p, buf, sizeof buf));
-
-	    switch (si->type)
-	      {
-	      case STATIC_IPV6_GATEWAY:
-		vty_out (vty, " %s", inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ));
-		break;
-	      case STATIC_IFINDEX:
-		vty_out (vty, " %s", si->ifname);
-		break;
-	      case STATIC_BLACKHOLE:
-		vty_out (vty, " Null0" );
-		break;
-	      case STATIC_IPV6_GATEWAY_IFINDEX:
-		vty_out (vty, " %s %s",
-			 inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ),
-			 ifindex2ifname_vrf (si->ifindex, si->vrf_id));
-		break;
-	      }
-
-            /* flags are incompatible with STATIC_BLACKHOLE */
-            if (si->type != STATIC_BLACKHOLE)
-              {
-                if (CHECK_FLAG(si->flags, ZEBRA_FLAG_REJECT))
-                  vty_out (vty, " %s", "reject");
-                if (CHECK_FLAG(si->flags, ZEBRA_FLAG_BLACKHOLE))
-                  vty_out (vty, " %s", "blackhole");
-              }
-
-            if (si->tag)
-              vty_out (vty, " tag %"ROUTE_TAG_PRI, si->tag);
-
-            if (si->distance != ZEBRA_STATIC_DISTANCE_DEFAULT)
-              vty_out (vty, " %d", si->distance);
-
-            if (si->vrf_id != VRF_DEFAULT)
-              {
-                vty_out (vty, " vrf %s", zvrf->name);
-              }
-
-            /* Label information */
-            if (si->snh_label.num_labels)
-              vty_out (vty, " label %s",
-                       mpls_label2str (si->snh_label.num_labels,
-                                       si->snh_label.label, buf, sizeof buf));
-
-            vty_out (vty, "%s", VTY_NEWLINE);
-
-            write = 1;
-          }
-    }
-  return write;
-}
-
 DEFUN (allow_external_route_update,
        allow_external_route_update_cmd,
        "allow-external-route-update",
@@ -5951,11 +5885,9 @@ zebra_ip_config (struct vty *vty)
 {
   int write = 0;
 
-  write += static_config_ipv4 (vty, SAFI_UNICAST, "ip route");
-  write += static_config_ipv4 (vty, SAFI_MULTICAST, "ip mroute");
-#ifdef HAVE_IPV6
-  write += static_config_ipv6 (vty);
-#endif /* HAVE_IPV6 */
+  write += static_config (vty, AFI_IP, SAFI_UNICAST, "ip route");
+  write += static_config (vty, AFI_IP, SAFI_MULTICAST, "ip mroute");
+  write += static_config (vty, AFI_IP6, SAFI_UNICAST, "ipv6 route");
 
   write += zebra_import_table_config (vty);
   return write;
