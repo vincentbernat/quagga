@@ -529,8 +529,6 @@ ospf6_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
   vty_out (vty, "Duration: %s%s", duration, VNL);
 
   handler = ospf6_get_lsa_handler (lsa->header->type);
-  if (handler->show == NULL)
-    handler = &unknown_handler;
   (*handler->show) (vty, lsa);
 
   vty_out (vty, "%s", VNL);
