@@ -321,7 +321,7 @@ pim_mroute_msg_wrvifwhole (int fd, struct interface *ifp, const char *buf)
   struct pim_interface *pim_ifp;
   struct pim_ifchannel *ch;
   struct pim_upstream *up;
-  struct prefix_sg star_g;
+  //struct prefix_sg star_g;
   struct prefix_sg sg;
   struct channel_oil *oil;
 
