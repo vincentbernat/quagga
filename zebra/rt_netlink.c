@@ -746,6 +746,10 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   if (!ifp->info)
     return 0;
 
+  /* Drop "permanent" entries. */
+  if (ndm->ndm_state & NUD_PERMANENT)
+    return 0;
+
   zif = (struct zebra_if *)ifp->info;
   br_slave = (struct zebra_l2info_brslave *)zif->l2if;
   assert (br_slave);
