@@ -128,11 +128,14 @@ ospf_if_drop_alldrouters (struct ospf *top, struct prefix *p, ifindex_t ifindex)
 }
 
 int
-ospf_if_ipmulticast (struct ospf *top, struct prefix *p, ifindex_t ifindex)
+ospf_if_ipmulticast (struct ospf *top, struct ospf_interface *oi)
 {
   u_char val;
   int ret, len;
-  
+
+  if (oi->if_multicast)
+    return 0;
+
   val = 0;
   len = sizeof (val);
   
@@ -149,12 +152,16 @@ ospf_if_ipmulticast (struct ospf *top, struct prefix *p, ifindex_t ifindex)
     zlog_warn ("can't setsockopt IP_MULTICAST_TTL(1) for fd %d: %s",
 	       top->fd, safe_strerror (errno));
 
-  ret = setsockopt_ipv4_multicast_if (top->fd, p->u.prefix4, ifindex);
+  ret = setsockopt_ipv4_multicast_if (top->fd,
+				      oi->address->u.prefix4,
+				      oi->ifp->ifindex);
   if (ret < 0)
     zlog_warn("can't setsockopt IP_MULTICAST_IF(fd %d, addr %s, "
 	      "ifindex %u): %s",
-	      top->fd, inet_ntoa(p->u.prefix4), ifindex, safe_strerror(errno));
+	      top->fd, inet_ntoa(oi->address->u.prefix4),
+	      oi->ifp->ifindex, safe_strerror(errno));
 
+  oi->if_multicast = 1;
   return ret;
 }
 

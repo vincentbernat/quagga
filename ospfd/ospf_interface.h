@@ -138,6 +138,10 @@ struct ospf_interface
 
   /* Interface data from zebra. */
   struct interface *ifp;
+
+  /* Let's not set multicast data a billion times */
+  int if_multicast;
+
   struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
   
   /* Packet send buffer. */
