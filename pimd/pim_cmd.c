@@ -3516,6 +3516,30 @@ DEFUN (no_ip_pim_keep_alive,
   return CMD_SUCCESS;
 }
 
+DEFUN (ip_pim_packets,
+       ip_pim_packets_cmd,
+       "ip pim packets <1-100>",
+       IP_STR
+       "pim multicast routing\n"
+       "Number of packets to process at one time per fd\n")
+{
+  VTY_GET_INTEGER_RANGE ("packets", qpim_packet_process,
+			 argv[0], 1, 100);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_pim_packets,
+       no_ip_pim_packets_cmd,
+       "no ip pim packets <1-100>",
+       NO_STR
+       IP_STR
+       "pim multicast routing\n"
+       "Number of packets to process at one time per fd\n")
+{
+  qpim_packet_process = PIM_DEFAULT_PACKET_PROCESS;
+  return CMD_SUCCESS;
+}
+
 DEFUN (ip_pim_rp,
        ip_pim_rp_cmd,
        "ip pim rp A.B.C.D",
@@ -6225,6 +6249,8 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &no_ip_pim_register_suppress_cmd);
   install_element (CONFIG_NODE, &ip_pim_keep_alive_cmd);
   install_element (CONFIG_NODE, &no_ip_pim_keep_alive_cmd);
+  install_element (CONFIG_NODE, &ip_pim_packets_cmd);
+  install_element (CONFIG_NODE, &no_ip_pim_packets_cmd);
   install_element (CONFIG_NODE, &ip_ssmpingd_cmd);
   install_element (CONFIG_NODE, &no_ip_ssmpingd_cmd); 
   install_element (CONFIG_NODE, &pim_interface_cmd);
