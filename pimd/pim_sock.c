@@ -112,6 +112,7 @@ pim_socket_bind (int fd, struct interface *ifp)
 
 int pim_socket_mcast(int protocol, struct in_addr ifaddr, int ifindex, int loop)
 {
+  int rcvbuf = 1024 * 1024 * 8;
   struct ip_mreqn mreq;
   int fd;
 
@@ -224,6 +225,10 @@ int pim_socket_mcast(int protocol, struct in_addr ifaddr, int ifindex, int loop)
     close(fd);
     return PIM_SOCK_ERR_IFACE;
   }
+
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)))
+      zlog_warn("%s: Failure to set buffer size to %d",
+		__PRETTY_FUNCTION__, rcvbuf);
 
   {
     long flags;
