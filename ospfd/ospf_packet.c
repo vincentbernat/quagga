@@ -706,7 +706,7 @@ ospf_write (struct thread *thread)
 
       if (op->dst.s_addr == htonl (OSPF_ALLSPFROUTERS)
           || op->dst.s_addr == htonl (OSPF_ALLDROUTERS))
-          ospf_if_ipmulticast (ospf, oi);
+          ospf_if_ipmulticast (ospf, oi->address, oi->ifp->ifindex);
 
       /* Rewrite the md5 signature & update the seq */
       ospf_make_md5_digest (oi, op);
