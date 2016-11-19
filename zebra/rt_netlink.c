@@ -712,6 +712,7 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   struct ndmsg *ndm;
   struct interface *ifp;
   struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
   struct rtattr *tb[NDA_MAX + 1];
   struct zebra_l2info_brslave *br_slave;
   struct interface *br_if;
@@ -735,6 +736,13 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   /* The interface should exist. */
   ifp = if_lookup_by_index_per_ns (zebra_ns_lookup (NS_DEFAULT), ndm->ndm_ifindex);
   if (!ifp)
+    return 0;
+
+  /* Locate VRF corresponding to interface. We only process MAC notifications
+   * if EVPN is enabled on this VRF.
+   */
+  zvrf = vrf_info_lookup(ifp->vrf_id);
+  if (!zvrf || !EVPN_ENABLED(zvrf))
     return 0;
 
   /* The interface should be something we're interested in. */
@@ -813,7 +821,7 @@ netlink_neigh_read (struct zebra_ns *zns)
 {
   int ret;
 
-  /* Get IPv4 routing table. */
+  /* Get bridge FDB table. */
   ret = netlink_request (AF_BRIDGE, RTM_GETNEIGH, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;

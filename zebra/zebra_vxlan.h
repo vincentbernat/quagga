@@ -32,6 +32,9 @@
 #include "zebra/interface.h"
 #include "zebra/zebra_vrf.h"
 
+/* Is EVPN enabled? */
+#define EVPN_ENABLED(zvrf)  (zvrf)->advertise_vni
+
 extern int zebra_vxlan_if_up (struct interface *ifp);
 extern int zebra_vxlan_if_down (struct interface *ifp);
 extern int zebra_vxlan_if_add_update (struct interface *ifp,

@@ -68,7 +68,6 @@ zebra_ns_enable (ns_id_t ns_id, void **info)
   kernel_init (zns);
   interface_list (zns);
   route_read (zns);
-  neigh_read (zns);
 
   return 0;
 }

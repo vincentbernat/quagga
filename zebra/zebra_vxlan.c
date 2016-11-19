@@ -206,9 +206,7 @@ zvni_send_add_to_client (struct zebra_vrf *zvrf, zebra_vni_t *zvni);
 static int
 zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni);
 static void
-zvni_propagate_this_vni_info (struct hash_backet *backet, void *ctxt);
-static void
-zvni_propagate_vni_info (struct zebra_vrf *zvrf);
+zvni_build_hash_table (struct zebra_vrf *zvrf);
 static int
 zvni_vtep_match (struct prefix *vtep, zebra_vtep_t *zvtep);
 static zebra_vtep_t *
@@ -744,36 +742,60 @@ zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni)
 }
 
 /*
- * Propagate a VNI and its info (MACIP) to client.
+ * Build the VNI hash table by going over the VxLAN interfaces. This
+ * is called when EVPN (advertise-vni) is enabled.
  */
 static void
-zvni_propagate_this_vni_info (struct hash_backet *backet, void *ctxt)
+zvni_build_hash_table (struct zebra_vrf *zvrf)
 {
-  zebra_vni_t *zvni;
-  struct zebra_vrf *zvrf;
+  struct listnode *node;
   struct interface *ifp;
 
-  zvni = (zebra_vni_t *) backet->data;
-  zvrf = (struct zebra_vrf *)ctxt;
-  ifp = zvni->vxlan_if;
-
-  /* Propagate only if interface is up. */
-  if (ifp && if_is_operative (ifp))
+  /* Walk VxLAN interfaces and create VNI hash. */
+  for (ALL_LIST_ELEMENTS_RO (vrf_iflist (zvrf->vrf_id), node, ifp))
     {
-      zvni_send_add_to_client (zvrf, zvni);
+      struct zebra_if *zif;
+      struct zebra_l2if_vxlan *zl2if;
+      zebra_vni_t *zvni;
+      vni_t vni;
 
-      /* If any local MACs learnt, inform BGP. */
-      zvni_macip_adv_all (zvrf, zvni);
+      zif = ifp->info;
+      if (!zif || zif->zif_type != ZEBRA_IF_VXLAN)
+        continue;
+      zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+      assert (zl2if);
+
+      vni = zl2if->vni;
+
+      if (IS_ZEBRA_DEBUG_VXLAN)
+        zlog_debug ("%u:Create VNI hash for intf %s(%u) VNI %u local IP %s",
+                    zvrf->vrf_id, ifp->name, ifp->ifindex, vni,
+                    inet_ntoa (zl2if->vtep_ip));
+
+      /* VNI hash entry is not expected to exist. */
+      zvni = zvni_lookup (zvrf, vni);
+      if (zvni)
+        {
+          zlog_err ("VNI hash already present for VRF %d IF %s(%u) VNI %u",
+                    zvrf->vrf_id, ifp->name, ifp->ifindex, vni);
+          continue;
+        }
+
+      zvni = zvni_add (zvrf, vni);
+      if (!zvni)
+        {
+          zlog_err ("Failed to add VNI hash, VRF %d IF %s(%u) VNI %u",
+                    zvrf->vrf_id, ifp->name, ifp->ifindex, vni);
+          return;
+        }
+
+      zvni->local_vtep_ip = zl2if->vtep_ip;
+      zvni->vxlan_if = ifp;
+
+      /* Inform BGP if interface is up. */
+      if (if_is_operative (ifp))
+        zvni_send_add_to_client (zvrf, zvni);
     }
-}
-
-/*
- * Propagate all known VNIs and related info (MACIP) to client.
- */
-static void
-zvni_propagate_vni_info (struct zebra_vrf *zvrf)
-{
-  hash_iterate(zvrf->vni_table, zvni_propagate_this_vni_info, (void *)zvrf);
 }
 
 /*
@@ -1080,6 +1102,9 @@ zebra_vxlan_if_up (struct interface *ifp)
   zvrf = vrf_info_lookup(ifp->vrf_id);
   assert(zvrf);
 
+  if (!EVPN_ENABLED(zvrf))
+    return 0;
+
   vni = VNI_FROM_ZEBRA_IF (zif);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
@@ -1097,10 +1122,7 @@ zebra_vxlan_if_up (struct interface *ifp)
 
   assert (zvni->vxlan_if == ifp);
 
-  /* Inform BGP if required. */
-  if (!zvrf->advertise_vni)
-    return 0;
-
+  /* Inform BGP about this VNI. */
   zvni_send_add_to_client (zvrf, zvni);
 
   /* If any local MACs learnt, inform BGP. */
@@ -1128,6 +1150,9 @@ zebra_vxlan_if_down (struct interface *ifp)
   zvrf = vrf_info_lookup(ifp->vrf_id);
   assert(zvrf);
 
+  if (!EVPN_ENABLED(zvrf))
+    return 0;
+
   vni = VNI_FROM_ZEBRA_IF (zif);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
@@ -1145,9 +1170,8 @@ zebra_vxlan_if_down (struct interface *ifp)
 
   assert (zvni->vxlan_if == ifp);
 
-  /* Inform BGP if required. */
-  if (zvrf->advertise_vni)
-    zvni_send_del_to_client (zvrf, zvni->vni);
+  /* Delete this VNI from BGP. */
+  zvni_send_del_to_client (zvrf, zvni->vni);
 
   /* Free up all MAC-IPs, if any. */
   zvni_macip_del_all (zvni, 1, DEL_REMOTE_MAC);
@@ -1206,6 +1230,10 @@ zebra_vxlan_if_add_update (struct interface *ifp,
   if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
     zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
 
+  /* If EVPN is not enabled, nothing further to be done. */
+  if (!EVPN_ENABLED(zvrf))
+    return 0;
+
   /* If hash entry exists and no change to VTEP IP, we're done. */
   zvni = zvni_lookup (zvrf, vni);
   if (zvni && IPV4_ADDR_SAME(&zvni->local_vtep_ip, &zl2if->vtep_ip))
@@ -1225,15 +1253,10 @@ zebra_vxlan_if_add_update (struct interface *ifp,
   zvni->local_vtep_ip = zl2if->vtep_ip;
   zvni->vxlan_if = ifp;
 
-  /* Done if interface is not up. */
-  if (!if_is_operative (ifp))
-    return 0;
+  /* Inform BGP if interface is up. */
+  if (if_is_operative (ifp))
+    zvni_send_add_to_client (zvrf, zvni);
 
-  /* Inform BGP if required. */
-  if (!zvrf->advertise_vni)
-    return 0;
-
-  zvni_send_add_to_client (zvrf, zvni);
   return 0;
 }
 
@@ -1260,6 +1283,14 @@ zebra_vxlan_if_del (struct interface *ifp)
   zvrf = vrf_info_lookup(ifp->vrf_id);
   assert(zvrf);
 
+  /* If EVPN is not enabled, just need to free the L2 interface. */
+  if (!EVPN_ENABLED(zvrf))
+    {
+      XFREE (MTYPE_ZEBRA_L2IF, _zl2if);
+      zif->l2if = NULL;
+      return 0;
+    }
+
   if (IS_ZEBRA_DEBUG_VXLAN)
     zlog_debug ("%u:Del intf %s(%u) VNI %u",
                 ifp->vrf_id, ifp->name, ifp->ifindex, vni);
@@ -1273,9 +1304,8 @@ zebra_vxlan_if_del (struct interface *ifp)
       return 0;
     }
 
-  /* Inform BGP if required. */
-  if (zvrf->advertise_vni)
-    zvni_send_del_to_client (zvrf, zvni->vni);
+  /* Delete VNI from BGP. */
+  zvni_send_del_to_client (zvrf, zvni->vni);
 
   /* Free up all MAC-IPs, if any. */
   zvni_macip_del_all (zvni, 0, DEL_ALL_MAC);
@@ -1336,6 +1366,8 @@ int zebra_vxlan_remote_vtep_add (struct zserv *client, int sock,
   struct prefix vtep;
   zebra_vni_t *zvni;
   char pbuf[PREFIX2STR_BUFFER];
+
+  assert (EVPN_ENABLED (zvrf));
 
   s = client->ibuf;
 
@@ -1421,6 +1453,8 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
   zebra_vtep_t *zvtep;
   char pbuf[PREFIX2STR_BUFFER];
 
+  assert (EVPN_ENABLED (zvrf));
+
   s = client->ibuf;
 
   while (l < length)
@@ -1479,12 +1513,10 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
 }
 
 /*
- * Handle message from client to learn (or stop learning) about VNIs.
- * Note: This setting is similar to 'redistribute <proto>' and only
- * controls VNI propagation from zebra to client (bgpd). When enabled,
- * any existing VNIs need to be informed to the client; when disabled,
- * it is sufficient to note the state, the client is expected to do
- * its own internal cleanup.
+ * Handle message from client to learn (or stop learning) about VNIs and MACs.
+ * When enabled, the VNI hash table will be built and MAC FDB table read;
+ * when disabled, the entries should be deleted and remote VTEPs and MACs
+ * uninstalled from the kernel.
  */
 int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
                                u_short length, struct zebra_vrf *zvrf)
@@ -1496,15 +1528,37 @@ int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
   advertise = stream_getc (s);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:Recv ADVERTISE_VNI %s",
-                zvrf->vrf_id, advertise ? "enable" : "disable");
+    zlog_debug ("%u:EVPN (advertise-vni) %s, currently %s",
+                zvrf->vrf_id, advertise ? "enabled" : "disabled",
+                EVPN_ENABLED(zvrf) ? "enabled" : "disabled");
 
+  if (zvrf->advertise_vni == advertise)
+    return 0;
+
+  zvrf->advertise_vni = advertise;
+  if (EVPN_ENABLED(zvrf))
+    {
+      /* Build VNI hash table and inform BGP. */
+      zvni_build_hash_table (zvrf);
+
+      /* Read the MAC FDB */
+      neigh_read (zvrf->zns);
+    }
+  else
+    {
+      /* Cleanup MACs and VTEPs for all VNIs - uninstall from kernel and
+       * free entries.
+       */
+      hash_iterate (zvrf->vni_table, zvni_cleanup_all, zvrf);
+    }
+
+#if 0
   if (zvrf->advertise_vni != advertise)
     {
-      zvrf->advertise_vni = advertise;
       if (zvrf->advertise_vni)
         zvni_propagate_vni_info (zvrf);
     }
+#endif
 
   return 0;
 }
@@ -1574,7 +1628,7 @@ zebra_vxlan_local_mac_add_update (struct interface *ifp, struct interface *br_if
   /* Inform BGP if required. */
   if (add)
     {
-      if (if_is_operative (zvni->vxlan_if) && zvrf->advertise_vni)
+      if (if_is_operative (zvni->vxlan_if))
         return zvni_macip_send_add_to_client (zvrf, zvni->vni, mac);
     }
 
@@ -1620,9 +1674,8 @@ zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
   zvrf = vrf_info_lookup(zvni->vxlan_if->vrf_id);
   assert(zvrf);
 
-  /* Inform BGP if required. */
-  if (zvrf->advertise_vni)
-    zvni_macip_send_del_to_client (zvrf, zvni->vni, mac);
+  /* Remove MAC from BGP. */
+  zvni_macip_send_del_to_client (zvrf, zvni->vni, mac);
 
   /* Delete this MAC-IP entry. */
   zvni_macip_del (zvni, macip);
@@ -1646,6 +1699,8 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
   zebra_macip_t *macip;
   u_short l = 0;
   char buf[MACADDR_STRLEN];
+
+  assert (EVPN_ENABLED (zvrf));
 
   s = client->ibuf;
 
@@ -1757,6 +1812,8 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
   u_short l = 0;
   char buf[MACADDR_STRLEN];
 
+  assert (EVPN_ENABLED (zvrf));
+
   s = client->ibuf;
 
   while (l < length)
@@ -1830,6 +1887,11 @@ zebra_vxlan_print_vni_macs (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
   zebra_vni_t *zvni;
 
+  if (!EVPN_ENABLED(zvrf))
+    {
+      vty_out (vty, "%% EVPN is not enabled%s", VTY_NEWLINE);
+      return;
+    }
   zvni = zvni_lookup (zvrf, vni);
   if (!zvni)
     {
@@ -1848,6 +1910,11 @@ zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
   zebra_vni_t *zvni;
 
+  if (!EVPN_ENABLED(zvrf))
+    {
+      vty_out (vty, "%% EVPN is not enabled%s", VTY_NEWLINE);
+      return;
+    }
   zvni = zvni_lookup (zvrf, vni);
   if (!zvni)
     {
@@ -1863,6 +1930,11 @@ zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 void
 zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
 {
+  if (!EVPN_ENABLED(zvrf))
+    {
+      vty_out (vty, "%% EVPN is not enabled%s", VTY_NEWLINE);
+      return;
+    }
   hash_iterate(zvrf->vni_table, zvni_print_hash, vty);
 }
 
