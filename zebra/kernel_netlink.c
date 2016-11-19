@@ -753,7 +753,7 @@ netlink_request (int family, int type, struct nlsock *nl,
   else
     {
       memset (&reqfilter, 0, sizeof reqfilter);
-      reqfilter.nlh.nlmsg_len = sizeof req;
+      reqfilter.nlh.nlmsg_len = sizeof reqfilter;
       reqfilter.nlh.nlmsg_type = type;
       reqfilter.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
       reqfilter.nlh.nlmsg_pid = nl->snl.nl_pid;
