@@ -4985,6 +4985,8 @@ DEFUN (debug_pim,
   PIM_DO_DEBUG_PIM_EVENTS;
   PIM_DO_DEBUG_PIM_PACKETS;
   PIM_DO_DEBUG_PIM_TRACE;
+  PIM_DO_DEBUG_MSDP_EVENTS;
+  PIM_DO_DEBUG_MSDP_PACKETS;
   return CMD_SUCCESS;
 }
 
@@ -4998,6 +5000,8 @@ DEFUN (no_debug_pim,
   PIM_DONT_DEBUG_PIM_EVENTS;
   PIM_DONT_DEBUG_PIM_PACKETS;
   PIM_DONT_DEBUG_PIM_TRACE;
+  PIM_DONT_DEBUG_MSDP_EVENTS;
+  PIM_DONT_DEBUG_MSDP_PACKETS;
 
   PIM_DONT_DEBUG_PIM_PACKETDUMP_SEND;
   PIM_DONT_DEBUG_PIM_PACKETDUMP_RECV;
@@ -5859,7 +5863,7 @@ ip_msdp_show_peers(struct vty *vty, u_char uj)
   if (uj) {
     json = json_object_new_object();
   } else {
-    vty_out(vty, "Peer                       Local        State    Uptime  SaCnt%s", VTY_NEWLINE);
+    vty_out(vty, "Peer                       Local        State    Uptime   SaCnt%s", VTY_NEWLINE);
   }
 
   for (ALL_LIST_ELEMENTS_RO(msdp->peer_list, mpnode, mp)) {
@@ -5881,7 +5885,7 @@ ip_msdp_show_peers(struct vty *vty, u_char uj)
       json_object_int_add(json_row, "saCount", mp->sa_cnt);
       json_object_object_add(json, peer_str, json_row);
     } else {
-      vty_out(vty, "%-15s  %15s  %11s  %8s  %5d%s",
+      vty_out(vty, "%-15s  %15s  %11s  %8s  %6d%s",
           peer_str, local_str, state_str,
           timebuf, mp->sa_cnt, VTY_NEWLINE);
     }
