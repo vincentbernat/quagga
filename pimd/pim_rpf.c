@@ -137,7 +137,7 @@ int pim_nexthop_lookup(struct pim_nexthop *nexthop, struct in_addr addr, int nei
           struct pim_neighbor *nbr;
 
           nbr = pim_neighbor_find (ifp, nexthop_tab[i].nexthop_addr.u.prefix4);
-          if (PIM_DEBUG_ZEBRA)
+          if (PIM_DEBUG_PIM_TRACE_DETAIL)
             zlog_debug ("ifp name: %s, pim nbr: %p", ifp->name, nbr);
           if (!nbr && !if_is_loopback (ifp))
             i++;
@@ -153,20 +153,20 @@ int pim_nexthop_lookup(struct pim_nexthop *nexthop, struct in_addr addr, int nei
       if (PIM_DEBUG_ZEBRA) {
         char nexthop_str[PREFIX_STRLEN];
         char addr_str[INET_ADDRSTRLEN];
-        pim_addr_dump("<nexthop?>", &nexthop_tab[0].nexthop_addr, nexthop_str, sizeof(nexthop_str));
+        pim_addr_dump("<nexthop?>", &nexthop_tab[i].nexthop_addr, nexthop_str, sizeof(nexthop_str));
         pim_inet4_dump("<addr?>", addr, addr_str, sizeof(addr_str));
         zlog_debug("%s %s: found nexthop %s for address %s: interface %s ifindex=%d metric=%d pref=%d",
 	           __FILE__, __PRETTY_FUNCTION__,
 	           nexthop_str, addr_str,
 	           ifp->name, first_ifindex,
-	           nexthop_tab[0].route_metric,
-	           nexthop_tab[0].protocol_distance);
+	           nexthop_tab[i].route_metric,
+	           nexthop_tab[i].protocol_distance);
       }
       /* update nextop data */
       nexthop->interface                = ifp;
-      nexthop->mrib_nexthop_addr        = nexthop_tab[0].nexthop_addr;
-      nexthop->mrib_metric_preference   = nexthop_tab[0].protocol_distance;
-      nexthop->mrib_route_metric        = nexthop_tab[0].route_metric;
+      nexthop->mrib_nexthop_addr        = nexthop_tab[i].nexthop_addr;
+      nexthop->mrib_metric_preference   = nexthop_tab[i].protocol_distance;
+      nexthop->mrib_route_metric        = nexthop_tab[i].route_metric;
       nexthop->last_lookup              = addr;
       nexthop->last_lookup_time         = pim_time_monotonic_usec();
       return 0;

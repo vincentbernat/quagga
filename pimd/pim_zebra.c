@@ -348,6 +348,7 @@ static int pim_zebra_if_address_del(int command, struct zclient *client,
   }
 
   pim_if_addr_del(c, 0);
+  pim_rp_setup();
   pim_i_am_rp_re_evaluate();
   
   return 0;
@@ -545,7 +546,7 @@ static int on_rpf_cache_refresh(struct thread *t)
   return 0;
 }
 
-static void sched_rpf_cache_refresh()
+void sched_rpf_cache_refresh(void)
 {
   ++qpim_rpf_cache_refresh_requests;
 

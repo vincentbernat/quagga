@@ -37,6 +37,7 @@
 #include "pim_upstream.h"
 #include "pim_ifchannel.h"
 #include "pim_rp.h"
+#include "pim_zebra.h"
 
 static void dr_election_by_addr(struct interface *ifp)
 {
@@ -317,6 +318,14 @@ static struct pim_neighbor *pim_neighbor_new(struct interface *ifp,
   neigh->interface              = ifp;
 
   pim_neighbor_timer_reset(neigh, holdtime);
+  /*
+   * The pim_ifstat_hello_sent variable is used to decide if
+   * we should expedite a hello out the interface.  If we
+   * establish a new neighbor, we unfortunately need to
+   * reset the value so that we can know to hurry up and
+   * hello
+   */
+  pim_ifp->pim_ifstat_hello_sent = 0;
 
   pim_inet4_dump("<src?>", source_addr, src_str, sizeof(src_str));
 
@@ -421,6 +430,18 @@ pim_neighbor_find_if (struct interface *ifp)
   return listnode_head (pim_ifp->pim_neighbor_list);
 }
 
+/* rpf info associated with an upstream entry needs to be re-evaluated
+ * when an RPF neighbor comes or goes */
+static void
+pim_neighbor_rpf_update(void)
+{
+  /* XXX: for the time being piggyback on the timer used on rib changes
+   * to scan and update the rpf nexthop. This is expensive processing
+   * and we should be able to optimize neighbor changes differently than
+   * nexthop changes. */
+  sched_rpf_cache_refresh();
+}
+
 struct pim_neighbor *pim_neighbor_add(struct interface *ifp,
 				      struct in_addr source_addr,
 				      pim_hello_options hello_options,
@@ -483,6 +504,8 @@ struct pim_neighbor *pim_neighbor_add(struct interface *ifp,
   pim_upstream_find_new_rpf();
 
   pim_rp_setup ();
+
+  pim_neighbor_rpf_update();
   return neigh;
 }
 
@@ -595,6 +618,8 @@ void pim_neighbor_delete(struct interface *ifp,
   listnode_delete(pim_ifp->pim_neighbor_list, neigh);
 
   pim_neighbor_free(neigh);
+
+  pim_neighbor_rpf_update();
 }
 
 void pim_neighbor_delete_all(struct interface *ifp,
