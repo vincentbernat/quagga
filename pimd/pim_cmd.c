@@ -4197,15 +4197,12 @@ DEFUN (interface_no_ip_igmp_query_max_response_time,
 {
   struct interface *ifp;
   struct pim_interface *pim_ifp;
-  int default_query_interval_dsec;
 
   ifp = vty->index;
   pim_ifp = ifp->info;
 
   if (!pim_ifp)
     return CMD_SUCCESS;
-
-  default_query_interval_dsec = 10 * pim_ifp->igmp_default_query_interval;
 
   change_query_max_response_time(pim_ifp, IGMP_QUERY_MAX_RESPONSE_TIME_DSEC);
 
@@ -4263,15 +4260,12 @@ DEFUN_HIDDEN (interface_no_ip_igmp_query_max_response_time_dsec,
 {
   struct interface *ifp;
   struct pim_interface *pim_ifp;
-  int default_query_interval_dsec;
 
   ifp = vty->index;
   pim_ifp = ifp->info;
 
   if (!pim_ifp)
     return CMD_SUCCESS;
-
-  default_query_interval_dsec = 10 * pim_ifp->igmp_default_query_interval;
 
   change_query_max_response_time(pim_ifp, IGMP_QUERY_MAX_RESPONSE_TIME_DSEC);
 
