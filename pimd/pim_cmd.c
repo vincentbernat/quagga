@@ -4146,16 +4146,16 @@ DEFUN (interface_no_ip_igmp_version,
   return CMD_SUCCESS;
 }
 
-#define IGMP_QUERY_MAX_RESPONSE_TIME_MIN (1)
-#define IGMP_QUERY_MAX_RESPONSE_TIME_MAX (25)
+#define IGMP_QUERY_MAX_RESPONSE_TIME_MIN_DSEC (10)
+#define IGMP_QUERY_MAX_RESPONSE_TIME_MAX_DSEC (250)
 
 DEFUN (interface_ip_igmp_query_max_response_time,
        interface_ip_igmp_query_max_response_time_cmd,
-       PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME " <1-25>",
+       PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME " <10-250>",
        IP_STR
        IFACE_IGMP_STR
        IFACE_IGMP_QUERY_MAX_RESPONSE_TIME_STR
-       "Query response value in seconds\n")
+       "Query response value in deci-seconds\n")
 {
   struct interface *ifp;
   struct pim_interface *pim_ifp;
@@ -4174,26 +4174,7 @@ DEFUN (interface_ip_igmp_query_max_response_time,
 
   query_max_response_time = atoi(argv[0]);
 
-  /*
-    It seems we don't need to check bounds since command.c does it
-    already, but we verify them anyway for extra safety.
-  */
-  if (query_max_response_time < IGMP_QUERY_MAX_RESPONSE_TIME_MIN) {
-    vty_out(vty, "Query max response time %d sec lower than minimum %d sec%s",
-	    query_max_response_time,
-	    IGMP_QUERY_MAX_RESPONSE_TIME_MIN,
-	    VTY_NEWLINE);
-    return CMD_WARNING;
-  }
-  if (query_max_response_time > IGMP_QUERY_MAX_RESPONSE_TIME_MAX) {
-    vty_out(vty, "Query max response time %d sec higher than maximum %d sec%s",
-	    query_max_response_time,
-	    IGMP_QUERY_MAX_RESPONSE_TIME_MAX,
-	    VTY_NEWLINE);
-    return CMD_WARNING;
-  }
-
-  if (query_max_response_time >= pim_ifp->igmp_default_query_interval) {
+  if (query_max_response_time >= pim_ifp->igmp_default_query_interval * 10) {
     vty_out(vty,
 	    "Can't set query max response time %d sec >= general query interval %d sec%s",
 	    query_max_response_time, pim_ifp->igmp_default_query_interval,
@@ -4201,14 +4182,14 @@ DEFUN (interface_ip_igmp_query_max_response_time,
     return CMD_WARNING;
   }
 
-  change_query_max_response_time(pim_ifp, 10 * query_max_response_time);
+  change_query_max_response_time(pim_ifp, query_max_response_time);
 
   return CMD_SUCCESS;
 }
 
 DEFUN (interface_no_ip_igmp_query_max_response_time,
        interface_no_ip_igmp_query_max_response_time_cmd,
-       PIM_CMD_NO " " PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME,
+       PIM_CMD_NO " " PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC,
        NO_STR
        IP_STR
        IFACE_IGMP_STR
@@ -4226,29 +4207,18 @@ DEFUN (interface_no_ip_igmp_query_max_response_time,
 
   default_query_interval_dsec = 10 * pim_ifp->igmp_default_query_interval;
 
-  if (IGMP_QUERY_MAX_RESPONSE_TIME_DSEC >= default_query_interval_dsec) {
-    vty_out(vty,
-	    "Can't set default query max response time %d dsec >= general query interval %d dsec.%s",
-	    IGMP_QUERY_MAX_RESPONSE_TIME_DSEC, default_query_interval_dsec,
-	    VTY_NEWLINE);
-    return CMD_WARNING;
-  }
-
   change_query_max_response_time(pim_ifp, IGMP_QUERY_MAX_RESPONSE_TIME_DSEC);
 
   return CMD_SUCCESS;
 }
 
-#define IGMP_QUERY_MAX_RESPONSE_TIME_MIN_DSEC (10)
-#define IGMP_QUERY_MAX_RESPONSE_TIME_MAX_DSEC (250)
-
-DEFUN (interface_ip_igmp_query_max_response_time_dsec,
-       interface_ip_igmp_query_max_response_time_dsec_cmd,
-       PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC " <10-250>",
-       IP_STR
-       IFACE_IGMP_STR
-       IFACE_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC_STR
-       "Query response value in deciseconds\n")
+DEFUN_HIDDEN (interface_ip_igmp_query_max_response_time_dsec,
+	      interface_ip_igmp_query_max_response_time_dsec_cmd,
+	      PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC " <10-250>",
+	      IP_STR
+	      IFACE_IGMP_STR
+	      IFACE_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC_STR
+	      "Query response value in deciseconds\n")
 {
   struct interface *ifp;
   struct pim_interface *pim_ifp;
@@ -4268,25 +4238,6 @@ DEFUN (interface_ip_igmp_query_max_response_time_dsec,
 
   query_max_response_time_dsec = atoi(argv[0]);
 
-  /*
-    It seems we don't need to check bounds since command.c does it
-    already, but we verify them anyway for extra safety.
-  */
-  if (query_max_response_time_dsec < IGMP_QUERY_MAX_RESPONSE_TIME_MIN_DSEC) {
-    vty_out(vty, "Query max response time %d dsec lower than minimum %d dsec%s",
-	    query_max_response_time_dsec,
-	    IGMP_QUERY_MAX_RESPONSE_TIME_MIN_DSEC,
-	    VTY_NEWLINE);
-    return CMD_WARNING;
-  }
-  if (query_max_response_time_dsec > IGMP_QUERY_MAX_RESPONSE_TIME_MAX_DSEC) {
-    vty_out(vty, "Query max response time %d dsec higher than maximum %d dsec%s",
-	    query_max_response_time_dsec,
-	    IGMP_QUERY_MAX_RESPONSE_TIME_MAX_DSEC,
-	    VTY_NEWLINE);
-    return CMD_WARNING;
-  }
-
   default_query_interval_dsec = 10 * pim_ifp->igmp_default_query_interval;
 
   if (query_max_response_time_dsec >= default_query_interval_dsec) {
@@ -4302,13 +4253,13 @@ DEFUN (interface_ip_igmp_query_max_response_time_dsec,
   return CMD_SUCCESS;
 }
 
-DEFUN (interface_no_ip_igmp_query_max_response_time_dsec,
-       interface_no_ip_igmp_query_max_response_time_dsec_cmd,
-       PIM_CMD_NO " " PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC,
-       NO_STR
-       IP_STR
-       IFACE_IGMP_STR
-       IFACE_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC_STR)
+DEFUN_HIDDEN (interface_no_ip_igmp_query_max_response_time_dsec,
+	      interface_no_ip_igmp_query_max_response_time_dsec_cmd,
+	      PIM_CMD_NO " " PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC,
+	      NO_STR
+	      IP_STR
+	      IFACE_IGMP_STR
+	      IFACE_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC_STR)
 {
   struct interface *ifp;
   struct pim_interface *pim_ifp;
@@ -4321,14 +4272,6 @@ DEFUN (interface_no_ip_igmp_query_max_response_time_dsec,
     return CMD_SUCCESS;
 
   default_query_interval_dsec = 10 * pim_ifp->igmp_default_query_interval;
-
-  if (IGMP_QUERY_MAX_RESPONSE_TIME_DSEC >= default_query_interval_dsec) {
-    vty_out(vty,
-	    "Can't set default query max response time %d dsec >= general query interval %d dsec.%s",
-	    IGMP_QUERY_MAX_RESPONSE_TIME_DSEC, default_query_interval_dsec,
-	    VTY_NEWLINE);
-    return CMD_WARNING;
-  }
 
   change_query_max_response_time(pim_ifp, IGMP_QUERY_MAX_RESPONSE_TIME_DSEC);
 
