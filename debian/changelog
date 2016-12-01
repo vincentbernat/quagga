@@ -1,3 +1,13 @@
+quagga (1.0.0+cl3u6) RELEASED; urgency=medium
+
+  * New Enabled: PIM GA
+  * New Enabled: Upstream Patch import
+  * New Enabled: Better integration of Watchquagga and systemd
+  * New Enabled: Various json commands added and json issues fixed.
+  * Closes: Various Memory Leaks fixed
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Thu, 1 Dec 2016 07:45:32 -0700
+
 quagga (0.99.24+cl3eau5) RELEASED; urgency=medium
 
   * New Enabled: Fix PIM to work with new kernel
