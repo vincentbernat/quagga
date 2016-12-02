@@ -4189,7 +4189,7 @@ DEFUN (interface_ip_igmp_query_max_response_time,
 
 DEFUN (interface_no_ip_igmp_query_max_response_time,
        interface_no_ip_igmp_query_max_response_time_cmd,
-       PIM_CMD_NO " " PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME_DSEC,
+       PIM_CMD_NO " " PIM_CMD_IP_IGMP_QUERY_MAX_RESPONSE_TIME " <10-250>",
        NO_STR
        IP_STR
        IFACE_IGMP_STR
