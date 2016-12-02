@@ -507,7 +507,7 @@ pim_msdp_sa_local_del_on_up_del(struct prefix_sg *sg)
        * KAT is running there MUST be an additional source-stream reference to
        * the flow. Accounting for such cases requires lot of changes; perhaps
        * address this in the next release? - XXX  */
-      zlog_error("MSDP sa %s SPT teardown is causing the local entry to be removed", sa->sg_str);
+      zlog_err ("MSDP sa %s SPT teardown is causing the local entry to be removed", sa->sg_str);
       return;
     }
 
