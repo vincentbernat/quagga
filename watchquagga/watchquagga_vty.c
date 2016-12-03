@@ -94,7 +94,8 @@ DEFUN (config_write_integrated,
 	char msg[512];
 	snprintf(msg, sizeof(msg), "error executing %s: %s\n",
 			VTYSH_BIN_PATH, safe_strerror(errno));
-	write(1, msg, strlen(msg));
+	if (write(1, msg, strlen(msg)) < 0)
+	        zlog_warn("Unable to write: %s", safe_strerror(errno));
 	exit(1);
 }
 
@@ -116,12 +117,14 @@ void integrated_write_sigchld(int status)
 	if (reply[3] != CMD_SUCCESS) {
 		/* failure might be silent in vtysh without this */
 		static const char msg[] = "% Configuration write failed.\n";
-		write(integrated_result_fd, msg, strlen(msg));
+		if (write(integrated_result_fd, msg, strlen(msg)) < 0)
+		        zlog_warn("Unable to write: %s", safe_strerror(errno));
 	}
 
 	/* don't care about failures here, if the connection is broken the
 	 * return value will just be lost. */
-	write(integrated_result_fd, reply, sizeof(reply));
+	if (write(integrated_result_fd, reply, sizeof(reply)) < 0)
+	        zlog_warn("Unable to write: %s", safe_strerror(errno));
 	close(integrated_result_fd);
 
 	integrated_write_pid = -1;
