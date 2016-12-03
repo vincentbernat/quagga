@@ -89,6 +89,10 @@
 #ifndef NDA_MASTER
 #define NDA_MASTER   9
 #endif
+
+#ifndef NTF_SELF
+#define NTF_SELF     0x02
+#endif
 /* End of temporary definitions */
 
 #ifndef NLMSG_TAIL
@@ -801,8 +805,10 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   memcpy (&mac, RTA_DATA (tb[NDA_LLADDR]), ETHER_ADDR_LEN);
 
+#if defined NDA_VLAN
   if (tb[NDA_VLAN])
     vid = *(u_int16_t *) RTA_DATA(tb[NDA_VLAN]);
+#endif
 
   if (IS_ZEBRA_DEBUG_KERNEL)
     zlog_debug ("Rx %s family %s IF %s(%u) VLAN %u MAC %s",
