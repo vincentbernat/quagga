@@ -176,6 +176,11 @@ struct channel_oil *pim_channel_oil_add(struct prefix_sg *sg,
 
   c_oil = pim_find_channel_oil(sg);
   if (c_oil) {
+    if (c_oil->oil.mfcc_parent != input_vif_index)
+      if (PIM_DEBUG_MROUTE)
+	zlog_debug ("%s: Existing channel oil %s points to %d, modifying to point at %d",
+		    __PRETTY_FUNCTION__, pim_str_sg_dump(sg), c_oil->oil.mfcc_parent, input_vif_index);
+    c_oil->oil.mfcc_parent = input_vif_index;
     ++c_oil->oil_ref_count;
     return c_oil;
   }
@@ -203,18 +208,6 @@ pim_channel_del_oif (struct channel_oil *channel_oil,
   zassert (oif);
 
   pim_ifp = oif->info;
-
-  if (PIM_DEBUG_MROUTE)
-    {
-      char group_str[INET_ADDRSTRLEN];
-      char source_str[INET_ADDRSTRLEN];
-      pim_inet4_dump("<group?>", channel_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
-      pim_inet4_dump("<source?>", channel_oil->oil.mfcc_origin, source_str, sizeof(source_str));
-      zlog_debug("%s %s: (S,G)=(%s,%s): proto_mask=%u OIF=%s vif_index=%d",
-		 __FILE__, __PRETTY_FUNCTION__,
-		 source_str, group_str,
-		 proto_mask, oif->name, pim_ifp->mroute_vif_index);
-    }
 
   /*
    * Don't do anything if we've been asked to remove a source
@@ -259,7 +252,7 @@ pim_channel_del_oif (struct channel_oil *channel_oil,
 
   channel_oil->oil.mfcc_ttls[pim_ifp->mroute_vif_index] = 0;
 
-  if (pim_mroute_add (channel_oil)) {
+  if (pim_mroute_add (channel_oil, __PRETTY_FUNCTION__)) {
     if (PIM_DEBUG_MROUTE)
       {
         char group_str[INET_ADDRSTRLEN];
@@ -273,6 +266,18 @@ pim_channel_del_oif (struct channel_oil *channel_oil,
       }
     return -1;
   }
+
+  if (PIM_DEBUG_MROUTE)
+    {
+      char group_str[INET_ADDRSTRLEN];
+      char source_str[INET_ADDRSTRLEN];
+      pim_inet4_dump("<group?>", channel_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
+      pim_inet4_dump("<source?>", channel_oil->oil.mfcc_origin, source_str, sizeof(source_str));
+      zlog_debug("%s %s: (S,G)=(%s,%s): proto_mask=%u OIF=%s vif_index=%d",
+		 __FILE__, __PRETTY_FUNCTION__,
+		 source_str, group_str,
+		 proto_mask, oif->name, pim_ifp->mroute_vif_index);
+    }
 
   return 0;
 }
@@ -296,17 +301,6 @@ int pim_channel_add_oif(struct channel_oil *channel_oil,
     }
 
   pim_ifp = oif->info;
-
-  if (PIM_DEBUG_MROUTE) {
-    char group_str[INET_ADDRSTRLEN];
-    char source_str[INET_ADDRSTRLEN];
-    pim_inet4_dump("<group?>", channel_oil->oil.mfcc_mcastgrp, group_str, sizeof(group_str));
-    pim_inet4_dump("<source?>", channel_oil->oil.mfcc_origin, source_str, sizeof(source_str));
-    zlog_debug("%s %s: (S,G)=(%s,%s): proto_mask=%u OIF=%s vif_index=%d",
-	       __FILE__, __PRETTY_FUNCTION__,
-	       source_str, group_str,
-	       proto_mask, oif->name, pim_ifp->mroute_vif_index);
-  }
 
 #ifdef PIM_ENFORCE_LOOPFREE_MFC
   /*
@@ -398,7 +392,7 @@ int pim_channel_add_oif(struct channel_oil *channel_oil,
 
   channel_oil->oil.mfcc_ttls[pim_ifp->mroute_vif_index] = PIM_MROUTE_MIN_TTL;
 
-  if (pim_mroute_add(channel_oil)) {
+  if (pim_mroute_add(channel_oil, __PRETTY_FUNCTION__)) {
     if (PIM_DEBUG_MROUTE)
       {
 	char group_str[INET_ADDRSTRLEN];
