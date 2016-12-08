@@ -2895,7 +2895,12 @@ peer_conf_interface_get (struct vty *vty, const char *conf_if, afi_t afi,
     }
 
   peer = peer_lookup_by_conf_if (bgp, conf_if);
-  if (!peer)
+  if (peer)
+    {
+      if (as_str)
+        ret = peer_remote_as (bgp, &su, NULL, &as, as_type, afi, safi);
+    }
+  else
     {
       if (bgp_flag_check (bgp, BGP_FLAG_NO_DEFAULT_IPV4)
           && afi == AFI_IP && safi == SAFI_UNICAST)
@@ -2919,8 +2924,9 @@ peer_conf_interface_get (struct vty *vty, const char *conf_if, afi_t afi,
       if (peer->ifp)
         bgp_zebra_initiate_radv (bgp, peer);
     }
-  else if ((v6only && !CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY)) ||
-           (!v6only && CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY)))
+
+  if ((v6only && !CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY)) ||
+      (!v6only && CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY)))
     {
       if (v6only)
         SET_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY);

@@ -58,6 +58,7 @@
 #include "zebra/zebra_vxlan.h"
 
 /* TODO - Temporary definitions, need to refine. */
+/* This needs to be addressed in a better way. */
 #ifndef AF_MPLS
 #define AF_MPLS 28
 #endif
@@ -96,6 +97,10 @@
 
 #ifndef NTF_SELF
 #define NTF_SELF     0x02
+#endif
+
+#ifndef NDA_VLAN
+#define NDA_VLAN     5
 #endif
 /* End of temporary definitions */
 
@@ -807,10 +812,8 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   memcpy (&mac, RTA_DATA (tb[NDA_LLADDR]), ETHER_ADDR_LEN);
 
-#if defined NDA_VLAN
-  if (tb[NDA_VLAN])
+  if ((NDA_VLAN <= NDA_MAX) && tb[NDA_VLAN])
     vid = *(u_int16_t *) RTA_DATA(tb[NDA_VLAN]);
-#endif
 
   if (IS_ZEBRA_DEBUG_KERNEL)
     zlog_debug ("Rx %s family %s IF %s(%u) VLAN %u MAC %s",
@@ -1457,8 +1460,9 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
 }
 
 static int
-netlink_neigh_update_af_bridge (struct interface *ifp, struct ethaddr *mac,
-                                struct in_addr vtep_ip, int cmd)
+netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
+                                struct ethaddr *mac, struct in_addr vtep_ip,
+                                int cmd)
 {
   struct zebra_ns *zns = zebra_ns_lookup (NS_DEFAULT);
   struct
@@ -1471,6 +1475,7 @@ netlink_neigh_update_af_bridge (struct interface *ifp, struct ethaddr *mac,
   struct zebra_if *zif;
   struct zebra_l2info_brslave *br_slave;
   struct interface *br_if;
+  struct zebra_if *br_zif;
   char buf[MACADDR_STRLEN];
 
   zif = ifp->info;
@@ -1491,13 +1496,16 @@ netlink_neigh_update_af_bridge (struct interface *ifp, struct ethaddr *mac,
     req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
   req.n.nlmsg_type = cmd;
   req.ndm.ndm_family = AF_BRIDGE;
-  req.ndm.ndm_state = NUD_NOARP | NUD_PERMANENT;
+  req.ndm.ndm_state = NUD_NOARP; // Mark as "static"
   req.ndm.ndm_flags |= NTF_SELF; // Handle by "self", not "master"
 
   addattr_l (&req.n, sizeof (req), NDA_LLADDR, mac, 6);
   req.ndm.ndm_ifindex = ifp->ifindex;
   dst_alen = 4; // TODO: hardcoded
   addattr_l (&req.n, sizeof (req), NDA_DST, &vtep_ip, dst_alen);
+  br_zif = (struct zebra_if *) br_if->info;
+  if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif) && vid > 0)
+    addattr16 (&req.n, sizeof (req), NDA_VLAN, vid);
   addattr32 (&req.n, sizeof (req), NDA_MASTER, br_if->ifindex);
 
   if (IS_ZEBRA_DEBUG_KERNEL)
@@ -1861,18 +1869,18 @@ kernel_neigh_update (int add, int ifindex, uint32_t addr, char *lla, int llalen)
 }
 
 int
-kernel_add_mac (struct interface *ifp, struct ethaddr *mac,
-                struct in_addr vtep_ip)
+kernel_add_mac (struct interface *ifp, vlanid_t vid,
+                struct ethaddr *mac, struct in_addr vtep_ip)
 {
- return netlink_neigh_update_af_bridge (ifp, mac, vtep_ip,
+ return netlink_neigh_update_af_bridge (ifp, vid, mac, vtep_ip,
                                         RTM_NEWNEIGH);
 }
 
 int
-kernel_del_mac (struct interface *ifp, struct ethaddr *mac,
-                struct in_addr vtep_ip)
+kernel_del_mac (struct interface *ifp, vlanid_t vid,
+                struct ethaddr *mac, struct in_addr vtep_ip)
 {
- return netlink_neigh_update_af_bridge (ifp, mac, vtep_ip,
+ return netlink_neigh_update_af_bridge (ifp, vid, mac, vtep_ip,
                                         RTM_DELNEIGH);
 }
 

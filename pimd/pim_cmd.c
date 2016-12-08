@@ -2990,7 +2990,7 @@ static void show_mroute(struct vty *vty, u_char uj)
     struct interface *ifp_in;
     found_oif = 0;
     first = 1;
-    if (!c_oil->installed)
+    if (!c_oil->installed && !uj)
       continue;
 
     pim_inet4_dump("<group?>", c_oil->oil.mfcc_mcastgrp, grp_str, sizeof(grp_str));
@@ -3022,6 +3022,9 @@ static void show_mroute(struct vty *vty, u_char uj)
 
       /* Find the inbound interface nested under the source, create it if it doesn't exist */
       json_object_object_get_ex(json_source, in_ifname, &json_ifp_in);
+      json_object_int_add(json_source, "installed", c_oil->installed);
+      json_object_int_add(json_source, "refCount", c_oil->oil_ref_count);
+      json_object_int_add(json_source, "oilSize", c_oil->oil_size);
 
       if (!json_ifp_in) {
         json_ifp_in = json_object_new_object();
@@ -3467,6 +3470,32 @@ pim_rp_cmd_worker (struct vty *vty, const char *rp, const char *group, const cha
       return CMD_WARNING;
     }
 
+  return CMD_SUCCESS;
+}
+
+DEFUN (ip_pim_joinprune_time,
+       ip_pim_joinprune_time_cmd,
+       "ip pim join-prune-interval <60-600>",
+       IP_STR
+       "pim multicast routing\n"
+       "Join Prune Send Interval\n"
+       "Seconds\n")
+{
+  VTY_GET_INTEGER_RANGE ("join-prune-interval", qpim_t_periodic,
+			 argv[0], 60, 600);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_pim_joinprune_time,
+       no_ip_pim_joinprune_time_cmd,
+       "no ip pim join-prune-interval <60-600>",
+       NO_STR
+       IP_STR
+       "pim multicast routing\n"
+       "Join Prune Send Interval\n"
+       "Seconds\n")
+{
+  qpim_t_periodic = PIM_DEFAULT_T_PERIODIC;
   return CMD_SUCCESS;
 }
 
@@ -6251,6 +6280,8 @@ void pim_cmd_init()
   install_element (CONFIG_NODE, &no_ip_pim_rp_prefix_list_cmd);
   install_element (CONFIG_NODE, &ip_pim_register_suppress_cmd);
   install_element (CONFIG_NODE, &no_ip_pim_register_suppress_cmd);
+  install_element (CONFIG_NODE, &ip_pim_joinprune_time_cmd);
+  install_element (CONFIG_NODE, &no_ip_pim_joinprune_time_cmd);
   install_element (CONFIG_NODE, &ip_pim_keep_alive_cmd);
   install_element (CONFIG_NODE, &no_ip_pim_keep_alive_cmd);
   install_element (CONFIG_NODE, &ip_pim_packets_cmd);

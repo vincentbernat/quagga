@@ -519,12 +519,14 @@ pim_upstream_compare (void *arg1, void *arg2)
   return 0;
 }
 
-static struct pim_upstream *pim_upstream_new(struct prefix_sg *sg,
-					     struct interface *incoming,
-					     int flags)
+static struct pim_upstream *
+pim_upstream_new (struct prefix_sg *sg,
+		  struct interface *incoming,
+		  int flags)
 {
-  struct pim_upstream *up;
   enum pim_rpf_result rpf_result;
+  struct pim_interface *pim_ifp;
+  struct pim_upstream *up;
 
   up = XCALLOC(MTYPE_PIM_UPSTREAM, sizeof(*up));
   if (!up) {
@@ -601,6 +603,10 @@ static struct pim_upstream *pim_upstream_new(struct prefix_sg *sg,
     XFREE(MTYPE_PIM_UPSTREAM, up);
     return NULL;
   }
+
+  pim_ifp = up->rpf.source_nexthop.interface->info;
+  if (pim_ifp)
+    up->channel_oil = pim_channel_oil_add(&up->sg, pim_ifp->mroute_vif_index);
 
   listnode_add_sort(pim_upstream_list, up);
 
@@ -1262,24 +1268,8 @@ pim_upstream_start_register_stop_timer (struct pim_upstream *up, int null_regist
 		   up, time);
 }
 
-/*
- * For a given upstream, determine the inherited_olist
- * and apply it.
- *
- * inherited_olist(S,G,rpt) =
- *           ( joins(*,*,RP(G)) (+) joins(*,G) (-) prunes(S,G,rpt) )
- *      (+) ( pim_include(*,G) (-) pim_exclude(S,G))
- *      (-) ( lost_assert(*,G) (+) lost_assert(S,G,rpt) )
- *
- *  inherited_olist(S,G) =
- *      inherited_olist(S,G,rpt) (+)
- *      joins(S,G) (+) pim_include(S,G) (-) lost_assert(S,G)
- *
- * return 1 if there are any output interfaces
- * return 0 if there are not any output interfaces
- */
 int
-pim_upstream_inherited_olist (struct pim_upstream *up)
+pim_upstream_inherited_olist_decide (struct pim_upstream *up)
 {
   struct pim_interface *pim_ifp;
   struct listnode *chnextnode;
@@ -1303,6 +1293,30 @@ pim_upstream_inherited_olist (struct pim_upstream *up)
 	  output_intf++;
 	}
     }
+
+  return output_intf;
+}
+
+/*
+ * For a given upstream, determine the inherited_olist
+ * and apply it.
+ *
+ * inherited_olist(S,G,rpt) =
+ *           ( joins(*,*,RP(G)) (+) joins(*,G) (-) prunes(S,G,rpt) )
+ *      (+) ( pim_include(*,G) (-) pim_exclude(S,G))
+ *      (-) ( lost_assert(*,G) (+) lost_assert(S,G,rpt) )
+ *
+ *  inherited_olist(S,G) =
+ *      inherited_olist(S,G,rpt) (+)
+ *      joins(S,G) (+) pim_include(S,G) (-) lost_assert(S,G)
+ *
+ * return 1 if there are any output interfaces
+ * return 0 if there are not any output interfaces
+ */
+int
+pim_upstream_inherited_olist (struct pim_upstream *up)
+{
+  int output_intf =  pim_upstream_inherited_olist_decide (up);
 
   /*
    * If we have output_intf switch state to Join and work like normal
