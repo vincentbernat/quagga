@@ -556,11 +556,18 @@ zvni_map_vlan (struct interface *ifp, struct interface *br_if, vlanid_t vid)
 static int
 zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip)
 {
+  struct zebra_if *zif;
+  struct zebra_l2if_vxlan *zl2if;
+
   if (!(macip->flags & ZEBRA_MAC_REMOTE))
     return 0;
 
-  return kernel_add_mac (zvni->vxlan_if, &macip->emac,
-                         macip->fwd_info.r_vtep_ip);
+  zif = zvni->vxlan_if->info;
+  zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  assert(zl2if);
+
+  return kernel_add_mac (zvni->vxlan_if, zl2if->access_vlan,
+                         &macip->emac, macip->fwd_info.r_vtep_ip);
 }
 
 /*
@@ -569,6 +576,9 @@ zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip)
 static int
 zvni_macip_uninstall (zebra_vni_t *zvni, zebra_macip_t *macip)
 {
+  struct zebra_if *zif;
+  struct zebra_l2if_vxlan *zl2if;
+
   if (!(macip->flags & ZEBRA_MAC_REMOTE))
     return 0;
 
@@ -579,8 +589,12 @@ zvni_macip_uninstall (zebra_vni_t *zvni, zebra_macip_t *macip)
       return -1;
     }
 
-  return kernel_del_mac (zvni->vxlan_if, &macip->emac,
-                         macip->fwd_info.r_vtep_ip);
+  zif = zvni->vxlan_if->info;
+  zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  assert(zl2if);
+
+  return kernel_del_mac (zvni->vxlan_if, zl2if->access_vlan,
+                         &macip->emac, macip->fwd_info.r_vtep_ip);
 }
 
 /*

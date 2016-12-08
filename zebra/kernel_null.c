@@ -57,15 +57,15 @@ int kernel_neigh_update (int a, int b, uint32_t c, char *d, int e)
 }
 
 int
-kernel_add_mac (struct interface *ifp, struct ethaddr *mac,
-                struct in_addr vtep_ip)
+kernel_add_mac (struct interface *ifp, vlanid_t vid,
+                struct ethaddr *mac, struct in_addr vtep_ip)
 {
   return 0;
 }
 
 int
-kernel_del_mac (struct interface *ifp, struct ethaddr *mac,
-                struct in_addr vtep_ip)
+kernel_del_mac (struct interface *ifp, vlanid_t vid,
+                struct ethaddr *mac, struct in_addr vtep_ip)
 {
   return 0;
 }
