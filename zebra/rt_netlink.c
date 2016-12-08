@@ -58,6 +58,7 @@
 #include "zebra/zebra_vxlan.h"
 
 /* TODO - Temporary definitions, need to refine. */
+/* This needs to be addressed in a better way. */
 #ifndef AF_MPLS
 #define AF_MPLS 28
 #endif
@@ -96,6 +97,10 @@
 
 #ifndef NTF_SELF
 #define NTF_SELF     0x02
+#endif
+
+#ifndef NDA_VLAN
+#define NDA_VLAN     5
 #endif
 /* End of temporary definitions */
 
@@ -807,10 +812,8 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   memcpy (&mac, RTA_DATA (tb[NDA_LLADDR]), ETHER_ADDR_LEN);
 
-#if defined NDA_VLAN
-  if (tb[NDA_VLAN])
+  if ((NDA_VLAN <= NDA_MAX) && tb[NDA_VLAN])
     vid = *(u_int16_t *) RTA_DATA(tb[NDA_VLAN]);
-#endif
 
   if (IS_ZEBRA_DEBUG_KERNEL)
     zlog_debug ("Rx %s family %s IF %s(%u) VLAN %u MAC %s",
