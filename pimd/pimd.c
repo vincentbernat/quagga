@@ -40,6 +40,7 @@
 #include "pim_ssmpingd.h"
 #include "pim_static.h"
 #include "pim_rp.h"
+#include "pim_zlookup.h"
 
 const char *const PIM_ALL_SYSTEMS      = MCAST_ALL_SYSTEMS;
 const char *const PIM_ALL_ROUTERS      = MCAST_ALL_ROUTERS;
@@ -91,6 +92,10 @@ static void pim_free()
   pim_if_terminate ();
   pim_rp_free ();
   pim_route_map_terminate();
+
+  zclient_lookup_free ();
+
+  zprivs_terminate(&pimd_privs);
 }
 
 void pim_init()
