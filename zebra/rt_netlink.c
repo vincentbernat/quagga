@@ -1496,8 +1496,8 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
     req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
   req.n.nlmsg_type = cmd;
   req.ndm.ndm_family = AF_BRIDGE;
-  req.ndm.ndm_state = NUD_NOARP; // Mark as "static"
-  req.ndm.ndm_flags |= NTF_SELF; // Handle by "self", not "master"
+  req.ndm.ndm_state = NUD_NOARP | NUD_REACHABLE; // "static"
+  req.ndm.ndm_flags |= NTF_SELF | NTF_MASTER;
 
   addattr_l (&req.n, sizeof (req), NDA_LLADDR, mac, 6);
   req.ndm.ndm_ifindex = ifp->ifindex;
@@ -1509,10 +1509,10 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
   addattr32 (&req.n, sizeof (req), NDA_MASTER, br_if->ifindex);
 
   if (IS_ZEBRA_DEBUG_KERNEL)
-    zlog_debug ("Tx %s family %s IF %s(%u) MAC %s Remote VTEP %s",
+    zlog_debug ("Tx %s family %s IF %s(%u) vlan %d MAC %s Remote VTEP %s",
                 nl_msg_type_to_str (cmd),
                 nl_family_to_str (req.ndm.ndm_family),
-                ifp->name, ifp->ifindex,
+                ifp->name, ifp->ifindex, vid,
                 mac2str (mac, buf, sizeof (buf)),
                 inet_ntoa (vtep_ip));
 
