@@ -56,7 +56,7 @@ override_dh_auto_configure:
 		--enable-cumulus=yes \
 		--enable-pimd=yes \
 		--enable-bgp-vnc=no \
-		--enable-ldpd=no \
+		--enable-ldpd=yes \
 		--enable-dependency-tracking; \
 	fi
 
