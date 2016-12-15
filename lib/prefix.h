@@ -69,7 +69,6 @@ struct evpn_addr
   u_char route_type;
   enum evpn_ipaddr_type_t ipa_type;
   struct ethaddr mac;
-  vni_t vni;
   union
   {
     u_char addr;

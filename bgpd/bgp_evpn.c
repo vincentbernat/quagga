@@ -417,8 +417,7 @@ bgp_zebra_send_remote_vtep (struct bgp *bgp, struct bgpevpn *vpn,
  * Build EVPN type-2 prefix (for route node)
  */
 static inline void
-build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac,
-                         vni_t vni)
+build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac)
 {
   memset (p, 0, sizeof (struct prefix_evpn));
   p->family = AF_ETHERNET;
@@ -426,7 +425,6 @@ build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac,
   p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
   memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
   p->prefix.ipa_type = IP_ADDR_NONE;
-  p->prefix.vni = vni;
 }
 
 /*
@@ -1508,7 +1506,7 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
         stream_putc (s, ETHER_ADDR_LEN); /* Mac Addr Len */
         stream_put (s, evp->prefix.mac.octet, 6); /* Mac Addr */
         stream_putc (s, 0); /* IP address Length */
-        stream_put (s, &evp->prefix.vni, 3); /* VNI */
+        stream_put (s, 0, 3); /* VNI - TODO */
         break;
 
       default:
@@ -1730,7 +1728,7 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
     }
 
   /* Create EVPN type-2 route and schedule for processing. */
-  build_evpn_type2_prefix (&p, mac, vpn->vni);
+  build_evpn_type2_prefix (&p, mac);
   if (update_evpn_route (bgp, vpn, &p))
     {
       char buf[MACADDR_STRLEN];
@@ -1776,7 +1774,7 @@ bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
     }
 
   /* Remove EVPN type-2 route and schedule for processing. */
-  build_evpn_type2_prefix (&p, mac, vpn->vni);
+  build_evpn_type2_prefix (&p, mac);
   delete_evpn_route (bgp, vpn, &p);
 
   return 0;
