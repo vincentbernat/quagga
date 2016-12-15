@@ -15943,6 +15943,8 @@ bgp_vty_init (void)
   install_element (BGP_ENCAP_NODE, &no_neighbor_route_reflector_client_cmd);
   install_element (BGP_ENCAPV6_NODE, &neighbor_route_reflector_client_cmd);
   install_element (BGP_ENCAPV6_NODE, &no_neighbor_route_reflector_client_cmd);
+  install_element (BGP_EVPN_NODE, &neighbor_route_reflector_client_cmd);
+  install_element (BGP_EVPN_NODE, &no_neighbor_route_reflector_client_cmd);
 
   /* "neighbor route-server" commands.*/
   install_element (BGP_NODE, &neighbor_route_server_client_cmd);
