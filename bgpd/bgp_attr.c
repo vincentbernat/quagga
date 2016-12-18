@@ -2679,7 +2679,7 @@ bgp_packet_mpattr_prefix (struct stream *s, afi_t afi, safi_t safi,
       stream_put (s, &p->u.prefix, PSIZE (p->prefixlen));
     }
   else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
-    bgp_evpn_encode_prefix (s, p, prd, addpath_encode, addpath_tx_id);
+    bgp_evpn_encode_prefix (s, p, prd, tag, addpath_encode, addpath_tx_id);
   else
     stream_put_prefix_addpath (s, p, addpath_encode, addpath_tx_id);
 }
@@ -3239,7 +3239,7 @@ bgp_packet_mpunreach_prefix (struct stream *s, struct prefix *p,
       stream_put (s, &p->u.prefix, PSIZE (p->prefixlen));
     }
   else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
-    bgp_evpn_encode_prefix (s, p, prd, addpath_encode, addpath_tx_id);
+    bgp_evpn_encode_prefix (s, p, prd, tag, addpath_encode, addpath_tx_id);
   else
     stream_put_prefix_addpath (s, p, addpath_encode, addpath_tx_id);
 }

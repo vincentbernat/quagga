@@ -664,6 +664,7 @@ subgroup_update_packet (struct update_subgroup *subgrp)
   u_int32_t addpath_tx_id = 0;
   int enhe;
   struct prefix_rd *prd = NULL;
+  u_char *tag = NULL;
 
   if (!subgrp)
     return NULL;
@@ -767,8 +768,6 @@ subgroup_update_packet (struct update_subgroup *subgrp)
       else
 	{
 	  /* Encode the prefix in MP_REACH_NLRI attribute */
-	  u_char *tag = NULL;
-
 	  if (rn->prn)
 	    prd = (struct prefix_rd *) &rn->prn->p;
 	  if (binfo && binfo->extra)
@@ -794,11 +793,11 @@ subgroup_update_packet (struct update_subgroup *subgrp)
               send_attr_printed = 1;
             }
 
+          bgp_debug_rdpfxpath2str (afi, safi, prd, &rn->p, tag,
+                                   addpath_encode, addpath_tx_id,
+                                   pfx_buf, sizeof (pfx_buf));
           zlog_debug ("u%" PRIu64 ":s%" PRIu64 " send UPDATE %s",
-                      subgrp->update_group->id, subgrp->id,
-                      bgp_debug_rdpfxpath2str (prd, &rn->p, addpath_encode,
-                                               addpath_tx_id,
-                                               pfx_buf, sizeof (pfx_buf)));
+                      subgrp->update_group->id, subgrp->id, pfx_buf);
 	}
 
       /* Synchnorize attribute.  */
@@ -942,11 +941,11 @@ subgroup_withdraw_packet (struct update_subgroup *subgrp)
 	{
           char pfx_buf[BGP_PRD_PATH_STRLEN];
 
+          bgp_debug_rdpfxpath2str (afi, safi, prd, &rn->p, NULL,
+                                   addpath_encode, addpath_tx_id,
+                                   pfx_buf, sizeof (pfx_buf));
 	  zlog_debug ("u%" PRIu64 ":s%" PRIu64 " send UPDATE %s -- unreachable",
-                      subgrp->update_group->id, subgrp->id,
-                      bgp_debug_rdpfxpath2str (prd, &rn->p,
-                                               addpath_encode, addpath_tx_id,
-                                               pfx_buf, sizeof (pfx_buf)));
+                      subgrp->update_group->id, subgrp->id, pfx_buf);
 	}
 
       subgrp->scount--;

@@ -138,6 +138,28 @@ is_vni_param_configured (struct bgpevpn *vpn)
           is_export_rt_configured (vpn));
 }
 
+static inline void
+vni2tag (vni_t vni, u_char *tag)
+{
+  tag[0] = (u_char)(vni >> 12);
+  tag[1] = (u_char)(vni >> 4);
+  tag[2] = (u_char)(vni << 4);
+}
+
+static inline vni_t
+tag2vni (u_char *tag)
+{
+  vni_t vni;
+
+  vni = ((u_int32_t) *tag++ << 12);
+  vni |= (u_int32_t) *tag++ << 4;
+  vni |= (u_int32_t) ((*tag & 0xf0) >> 4);
+
+  return vni;
+}
+
+extern char *
+bgp_evpn_tag2str (u_char *tag, char *buf, int len);
 extern char *
 bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len);
 extern void
@@ -158,8 +180,8 @@ extern void
 bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn);
 extern void
 bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
-                        struct prefix_rd *prd, int addpath_encode,
-                        u_int32_t addpath_tx_id);
+                        struct prefix_rd *prd, u_char *tag,
+                        int addpath_encode, u_int32_t addpath_tx_id);
 extern int
 bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
                             u_char *pnt, bgp_size_t length, int *numpfx);

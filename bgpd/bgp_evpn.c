@@ -455,6 +455,7 @@ update_evpn_route (struct bgp *bgp, struct bgpevpn *vpn,
   struct attr *attr_new;
   afi_t afi = AFI_L2VPN;
   safi_t safi = SAFI_EVPN;
+  u_char tag[3];
 
   memset (&attr, 0, sizeof (struct attr));
 
@@ -470,6 +471,8 @@ update_evpn_route (struct bgp *bgp, struct bgpevpn *vpn,
   /* Set up RT extended community. */
   (bgp_attr_extra_get (&attr))->ecommunity = ecommunity_dup (vpn->export_rtl);
   attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+  /* The VNI goes into the 'tag' field of the route */
+  vni2tag (vpn->vni, tag);
 
   /* Add to hash. */
   attr_new = bgp_attr_intern (&attr);
@@ -490,6 +493,8 @@ update_evpn_route (struct bgp *bgp, struct bgpevpn *vpn,
       ri = info_make (ZEBRA_ROUTE_BGP, BGP_ROUTE_STATIC, 0,
                       bgp->peer_self, attr_new, rn);
       SET_FLAG (ri->flags, BGP_INFO_VALID);
+      bgp_info_extra_get(ri);
+      memcpy (ri->extra->tag, tag, 3);
       bgp_info_add (rn, ri);
     }
   else
@@ -1141,17 +1146,17 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   struct prefix_evpn p;
   u_char ipaddr_len;
   u_char macaddr_len;
-#if 0
+  u_char *tagpnt;
   vni_t vni;
-#endif
   int ret;
 
-  /* Type-2 route should be either 33 or 52 bytes:
+  /* Type-2 route should be either 33, 37 or 49 bytes:
    * RD (8), ESI (10), Eth Tag (4), MAC Addr Len (1),
    * MAC Addr (6), IP len (1), IP (0, 4 or 16),
-   * MPLS Lbl1 (3), MPLS Lbl2 (0 or 3).
+   * MPLS Lbl1 (3), MPLS Lbl2 (0 or 3)
+   * TODO: We currently expect only 1 label/tag.
    */
-  if (psize != 33 && psize != 37 && psize != 49 && psize != 52)
+  if (psize != 33 && psize != 37 && psize != 49)
     {
       zlog_err ("%u:%s - Rx EVPN NLRI with invalid length %d",
                 peer->bgp->vrf_id, peer->host, psize);
@@ -1195,20 +1200,22 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
         p.prefix.ipa_type = IP_ADDR_V6;
       memcpy (&p.prefix.ip, pfx, ipaddr_len);
     }
-#if 0
+
   pfx += ipaddr_len;
 
-  /* Get the VNI */
-  vni = *pfx;
-#endif
+  /* Get the VNI (in MPLS label field). */
+  tagpnt = pfx;
+  vni = tag2vni (tagpnt);
+  zlog_err ("%u:%s - Rx EVPN type-2 route with VNI %u",
+            peer->bgp->vrf_id, peer->host, vni);
 
   /* Process the route. */
   if (attr)
     ret = bgp_update (peer, (struct prefix *)&p, addpath_id, attr, afi, safi,
-                      ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL, &prd, NULL, 0);
+                      ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL, &prd, tagpnt, 0);
   else
     ret = bgp_withdraw (peer, (struct prefix *)&p, addpath_id, attr, afi, safi,
-                        ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL, &prd, NULL);
+                        ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL, &prd, tagpnt);
   return ret;
 }
 
@@ -1271,6 +1278,19 @@ process_type3_route (struct peer *peer, afi_t afi, safi_t safi,
 /*
  * Public functions.
  */
+
+/*
+ * Function to display "tag" in route as a VNI.
+ */
+char *
+bgp_evpn_tag2str (u_char *tag, char *buf, int len)
+{
+  vni_t vni;
+
+  vni = tag2vni (tag);
+  snprintf (buf, len, "%u", vni);
+  return buf;
+}
 
 /*
  * Function to convert evpn route to string.
@@ -1476,8 +1496,8 @@ bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn)
  */
 void
 bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
-                        struct prefix_rd *prd, int addpath_encode,
-                        u_int32_t addpath_tx_id)
+                        struct prefix_rd *prd, u_char *tag,
+                        int addpath_encode, u_int32_t addpath_tx_id)
 {
   struct prefix_evpn *evp = (struct prefix_evpn *)p;
 
@@ -1506,7 +1526,7 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
         stream_putc (s, ETHER_ADDR_LEN); /* Mac Addr Len */
         stream_put (s, evp->prefix.mac.octet, 6); /* Mac Addr */
         stream_putc (s, 0); /* IP address Length */
-        stream_put (s, 0, 3); /* VNI - TODO */
+        stream_put (s, tag, 3); /* VNI is contained in 'tag' */
         break;
 
       default:
@@ -1562,7 +1582,6 @@ bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *pack
   addpath_encoded = (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_ADV) &&
                      CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_RCV));
 
-#define VPN_PREFIXLEN_MIN_BYTES (3 + 8) /* label + RD */
   for (; pnt < lim; pnt += psize)
     {
       /* Clear prefix structure. */

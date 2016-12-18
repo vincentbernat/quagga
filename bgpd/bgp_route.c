@@ -2497,9 +2497,12 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	      && CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
 	    {
 	      if (bgp_debug_update(peer, p, NULL, 1))
-                zlog_debug ("%s rcvd %s", peer->host,
-                            bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                      addpath_id, pfx_buf, sizeof (pfx_buf)));
+                {
+                  bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                           addpath_id ? 1 : 0, addpath_id,
+                                           pfx_buf, sizeof (pfx_buf));
+                  zlog_debug ("%s rcvd %s", peer->host, pfx_buf);
+                }
 
 	      if (bgp_damp_update (ri, rn, afi, safi) != BGP_DAMP_SUPPRESSED)
 	        {
@@ -2511,16 +2514,18 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	    {
 	      if (bgp_debug_update(peer, p, NULL, 1))
                 {
-                if (!peer->rcvd_attr_printed)
-                  {
-                    zlog_debug ("%s rcvd UPDATE w/ attr: %s", peer->host, peer->rcvd_attr_str);
-                    peer->rcvd_attr_printed = 1;
-                  }
+                  if (!peer->rcvd_attr_printed)
+                    {
+                      zlog_debug ("%s rcvd UPDATE w/ attr: %s",
+                                  peer->host, peer->rcvd_attr_str);
+                      peer->rcvd_attr_printed = 1;
+                    }
 
+                  bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                           addpath_id ?  1 : 0, addpath_id,
+                                           pfx_buf, sizeof (pfx_buf));
 		  zlog_debug ("%s rcvd %s...duplicate ignored",
-		              peer->host,
-                              bgp_debug_rdpfxpath2str (prd, p, addpath_id ?
-                                1 : 0, addpath_id, pfx_buf, sizeof (pfx_buf)));
+		              peer->host, pfx_buf);
                 }
 
 	      /* graceful restart STALE flag unset. */
@@ -2541,18 +2546,24 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       if (CHECK_FLAG(ri->flags, BGP_INFO_REMOVED))
         {
           if (bgp_debug_update(peer, p, NULL, 1))
-            zlog_debug ("%s rcvd %s, flapped quicker than processing",
-                        peer->host,
-                        bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                  addpath_id, pfx_buf, sizeof (pfx_buf)));
+            {
+              bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                       addpath_id ? 1 : 0, addpath_id,
+                                       pfx_buf, sizeof (pfx_buf));
+              zlog_debug ("%s rcvd %s, flapped quicker than processing",
+                          peer->host, pfx_buf);
+            }
           bgp_info_restore (rn, ri);
         }
 
       /* Received Logging. */
       if (bgp_debug_update(peer, p, NULL, 1))
-	  zlog_debug ("%s rcvd %s", peer->host,
-                      bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                        addpath_id, pfx_buf, sizeof (pfx_buf)));
+        {
+          bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                   addpath_id ? 1 : 0, addpath_id,
+                                   pfx_buf, sizeof (pfx_buf));
+	  zlog_debug ("%s rcvd %s", peer->host, pfx_buf);
+        }
 
       /* graceful restart STALE flag unset. */
       if (CHECK_FLAG (ri->flags, BGP_INFO_STALE))
@@ -2633,8 +2644,9 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       bgp_attr_unintern (&ri->attr);
       ri->attr = attr_new;
 
-      /* Update MPLS tag.  */
-      if (safi == SAFI_MPLS_VPN)
+      /* Update MPLS tag or VNI.  */
+      if (tag &&
+          (safi == SAFI_MPLS_VPN || safi == SAFI_EVPN))
         memcpy ((bgp_info_extra_get (ri))->tag, tag, 3);
 
 #if ENABLE_BGP_VNC
@@ -2735,16 +2747,18 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           peer->rcvd_attr_printed = 1;
         }
 
-      zlog_debug ("%s rcvd %s", peer->host,
-                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                 addpath_id, pfx_buf, sizeof (pfx_buf)));
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
+      zlog_debug ("%s rcvd %s", peer->host, pfx_buf);
     }
 
   /* Make new BGP info. */
   new = info_make(type, sub_type, 0, peer, attr_new, rn);
 
-  /* Update MPLS tag. */
-  if (safi == SAFI_MPLS_VPN)
+  /* Update MPLS tag or VNI.  */
+  if (tag &&
+      (safi == SAFI_MPLS_VPN || safi == SAFI_EVPN))
     memcpy ((bgp_info_extra_get (new))->tag, tag, 3);
 
   /* Nexthop reachability check. */
@@ -2828,10 +2842,11 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           peer->rcvd_attr_printed = 1;
         }
 
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
       zlog_debug ("%s rcvd UPDATE about %s -- DENIED due to: %s",
-                  peer->host,
-                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                             addpath_id, pfx_buf, sizeof (pfx_buf)), reason);
+                  peer->host, pfx_buf, reason);
     }
 
   if (ri)
@@ -2871,10 +2886,13 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
     if (!bgp_adj_in_unset (rn, peer, addpath_id))
       {
         if (bgp_debug_update (peer, p, NULL, 1))
-          zlog_debug ("%s withdrawing route %s not in adj-in",
-                      peer->host,
-                      bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                       addpath_id, pfx_buf, sizeof (pfx_buf)));
+          {
+            bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                     addpath_id ? 1 : 0, addpath_id,
+                                     pfx_buf, sizeof (pfx_buf));
+            zlog_debug ("%s withdrawing route %s not in adj-in",
+                        peer->host, pfx_buf);
+          }
         bgp_unlock_node (rn);
         return 0;
       }
@@ -2888,20 +2906,24 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   /* Logging. */
   if (bgp_debug_update(peer, p, NULL, 1))
     {
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
       zlog_debug ("%s rcvd UPDATE about %s -- withdrawn",
-                  peer->host,
-                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                   addpath_id, pfx_buf, sizeof (pfx_buf)));
+                  peer->host, pfx_buf);
     }
 
   /* Withdraw specified route from routing table. */
   if (ri && ! CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
     bgp_rib_withdraw (rn, ri, peer, afi, safi, prd);
   else if (bgp_debug_update(peer, p, NULL, 1))
-    zlog_debug ("%s Can't find the route %s",
-                peer->host,
-                bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                    addpath_id, pfx_buf, sizeof (pfx_buf)));
+    {
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
+      zlog_debug ("%s Can't find the route %s",
+                  peer->host, pfx_buf);
+    }
 
   /* Unlock bgp_node_get() lock. */
   bgp_unlock_node (rn);
@@ -6931,11 +6953,22 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       json_nexthop_global = json_object_new_object();
     }
 
+  if (!json_paths && safi == SAFI_EVPN)
+    {
+      char tag_buf[20];
+
+      bgp_evpn_route2str ((struct prefix_evpn *)p, buf2, sizeof (buf2));
+      vty_out (vty, "Route %s", buf2);
+      tag_buf[0] = '\0';
+      if (binfo->extra && binfo->extra->tag)
+        {
+          bgp_evpn_tag2str (binfo->extra->tag, tag_buf, sizeof (tag_buf));
+          vty_out (vty, " VNI %s", tag_buf);
+        }
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
+
   attr = binfo->attr;
-  if (safi == SAFI_EVPN)
-    vty_out (vty, "Route %s%s",
-	          bgp_evpn_route2str((struct prefix_evpn *)p, buf2, sizeof (buf2)),
-	          VTY_NEWLINE);
   if (attr)
     {
       /* Line1 display AS-path, Aggregator */
