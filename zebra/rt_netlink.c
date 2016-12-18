@@ -761,14 +761,14 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   zvrf = vrf_info_lookup(ifp->vrf_id);
   if (!zvrf || !EVPN_ENABLED(zvrf))
     return 0;
+  if (!ifp->info)
+    return 0;
 
   /* The interface should be something we're interested in. */
   /* Drop on VxLAN */
   if (IS_ZEBRA_IF_VXLAN(ifp))
     return 0;
   if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp))
-    return 0;
-  if (!ifp->info)
     return 0;
 
   /* Drop "permanent" entries. */
