@@ -729,7 +729,7 @@ netlink_request (int family, int type, struct nlsock *nl,
   struct
   {
     struct nlmsghdr nlh;
-    struct rtgenmsg g;
+    struct ifinfomsg ifm;
   } req;
 
   /* Check netlink socket. */
@@ -752,7 +752,7 @@ netlink_request (int family, int type, struct nlsock *nl,
       req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
       req.nlh.nlmsg_pid = nl->snl.nl_pid;
       req.nlh.nlmsg_seq = ++nl->seq;
-      req.g.rtgen_family = family;
+      req.ifm.ifi_family = family;
       size = sizeof req;
       ptr = &req;
     }
