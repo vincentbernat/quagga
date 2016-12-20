@@ -43,6 +43,7 @@
 #include "bgpd/bgp_zebra.h"
 #include "linklist.h"
 #include "jhash.h"
+#include "bgpd/bgp_encap_types.h"
 
 /*
  * Definitions and external declarations.
@@ -441,6 +442,40 @@ build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
   p->prefix.ip.v4_addr = originator_ip;
 }
 
+ /*
+ * Build extended communities for EVPN route. RT and ENCAP are
+ * applicable to all routes.
+ */
+static void
+build_evpn_route_extcomm (struct bgpevpn *vpn, struct attr *attr)
+{
+  struct attr_extra *attre;
+  struct ecommunity ecom_tmp;
+  struct ecommunity_val beec;
+  bgp_encap_types tnl_type;
+
+  attre = bgp_attr_extra_get (attr);
+  tnl_type = BGP_ENCAP_TYPE_VXLAN;
+
+  /* Start with export RT */
+  attre->ecommunity = ecommunity_dup (vpn->export_rtl);
+
+  memset (&ecom_tmp, 0, sizeof (ecom_tmp));
+  memset (&beec, 0, sizeof (beec));
+  beec.val[0] = ECOMMUNITY_ENCODE_OPAQUE;
+  beec.val[1] = ECOMMUNITY_OPAQUE_SUBTYPE_ENCAP;
+  beec.val[6] = ((tnl_type) >> 8) & 0xff;
+  beec.val[7] = (tnl_type) & 0xff;
+  ecom_tmp.size = 1;
+  ecom_tmp.val = (u_int8_t *)beec.val;
+
+  /* Add Encap */
+  attre->ecommunity = ecommunity_merge (attre->ecommunity, &ecom_tmp);
+
+  attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+
+}
+
 /*
  * Create or update EVPN route (of type based on prefix) for specified VNI
  * and schedule for processing.
@@ -468,9 +503,10 @@ update_evpn_route (struct bgp *bgp, struct bgpevpn *vpn,
   /* Build path-attribute for this route. */
   bgp_attr_default_set (&attr, BGP_ORIGIN_IGP);
   attr.nexthop = vpn->originator_ip;
-  /* Set up RT extended community. */
-  (bgp_attr_extra_get (&attr))->ecommunity = ecommunity_dup (vpn->export_rtl);
-  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+
+  /* Set up RT and ENCAP extended community. */
+  build_evpn_route_extcomm (vpn, &attr);
+
   /* The VNI goes into the 'tag' field of the route */
   vni2tag (vpn->vni, tag);
 
@@ -603,9 +639,9 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
    */
   bgp_attr_default_set (&attr, BGP_ORIGIN_IGP);
   attr.nexthop = vpn->originator_ip;
-  /* Set up RT extended community. */
-  (bgp_attr_extra_get (&attr))->ecommunity = ecommunity_dup (vpn->export_rtl);
-  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+
+  /* Set up RT and ENCAP extended community. */
+  build_evpn_route_extcomm (vpn, &attr);
 
   /* TODO: We're walking entire table for this VNI, this should be optimized later. */
   /* EVPN routes are a 2-level table, first get the RD table. */
