@@ -158,6 +158,21 @@ tag2vni (u_char *tag)
   return vni;
 }
 
+static inline void
+encode_mac_mobility_extcomm (int static_mac, u_int32_t seq,
+                             struct ecommunity_val *eval)
+{
+  memset (eval, 0, sizeof (*eval));
+  eval->val[0] = ECOMMUNITY_ENCODE_EVPN;
+  eval->val[1] = ECOMMUNITY_EVPN_SUBTYPE_MAC_MOBILITY;
+  if (static_mac)
+    eval->val[2] = 0x01;
+  eval->val[4] = (seq >> 24) & 0xff;
+  eval->val[5] = (seq >> 16) & 0xff;
+  eval->val[6] = (seq >> 8) & 0xff;
+  eval->val[7] = seq & 0xff;
+}
+
 extern char *
 bgp_evpn_tag2str (u_char *tag, char *buf, int len);
 extern char *

@@ -295,6 +295,61 @@ enum ecommunity_token
   ecommunity_token_val,
 };
 
+/*
+ * Encode BGP extended community from passed values. Supports types
+ * defined in RFC 4360 and well-known sub-types.
+ */
+static int
+ecommunity_encode (u_char type, u_char sub_type, int trans,
+                   as_t as, struct in_addr ip, u_int32_t val,
+                   struct ecommunity_val *eval)
+{
+  assert (eval);
+  if (type == ECOMMUNITY_ENCODE_AS)
+    {
+      if (as > BGP_AS_MAX)
+        return -1;
+    }
+  else if (type == ECOMMUNITY_ENCODE_IP
+           || type == ECOMMUNITY_ENCODE_AS4)
+    {
+      if (val > UINT16_MAX)
+        return -1;
+    }
+
+  /* Fill in the values. */
+  eval->val[0] = type;
+  if (!trans)
+    eval->val[0] |= ECOMMUNITY_FLAG_NON_TRANSITIVE;
+  eval->val[1] = sub_type;
+  if (type == ECOMMUNITY_ENCODE_AS)
+    {
+      eval->val[2] = (as >> 8) & 0xff;
+      eval->val[3] = as & 0xff;
+      eval->val[4] = (val >> 24) & 0xff;
+      eval->val[5] = (val >> 16) & 0xff;
+      eval->val[6] = (val >> 8) & 0xff;
+      eval->val[7] = val & 0xff;
+    }
+  else if (type == ECOMMUNITY_ENCODE_IP)
+    {
+      memcpy (&eval->val[2], &ip, sizeof (struct in_addr));
+      eval->val[6] = (val >> 8) & 0xff;
+      eval->val[7] = val & 0xff;
+    }
+  else
+    {
+      eval->val[2] = (as >> 24) & 0xff;
+      eval->val[3] = (as >> 16) & 0xff;
+      eval->val[4] = (as >> 8) & 0xff;
+      eval->val[5] =  as & 0xff;
+      eval->val[6] = (val >> 8) & 0xff;
+      eval->val[7] = val & 0xff;
+    }
+
+  return 0;
+}
+
 /* Get next Extended Communities token from the string. */
 static const char *
 ecommunity_gettoken (const char *str, struct ecommunity_val *eval,
@@ -753,60 +808,4 @@ ecommunity_match (const struct ecommunity *ecom1,
     return 1;
   else
     return 0;
-}
-
-/*
- * Encode BGP extended community from passed values. Supports types
- * defined in RFC 4360 and well-known sub-types.
- */
-int
-ecommunity_encode (u_char type, u_char sub_type, int trans,
-                   as_t as, struct in_addr ip, u_int32_t val,
-                   struct ecommunity_val *eval)
-{
-  /* Sanity checks */
-  assert (eval);
-  if (type == ECOMMUNITY_ENCODE_AS)
-    {
-      if (as > BGP_AS_MAX)
-        return -1;
-    }
-  else if (type == ECOMMUNITY_ENCODE_IP
-           || type == ECOMMUNITY_ENCODE_AS4)
-    {
-      if (val > UINT16_MAX)
-        return -1;
-    }
-
-  /* Fill in the values. */
-  eval->val[0] = type;
-  if (!trans)
-    eval->val[0] |= ECOMMUNITY_FLAG_NON_TRANSITIVE;
-  eval->val[1] = sub_type;
-  if (type == ECOMMUNITY_ENCODE_AS)
-    {
-      eval->val[2] = (as >> 8) & 0xff;
-      eval->val[3] = as & 0xff;
-      eval->val[4] = (val >> 24) & 0xff;
-      eval->val[5] = (val >> 16) & 0xff;
-      eval->val[6] = (val >> 8) & 0xff;
-      eval->val[7] = val & 0xff;
-    }
-  else if (type == ECOMMUNITY_ENCODE_IP)
-    {
-      memcpy (&eval->val[2], &ip, sizeof (struct in_addr));
-      eval->val[6] = (val >> 8) & 0xff;
-      eval->val[7] = val & 0xff;
-    }
-  else
-    {
-      eval->val[2] = (as >> 24) & 0xff;
-      eval->val[3] = (as >> 16) & 0xff;
-      eval->val[4] = (as >> 8) & 0xff;
-      eval->val[5] =  as & 0xff;
-      eval->val[6] = (val >> 8) & 0xff;
-      eval->val[7] = val & 0xff;
-    }
-
-  return 0;
 }

@@ -276,17 +276,14 @@ static void
 form_auto_rt (struct bgp *bgp, struct bgpevpn *vpn,
                        struct ecommunity **ecom_list)
 {
-  u_char rt_type;
-  struct in_addr ip = { .s_addr = INADDR_ANY };
   struct ecommunity_val eval;
   struct ecommunity *ecom;
 
   if (bgp->as > BGP_AS_MAX)
-    rt_type = ECOMMUNITY_ENCODE_AS4;
+    encode_route_target_as4 (bgp->as, vpn->vni, &eval);
   else
-    rt_type = ECOMMUNITY_ENCODE_AS;
-  ecommunity_encode (rt_type, ECOMMUNITY_ROUTE_TARGET, 1, bgp->as,
-                     ip, vpn->vni, &eval);
+    encode_route_target_as (bgp->as, vpn->vni, &eval);
+
   ecom = ecommunity_new ();
   ecommunity_add_val (ecom, &eval);
   *ecom_list = ecom;
@@ -461,11 +458,7 @@ build_evpn_route_extcomm (struct bgpevpn *vpn, struct attr *attr)
   attre->ecommunity = ecommunity_dup (vpn->export_rtl);
 
   memset (&ecom_tmp, 0, sizeof (ecom_tmp));
-  memset (&beec, 0, sizeof (beec));
-  beec.val[0] = ECOMMUNITY_ENCODE_OPAQUE;
-  beec.val[1] = ECOMMUNITY_OPAQUE_SUBTYPE_ENCAP;
-  beec.val[6] = ((tnl_type) >> 8) & 0xff;
-  beec.val[7] = (tnl_type) & 0xff;
+  encode_encap_extcomm (tnl_type, &beec);
   ecom_tmp.size = 1;
   ecom_tmp.val = (u_int8_t *)beec.val;
 
