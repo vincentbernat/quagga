@@ -6383,11 +6383,11 @@ DEFUN (no_bgp_evpn_vni_rd_without_val,
 
 DEFUN (bgp_evpn_vni_rt,
        bgp_evpn_vni_rt_cmd,
-       "route-target (import|export) .RTLIST",
+       "route-target (import|export) .RT",
        "Route Target\n"
        "import\n"
        "export\n"
-       "Space separated route target list (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
+       "Route target (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
 {
   struct bgp *bgp;
   VTY_DECLVAR_CONTEXT_SUB(bgpevpn, vpn);
@@ -6397,6 +6397,7 @@ DEFUN (bgp_evpn_vni_rt,
   char *str;
 
   bgp = vty->index;
+  max_rts = 1; /* We only support one RT in a command. */
 
   if (!bgp || !vpn)
     return CMD_WARNING;
@@ -6404,13 +6405,11 @@ DEFUN (bgp_evpn_vni_rt,
   if (!strcmp (argv[0], "import"))
     {
       rt_type = RT_TYPE_IMPORT;
-      max_rts = 5; /* Only a max of 5 import RTs supported. */
       ecom = vpn->import_rtl;
     }
   else if (!strcmp (argv[0], "export"))
     {
       rt_type = RT_TYPE_EXPORT;
-      max_rts = 1; /* Only 1 export RT supported. */
       ecom = vpn->export_rtl;
     }
   else
@@ -6421,7 +6420,7 @@ DEFUN (bgp_evpn_vni_rt,
 
   if (argc > (max_rts + 1))
     {
-      vty_out (vty, "%% Only %d %s RT(s) are allowed%s",
+      vty_out (vty, "%% Only %d %s RT is allowed in a command%s",
                max_rts, rt_type == RT_TYPE_IMPORT ? "Import" : "Export",
                VTY_NEWLINE);
       return CMD_WARNING;
