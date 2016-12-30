@@ -267,8 +267,8 @@ bgp_evpn_show_vni (struct vty *vty, struct bgp *bgp, vni_t vni);
 extern void
 bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp);
 extern void
-bgp_evpn_set_advertise_vni (struct bgp *bgp);
+bgp_evpn_set_advertise_all_vni (struct bgp *bgp);
 extern void
-bgp_evpn_unset_advertise_vni (struct bgp *bgp);
+bgp_evpn_unset_advertise_all_vni (struct bgp *bgp);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

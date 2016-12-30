@@ -6595,10 +6595,10 @@ DEFUN (no_bgp_evpn_vni_rt_without_val,
   return CMD_SUCCESS;
 }
 
-DEFUN (bgp_evpn_advertise_vni,
-       bgp_evpn_advertise_vni_cmd,
-       "advertise-vni",
-       "Advertise VNI\n")
+DEFUN (bgp_evpn_advertise_all_vni,
+       bgp_evpn_advertise_all_vni_cmd,
+       "advertise-all-vni",
+       "Advertise All local VNIs\n")
 {
   struct bgp *bgp;
 
@@ -6606,15 +6606,15 @@ DEFUN (bgp_evpn_advertise_vni,
 
   if (!bgp)
     return CMD_WARNING;
-  bgp_evpn_set_advertise_vni (bgp);
+  bgp_evpn_set_advertise_all_vni (bgp);
   return CMD_SUCCESS;
 }
 
-DEFUN (no_bgp_evpn_advertise_vni,
-       no_bgp_evpn_advertise_vni_cmd,
-       "no advertise-vni",
+DEFUN (no_bgp_evpn_advertise_all_vni,
+       no_bgp_evpn_advertise_all_vni_cmd,
+       "no advertise-all-vni",
        NO_STR
-       "Advertise VNI\n")
+       "Advertise All local VNIs\n")
 {
   struct bgp *bgp;
 
@@ -6622,7 +6622,7 @@ DEFUN (no_bgp_evpn_advertise_vni,
 
   if (!bgp)
     return CMD_WARNING;
-  bgp_evpn_unset_advertise_vni (bgp);
+  bgp_evpn_unset_advertise_all_vni (bgp);
   return CMD_SUCCESS;
 }
 
@@ -14488,8 +14488,8 @@ DEFUN (show_bgp_evpn_vni,
   if (!bgp)
     return CMD_SUCCESS;
 
-  vty_out (vty, "Advertise VNI flag: %s%s",
-           bgp->advertise_vni? "Enabled" : "Disabled", VTY_NEWLINE);
+  vty_out (vty, "Advertise All VNI flag: %s%s",
+           bgp->advertise_all_vni? "Enabled" : "Disabled", VTY_NEWLINE);
 
   bgp_evpn_show_all_vnis (vty, bgp);
   return CMD_SUCCESS;
@@ -16433,14 +16433,14 @@ bgp_vty_init (void)
 
   /* EVPN commands */
   install_element (BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
-  install_element (BGP_EVPN_NODE, &bgp_evpn_advertise_vni_cmd);
+  install_element (BGP_EVPN_NODE, &bgp_evpn_advertise_all_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
   install_element (BGP_EVPN_VNI_NODE, &exit_vni_cmd);
 
   /* "no" EVPN commands */
   install_element (BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);
-  install_element (BGP_EVPN_NODE, &no_bgp_evpn_advertise_vni_cmd);
+  install_element (BGP_EVPN_NODE, &no_bgp_evpn_advertise_all_vni_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_without_val_cmd);
   install_element (BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);

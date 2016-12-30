@@ -33,7 +33,7 @@
 #include "zebra/zebra_vrf.h"
 
 /* Is EVPN enabled? */
-#define EVPN_ENABLED(zvrf)  (zvrf)->advertise_vni
+#define EVPN_ENABLED(zvrf)  (zvrf)->advertise_all_vni
 
 extern int zebra_vxlan_if_up (struct interface *ifp);
 extern int zebra_vxlan_if_down (struct interface *ifp);
@@ -54,7 +54,7 @@ extern int zebra_vxlan_local_mac_add_update (struct interface *ifp,
                     struct interface *br_if, struct ethaddr *mac, vlanid_t vid);
 extern int zebra_vxlan_local_mac_del (struct interface *ifp,
                     struct interface *br_if, struct ethaddr *mac, vlanid_t vid);
-extern int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
+extern int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
                                       u_short length, struct zebra_vrf *zvrf);
 extern void zebra_vxlan_print_vni_macs (struct vty *vty, struct zebra_vrf *zvrf,
                                         vni_t vni);

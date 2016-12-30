@@ -223,7 +223,7 @@ end
 end
  address-family evpn
   neighbor LEAF activate
-  advertise-vni
+  advertise-all-vni
   vni 10100
    rd 65000:10100
    route-target import 10.1.1.1:10100

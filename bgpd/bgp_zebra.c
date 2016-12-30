@@ -191,7 +191,7 @@ bgp_read_import_check_update(int command, struct zclient *zclient,
 }
 
 int
-bgp_zebra_advertise_vni (struct bgp *bgp, int advertise_vni)
+bgp_zebra_advertise_all_vni (struct bgp *bgp, int advertise)
 {
   struct stream *s;
 
@@ -206,8 +206,8 @@ bgp_zebra_advertise_vni (struct bgp *bgp, int advertise_vni)
   s = zclient->obuf;
   stream_reset (s);
 
-  zclient_create_header (s, ZEBRA_ADVERTISE_VNI, bgp->vrf_id);
-  stream_putc(s, advertise_vni);
+  zclient_create_header (s, ZEBRA_ADVERTISE_ALL_VNI, bgp->vrf_id);
+  stream_putc(s, advertise);
   stream_putw_at (s, 0, stream_get_endp (s));
 
   return zclient_send_message(zclient);
@@ -2088,8 +2088,8 @@ bgp_zebra_instance_register (struct bgp *bgp)
 
   /* For default instance, register to learn about VNIs, if appropriate. */
   if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
-      && bgp->advertise_vni)
-    bgp_zebra_advertise_vni (bgp, 1);
+      && bgp->advertise_all_vni)
+    bgp_zebra_advertise_all_vni (bgp, 1);
 }
 
 /* Deregister this instance with Zebra. Invoked upon the instance
@@ -2107,8 +2107,8 @@ bgp_zebra_instance_deregister (struct bgp *bgp)
 
   /* For default instance, unregister learning about VNIs, if appropriate. */
   if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
-      && bgp->advertise_vni)
-    bgp_zebra_advertise_vni (bgp, 0);
+      && bgp->advertise_all_vni)
+    bgp_zebra_advertise_all_vni (bgp, 0);
 
   /* Deregister for router-id, interfaces, redistributed routes. */
   zclient_send_dereg_requests (zclient, bgp->vrf_id);

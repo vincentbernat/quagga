@@ -77,8 +77,8 @@ zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
   return 0;
 }
 
-int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
-                               u_short length, struct zebra_vrf *zvrf)
+int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
+                                   u_short length, struct zebra_vrf *zvrf)
 {
   return 0;
 }

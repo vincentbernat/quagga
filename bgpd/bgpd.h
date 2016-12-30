@@ -355,7 +355,7 @@ struct bgp
 
   /* EVPN: vnihash for vni's */
   struct hash *vnihash;
-  int advertise_vni; /* Redistribute VNIs into BGP? */
+  int advertise_all_vni; /* Redistribute VNIs into BGP? */
   /* EVPN: import_rt_hash for auto/configured import route target */
   struct hash *import_rt_hash;
 

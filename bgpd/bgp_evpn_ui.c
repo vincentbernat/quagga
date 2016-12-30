@@ -398,10 +398,10 @@ bgp_config_write_evpn_info (struct vty *vty, struct bgp *bgp, afi_t afi,
 {
   struct evpn_config_write cfg;
 
-  if (bgp->advertise_vni)
+  if (bgp->advertise_all_vni)
     {
       bgp_config_write_family_header (vty, afi, safi, write);
-      vty_out (vty, "  advertise-vni%s", VTY_NEWLINE);
+      vty_out (vty, "  advertise-all-vni%s", VTY_NEWLINE);
     }
 
   cfg.write = *write;
@@ -459,10 +459,10 @@ bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp)
  * EVPN (VNI advertisement) enabled. Register with zebra.
  */
 void
-bgp_evpn_set_advertise_vni (struct bgp *bgp)
+bgp_evpn_set_advertise_all_vni (struct bgp *bgp)
 {
-  bgp->advertise_vni = 1;
-  bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
+  bgp->advertise_all_vni = 1;
+  bgp_zebra_advertise_all_vni (bgp, bgp->advertise_all_vni);
 }
 
 /*
@@ -470,9 +470,9 @@ bgp_evpn_set_advertise_vni (struct bgp *bgp)
  * cache, EVPN routes (delete and withdraw from peers).
  */
 void
-bgp_evpn_unset_advertise_vni (struct bgp *bgp)
+bgp_evpn_unset_advertise_all_vni (struct bgp *bgp)
 {
-  bgp->advertise_vni = 0;
-  bgp_zebra_advertise_vni (bgp, bgp->advertise_vni);
+  bgp->advertise_all_vni = 0;
+  bgp_zebra_advertise_all_vni (bgp, bgp->advertise_all_vni);
   bgp_evpn_cleanup_on_disable (bgp);
 }

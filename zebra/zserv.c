@@ -2055,8 +2055,8 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_REMOTE_VTEP_DEL:
       zebra_vxlan_remote_vtep_del (client, sock, length, zvrf);
       break;
-    case ZEBRA_ADVERTISE_VNI:
-      zebra_vxlan_advertise_vni (client, sock, length, zvrf);
+    case ZEBRA_ADVERTISE_ALL_VNI:
+      zebra_vxlan_advertise_all_vni (client, sock, length, zvrf);
       break;
     case ZEBRA_IPMR_ROUTE_STATS:
       zebra_ipmr_route_stats (client, sock, length, zvrf);

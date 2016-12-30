@@ -82,7 +82,7 @@ struct zebra_vrf
   /*
    * Whether EVPN is enabled or not.
    */
-  int advertise_vni;
+  int advertise_all_vni;
 
   /* MPLS static LSP config table */
   struct hash *slsp_table;

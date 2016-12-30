@@ -757,7 +757,7 @@ zvni_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni)
 
 /*
  * Build the VNI hash table by going over the VxLAN interfaces. This
- * is called when EVPN (advertise-vni) is enabled.
+ * is called when EVPN (advertise-all-vni) is enabled.
  */
 static void
 zvni_build_hash_table (struct zebra_vrf *zvrf)
@@ -1532,8 +1532,8 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
  * when disabled, the entries should be deleted and remote VTEPs and MACs
  * uninstalled from the kernel.
  */
-int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
-                               u_short length, struct zebra_vrf *zvrf)
+int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
+                                   u_short length, struct zebra_vrf *zvrf)
 {
   struct stream *s;
   int advertise;
@@ -1542,14 +1542,14 @@ int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
   advertise = stream_getc (s);
 
   if (IS_ZEBRA_DEBUG_VXLAN)
-    zlog_debug ("%u:EVPN (advertise-vni) %s, currently %s",
+    zlog_debug ("%u:EVPN VNI Adv %s, currently %s",
                 zvrf->vrf_id, advertise ? "enabled" : "disabled",
                 EVPN_ENABLED(zvrf) ? "enabled" : "disabled");
 
-  if (zvrf->advertise_vni == advertise)
+  if (zvrf->advertise_all_vni == advertise)
     return 0;
 
-  zvrf->advertise_vni = advertise;
+  zvrf->advertise_all_vni = advertise;
   if (EVPN_ENABLED(zvrf))
     {
       /* Build VNI hash table and inform BGP. */
@@ -1565,14 +1565,6 @@ int zebra_vxlan_advertise_vni (struct zserv *client, int sock,
        */
       hash_iterate (zvrf->vni_table, zvni_cleanup_all, zvrf);
     }
-
-#if 0
-  if (zvrf->advertise_vni != advertise)
-    {
-      if (zvrf->advertise_vni)
-        zvni_propagate_vni_info (zvrf);
-    }
-#endif
 
   return 0;
 }

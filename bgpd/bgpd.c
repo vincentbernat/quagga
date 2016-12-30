@@ -228,13 +228,13 @@ bgp_router_id_set (struct bgp *bgp, const struct in_addr *id)
     return 0;
 
   /* EVPN uses router id in RD, withdraw them */
-  if (bgp->advertise_vni)
+  if (bgp->advertise_all_vni)
     bgp_evpn_handle_router_id_update (bgp, TRUE);
 
   IPV4_ADDR_COPY (&bgp->router_id, id);
 
   /* EVPN uses router id in RD, update them */
-  if (bgp->advertise_vni)
+  if (bgp->advertise_all_vni)
     bgp_evpn_handle_router_id_update (bgp, FALSE);
 
   /* Set all peer's local identifier with this value. */

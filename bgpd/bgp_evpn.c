@@ -782,7 +782,7 @@ update_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
 
 /*
  * Delete (and withdraw) local routes for a VNI. Invoked upon the VNI
- * being deleted or EVPN (advertise-vni) being disabled.
+ * being deleted or EVPN (advertise-all-vni) being disabled.
  */
 static int
 delete_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
@@ -1505,7 +1505,7 @@ bgp_evpn_new (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
 
 /*
  * Free a given VPN - called in multiple scenarios such as zebra
- * notification, configuration being deleted, advertise-vni disabled etc.
+ * notification, configuration being deleted, advertise-all-vni disabled etc.
  * This just frees appropriate memory, caller should have taken other
  * needed actions.
  */
