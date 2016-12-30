@@ -84,7 +84,7 @@ int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
 }
 
 void
-zebra_vxlan_print_vni_macs (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
+zebra_vxlan_print_macs_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
 }
 
