@@ -11556,8 +11556,10 @@ bgp_show_evpn_route (struct vty *vty, struct prefix_rd *prd)
                                  inet_ntoa (bgp->router_id), VTY_NEWLINE);
                         vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s",
                                  VTY_NEWLINE);
-                        vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s",
-                                 VTY_NEWLINE, VTY_NEWLINE);
+                        vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s",
+                                 VTY_NEWLINE);
+                        vty_out (vty, "EVPN type-2 prefix: [2]:[ESI]:[EthTag]:[MAClen]:[MAC]%s", VTY_NEWLINE);
+                        vty_out (vty, "EVPN type-3 prefix: [3]:[ESI]:[EthTag]:[IPlen]:[OrigIP]%s%s", VTY_NEWLINE, VTY_NEWLINE);
                         vty_out (vty, v4_header, VTY_NEWLINE);
                         header = 0;
 		      }
