@@ -229,7 +229,28 @@ static void
 show_vni_entry (struct hash_backet *backet, struct vty *vty)
 {
   struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
-  display_vni (vty, vpn);
+  char buf1[10];
+  char buf2[INET6_ADDRSTRLEN];
+  char *ecom_str;
+
+  buf1[0] = '\0';
+  if (is_vni_configured (vpn))
+    sprintf (buf1, "C");
+  if (is_vni_live (vpn))
+    strcat (buf1, "K");
+
+  vty_out(vty, "%-5s %-10u %-15s %-21s",
+          buf1, vpn->vni, inet_ntoa(vpn->originator_ip),
+          prefix_rd2str (&vpn->prd, buf2, RD_ADDRSTRLEN));
+  ecom_str = ecommunity_ecom2str (vpn->import_rtl,
+                                  ECOMMUNITY_FORMAT_ROUTE_MAP);
+  vty_out (vty, " %-21s", ecom_str);
+  XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+  ecom_str = ecommunity_ecom2str (vpn->export_rtl,
+                                  ECOMMUNITY_FORMAT_ROUTE_MAP);
+  vty_out (vty, " %-21s", ecom_str);
+  XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 
 
@@ -450,6 +471,18 @@ bgp_evpn_show_vni (struct vty *vty, struct bgp *bgp, vni_t vni)
 void
 bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp)
 {
+  u_int32_t num_vnis;
+
+  num_vnis = hashcount(bgp->vnihash);
+  if (!num_vnis)
+    return;
+  vty_out(vty, "Number of VNIs (including pre-configured): %u%s",
+          num_vnis, VTY_NEWLINE);
+  vty_out(vty, "Flags: C - pre-configured, K - defined in kernel %s",
+          VTY_NEWLINE);
+  vty_out(vty, "%-5s %-10s %-15s %-21s %-21s %-21s%s",
+          "Flags", "VNI", "Orig IP", "RD", "Import RT", "Export RT",
+          VTY_NEWLINE);
   hash_iterate (bgp->vnihash,
                 (void (*) (struct hash_backet *, void *))
                 show_vni_entry, vty);
