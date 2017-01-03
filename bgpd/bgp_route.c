@@ -6958,7 +6958,7 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       char tag_buf[20];
 
       bgp_evpn_route2str ((struct prefix_evpn *)p, buf2, sizeof (buf2));
-      vty_out (vty, "Route %s", buf2);
+      vty_out (vty, "  Route %s", buf2);
       tag_buf[0] = '\0';
       if (binfo->extra && binfo->extra->tag)
         {
@@ -8038,9 +8038,11 @@ route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
   else
     {
       if (safi == SAFI_EVPN)
-        vty_out (vty, "BGP routing table entry for %s%s",
-	       prefix_rd2str (prd, buf1, RD_ADDRSTRLEN),
-	       VTY_NEWLINE);
+        vty_out (vty, "BGP routing table entry for %s:%s%s",
+                 prefix_rd2str (prd, buf1, RD_ADDRSTRLEN),
+                 bgp_evpn_route2str ((struct prefix_evpn *)p,
+                                     buf2, sizeof (buf2)),
+                 VTY_NEWLINE);
       else
         vty_out (vty, "BGP routing table entry for %s%s%s/%d%s",
 	       ((safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP) ?

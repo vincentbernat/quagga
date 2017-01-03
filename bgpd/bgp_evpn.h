@@ -263,6 +263,11 @@ bgp_config_write_evpn_info (struct vty *vty, struct bgp *bgp, afi_t afi,
 extern void
 bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp);
 extern void
+bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
+                        struct prefix_rd *prd);
+extern void
+bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp);
+extern void
 bgp_evpn_show_vni (struct vty *vty, struct bgp *bgp, vni_t vni);
 extern void
 bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp);
