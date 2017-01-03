@@ -1591,6 +1591,7 @@ vtysh_exit (struct vty *vty)
       break;
     case BGP_EVPN_VNI_NODE:
       vty->node = BGP_EVPN_NODE;
+      break;
     case BGP_VNC_DEFAULTS_NODE:
     case BGP_VNC_NVE_GROUP_NODE:
     case BGP_VNC_L2_GROUP_NODE:
