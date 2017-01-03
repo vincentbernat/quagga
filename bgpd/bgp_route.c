@@ -7133,7 +7133,8 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       if (binfo->peer == bgp->peer_self)
 	{
 
-          if (p->family == AF_INET && !BGP_ATTR_NEXTHOP_AFI_IP6(attr))
+          if (safi == SAFI_EVPN ||
+              (p->family == AF_INET && !BGP_ATTR_NEXTHOP_AFI_IP6(attr)))
             {
               if (json_paths)
                 json_object_string_add(json_peer, "peerId", "0.0.0.0");
