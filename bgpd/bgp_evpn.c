@@ -48,9 +48,6 @@
 /*
  * Definitions and external declarations.
  */
-#define EVPN_TYPE_2_ROUTE_PREFIXLEN      192
-#define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
-
 extern struct zclient *zclient;
 
 DEFINE_QOBJ_TYPE(bgpevpn)
@@ -412,34 +409,6 @@ bgp_zebra_send_remote_vtep (struct bgp *bgp, struct bgpevpn *vpn,
 }
 
 /*
- * Build EVPN type-2 prefix (for route node)
- */
-static inline void
-build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac)
-{
-  memset (p, 0, sizeof (struct prefix_evpn));
-  p->family = AF_ETHERNET;
-  p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
-  p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
-  memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
-  p->prefix.ipa_type = IP_ADDR_NONE;
-}
-
-/*
- * Build EVPN type-3 prefix (for route node)
- */
-static inline void
-build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
-{
-  memset (p, 0, sizeof (struct prefix_evpn));
-  p->family = AF_ETHERNET;
-  p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
-  p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
-  p->prefix.ipa_type = IP_ADDR_V4;
-  p->prefix.ip.v4_addr = originator_ip;
-}
-
- /*
  * Build extended communities for EVPN route. RT and ENCAP are
  * applicable to all routes.
  */

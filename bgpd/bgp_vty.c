@@ -11522,7 +11522,34 @@ DEFUN (show_bgp_evpn_route,
   bgp = bgp_get_default ();
 
   if (bgp)
-    bgp_evpn_show_all_routes (vty, bgp);
+    bgp_evpn_show_all_routes (vty, bgp, 0);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_bgp_evpn_route_type,
+       show_bgp_evpn_route_type_cmd,
+       "show bgp evpn route type (macip|multicast)",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "Specify Route type\n"
+       "MAC-IP (Type-2) route\n"
+       "Multicast (Type-3) route\n")
+{
+  struct bgp *bgp;
+  int type;
+
+  bgp = bgp_get_default ();
+  if (strncmp (argv[0], "ma", 2) == 0)
+    type = BGP_EVPN_MAC_IP_ROUTE;
+  else if (strncmp (argv[0], "mu", 2) == 0)
+    type = BGP_EVPN_IMET_ROUTE;
+  else
+    return CMD_WARNING;
+
+  if (bgp)
+    bgp_evpn_show_all_routes (vty, bgp, type);
   return CMD_SUCCESS;
 }
 
@@ -11548,7 +11575,79 @@ DEFUN (show_bgp_evpn_route_rd,
     }
   bgp = bgp_get_default ();
   if (bgp)
-    bgp_evpn_show_route_rd (vty, bgp, &prd);
+    bgp_evpn_show_route_rd (vty, bgp, &prd, 0);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_bgp_evpn_route_rd_type,
+       show_bgp_evpn_route_rd_type_cmd,
+       "show bgp evpn route rd ASN:nn_or_IP-address:nn type (macip|multicast)",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "Route Distinguisher\n"
+       "ASN:XX or A.B.C.D:XX\n"
+       "Specify Route type\n"
+       "MAC-IP (Type-2) route\n"
+       "Multicast (Type-3) route\n")
+{
+  struct bgp *bgp;
+  int ret;
+  struct prefix_rd prd;
+  int type;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (strncmp (argv[1], "ma", 2) == 0)
+    type = BGP_EVPN_MAC_IP_ROUTE;
+  else if (strncmp (argv[1], "mu", 2) == 0)
+    type = BGP_EVPN_IMET_ROUTE;
+  else
+    return CMD_WARNING;
+
+  bgp = bgp_get_default ();
+  if (bgp)
+    bgp_evpn_show_route_rd (vty, bgp, &prd, type);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_bgp_evpn_route_rd_mac,
+       show_bgp_evpn_route_rd_mac_cmd,
+       "show bgp evpn route rd ASN:nn_or_IP-address:nn mac WORD",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "Route Distinguisher\n"
+       "ASN:XX or A.B.C.D:XX\n"
+       "MAC\n"
+       "MAC address (e.g., 00:e0:ec:20:12:62\n")
+{
+  struct bgp *bgp;
+  int ret;
+  struct prefix_rd prd;
+  struct ethaddr mac;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  if (str2mac (argv[1], &mac) != 0)
+    {
+      vty_out (vty, "%% Malformed MAC address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  bgp = bgp_get_default ();
+  if (bgp)
+    bgp_evpn_show_route_rd_mac (vty, bgp, &prd, &mac);
   return CMD_SUCCESS;
 }
 
@@ -16797,7 +16896,10 @@ bgp_vty_init (void)
   install_element (VIEW_NODE, &show_bgp_evpn_vni_num_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_summary_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_type_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_rd_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_rd_type_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_rd_mac_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_import_rt_cmd);
 
   /* Community-list. */

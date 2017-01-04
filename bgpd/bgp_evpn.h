@@ -30,6 +30,10 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_ecommunity.h"
 
+/* EVPN prefix lengths. */
+#define EVPN_TYPE_2_ROUTE_PREFIXLEN      192
+#define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
+
 /* EVPN route types. */
 typedef enum
 {
@@ -173,6 +177,28 @@ encode_mac_mobility_extcomm (int static_mac, u_int32_t seq,
   eval->val[7] = seq & 0xff;
 }
 
+static inline void
+build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac)
+{
+  memset (p, 0, sizeof (struct prefix_evpn));
+  p->family = AF_ETHERNET;
+  p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
+  p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
+  memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
+  p->prefix.ipa_type = IP_ADDR_NONE;
+}
+
+static inline void
+build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
+{
+  memset (p, 0, sizeof (struct prefix_evpn));
+  p->family = AF_ETHERNET;
+  p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
+  p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
+  p->prefix.ipa_type = IP_ADDR_V4;
+  p->prefix.ip.v4_addr = originator_ip;
+}
+
 extern char *
 bgp_evpn_tag2str (u_char *tag, char *buf, int len);
 extern char *
@@ -264,9 +290,13 @@ extern void
 bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp);
 extern void
 bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
-                        struct prefix_rd *prd);
+                        struct prefix_rd *prd, int type);
 extern void
-bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp);
+bgp_evpn_show_route_rd_mac (struct vty *vty, struct bgp *bgp,
+                            struct prefix_rd *prd, struct ethaddr *mac);
+extern void
+bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp,
+                          int type);
 extern void
 bgp_evpn_show_vni (struct vty *vty, struct bgp *bgp, vni_t vni);
 extern void

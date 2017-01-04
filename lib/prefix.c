@@ -1097,3 +1097,17 @@ mac2str (const struct ethaddr *mac, char *buf, int size)
   return buf;
 
 }
+
+int
+str2mac (const char *buf, struct ethaddr *mac)
+{
+  unsigned char macaddr[ETHER_ADDR_LEN];
+
+  if (sscanf(buf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+      macaddr, macaddr+1, macaddr+2, macaddr+3,
+      macaddr+4, macaddr+5) != ETHER_ADDR_LEN)
+    return -1;
+
+  memcpy (mac->octet, macaddr, ETHER_ADDR_LEN);
+  return 0;
+}

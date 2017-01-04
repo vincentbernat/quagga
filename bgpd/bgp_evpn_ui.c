@@ -501,11 +501,54 @@ bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp)
 }
 
 /*
+ * Display BGP EVPN routing table -- for specific RD and MAC (vty handler).
+ * By definition, only matching type-2 route will be displayed.
+ */
+void
+bgp_evpn_show_route_rd_mac (struct vty *vty, struct bgp *bgp,
+                            struct prefix_rd *prd, struct ethaddr *mac)
+{
+  struct prefix_evpn p;
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+  afi_t afi;
+  safi_t safi;
+  u_int32_t path_cnt = 0;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+
+  /* See if route exists. */
+  build_evpn_type2_prefix (&p, mac);
+  rn = bgp_afi_node_lookup (bgp->rib[afi][safi], afi, safi,
+                            (struct prefix *)&p, prd);
+  if (!rn || !rn->info)
+    {
+      vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
+      return;
+    }
+
+  /* Prefix and num paths displayed once per prefix. */
+  route_vty_out_detail_header (vty, bgp, rn, prd, afi, safi, NULL);
+
+  /* Display each path for this prefix. */
+  for (ri = rn->info; ri; ri = ri->next)
+    {
+      route_vty_out_detail (vty, bgp, &rn->p, ri, afi, safi, NULL);
+      path_cnt++;
+    }
+
+  vty_out (vty, "%sDisplayed %u paths for requested prefix%s",
+           VTY_NEWLINE, path_cnt, VTY_NEWLINE);
+}
+
+/*
  * Display BGP EVPN routing table -- for specific RD (vty handler)
+ * If 'type' is non-zero, only routes matching that type are shown.
  */
 void
 bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
-                        struct prefix_rd *prd)
+                        struct prefix_rd *prd, int type)
 {
   struct bgp_node *rd_rn;
   struct bgp_table *table;
@@ -530,6 +573,12 @@ bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
   /* Display all prefixes with this RD. */
   for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
     {
+      struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+      if (type &&
+          evp->prefix.route_type != type)
+        continue;
+
       if (rn->info)
         {
           /* RD header and legend - once overall. */
@@ -557,17 +606,21 @@ bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
     }
 
   if (prefix_cnt == 0)
-    vty_out (vty, "No prefixes exist with this RD%s", VTY_NEWLINE);
+    vty_out (vty, "No prefixes exist with this RD%s%s",
+             type ? " (of requested type)" : "", VTY_NEWLINE);
   else
-    vty_out (vty, "%sDisplayed %u prefixes (%u paths) with this RD%s",
-             VTY_NEWLINE, prefix_cnt, path_cnt, VTY_NEWLINE);
+    vty_out (vty, "%sDisplayed %u prefixes (%u paths) with this RD%s%s",
+             VTY_NEWLINE, prefix_cnt, path_cnt,
+             type ? " (of requested type)" : "", VTY_NEWLINE);
 }
 
 /*
- * Display BGP EVPN routing table - all routes (vty handler)
+ * Display BGP EVPN routing table - all routes (vty handler).
+ * If 'type' is non-zero, only routes matching that type are shown.
  */
 void
-bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp)
+bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp,
+                          int type)
 {
   struct bgp_node *rd_rn;
   struct bgp_table *table;
@@ -598,6 +651,12 @@ bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp)
       /* Display all prefixes for an RD */
       for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
         {
+          struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+          if (type &&
+              evp->prefix.route_type != type)
+            continue;
+
           if (rn->info)
             {
               /* Overall header/legend displayed once. */
@@ -629,10 +688,12 @@ bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp)
     }
 
   if (prefix_cnt == 0)
-    vty_out (vty, "No EVPN prefixes exist%s", VTY_NEWLINE);
+    vty_out (vty, "No EVPN prefixes %sexist%s",
+             type ? "(of requested type) " : "", VTY_NEWLINE);
   else
-    vty_out (vty, "%sDisplayed %u prefixes (%u paths)%s",
-             VTY_NEWLINE, prefix_cnt, path_cnt, VTY_NEWLINE);
+    vty_out (vty, "%sDisplayed %u prefixes (%u paths)%s%s",
+             VTY_NEWLINE, prefix_cnt, path_cnt,
+             type ? " (of requested type)" : "", VTY_NEWLINE);
 }
 
 /*
