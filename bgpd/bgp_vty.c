@@ -11627,7 +11627,7 @@ DEFUN (show_bgp_evpn_route_rd_mac,
        "Route Distinguisher\n"
        "ASN:XX or A.B.C.D:XX\n"
        "MAC\n"
-       "MAC address (e.g., 00:e0:ec:20:12:62\n")
+       "MAC address (e.g., 00:e0:ec:20:12:62)\n")
 {
   struct bgp *bgp;
   int ret;
