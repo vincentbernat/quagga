@@ -5879,6 +5879,75 @@ DEFUN (show_evpn_mac_vni,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_evpn_mac_vni_all,
+       show_evpn_mac_vni_all_cmd,
+       "show evpn mac vni all",
+       SHOW_STR
+       "EVPN\n"
+       "MAC addresses\n"
+       "VxLAN Network Identifier\n"
+       "All VNIs\n")
+{
+  struct zebra_vrf *zvrf;
+
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_macs_all_vni(vty, zvrf);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_mac_vni_mac,
+       show_evpn_mac_vni_mac_cmd,
+       "show evpn mac vni " CMD_VNI_RANGE " mac WORD",
+       SHOW_STR
+       "EVPN\n"
+       "MAC addresses\n"
+       "VxLAN Network Identifier\n"
+       "VNI number\n"
+       "MAC\n"
+       "MAC address (e.g., 00:e0:ec:20:12:62)\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+  struct ethaddr mac;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (str2mac (argv[1], &mac) != 0)
+    {
+      vty_out (vty, "%% Malformed MAC address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_specific_mac_vni(vty, zvrf, vni, &mac);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_mac_vni_vtep,
+       show_evpn_mac_vni_vtep_cmd,
+       "show evpn mac vni " CMD_VNI_RANGE " vtep A.B.C.D",
+       SHOW_STR
+       "EVPN\n"
+       "MAC addresses\n"
+       "VxLAN Network Identifier\n"
+       "VNI number\n"
+       "Remote VTEP\n"
+       "Remote VTEP IP address\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+  struct in_addr vtep_ip;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (!inet_aton (argv[1], &vtep_ip))
+    {
+      vty_out (vty, "%% Malformed VTEP IP address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_macs_vni_vtep(vty, zvrf, vni, vtep_ip);
+  return CMD_SUCCESS;
+}
+
 /* Static ip route configuration write function. */
 static int
 zebra_ip_config (struct vty *vty)
@@ -6333,4 +6402,7 @@ zebra_vty_init (void)
   install_element (VIEW_NODE, &show_evpn_vni_cmd);
   install_element (VIEW_NODE, &show_evpn_vni_vni_cmd);
   install_element (VIEW_NODE, &show_evpn_mac_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_mac_vni_all_cmd);
+  install_element (VIEW_NODE, &show_evpn_mac_vni_mac_cmd);
+  install_element (VIEW_NODE, &show_evpn_mac_vni_vtep_cmd);
 }

@@ -88,6 +88,22 @@ zebra_vxlan_print_macs_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
 }
 
+void zebra_vxlan_print_macs_all_vni (struct vty *vty, struct zebra_vrf *zvrf)
+{
+}
+
+void
+zebra_vxlan_print_specific_mac_vni (struct vty *vty, struct zebra_vrf *zvrf,
+                                    vni_t vni, struct ethaddr *mac)
+{
+}
+
+void
+zebra_vxlan_print_macs_vni_vtep (struct vty *vty, struct zebra_vrf *zvrf,
+                                 vni_t vni, struct in_addr vtep_ip)
+{
+}
+
 void
 zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {

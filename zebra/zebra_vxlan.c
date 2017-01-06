@@ -141,12 +141,16 @@ struct macip_walk_ctx
   int uninstall;              /* uninstall from kernel? */
 
   u_int32_t flags;
-#define DEL_LOCAL_MAC              0x1
-#define DEL_REMOTE_MAC             0x2
-#define DEL_ALL_MAC                (DEL_LOCAL_MAC | DEL_REMOTE_MAC)
-#define DEL_REMOTE_MAC_FROM_VTEP   0x4
+#define DEL_LOCAL_MAC                0x1
+#define DEL_REMOTE_MAC               0x2
+#define DEL_ALL_MAC                  (DEL_LOCAL_MAC | DEL_REMOTE_MAC)
+#define DEL_REMOTE_MAC_FROM_VTEP     0x4
+#define SHOW_REMOTE_MAC_FROM_VTEP    0x8
 
   struct in_addr r_vtep_ip;   /* To walk MACs from specific VTEP */
+
+  struct vty *vty;            /* Used by VTY handlers */
+  u_int32_t  count;           /* Used by VTY handlers */
 };
 
 
@@ -968,7 +972,6 @@ zvni_vtep_uninstall (zebra_vni_t *zvni, struct prefix *vtep)
   return 0;
 }
 
-#if 0
 /*
  * Print a specific MAC-IP entry.
  */
@@ -1004,7 +1007,6 @@ zvni_print_macip (zebra_macip_t *macip, void *ctxt)
       vty_out(vty, "%s", VTY_NEWLINE);
     }
 }
-#endif
 
 /*
  * Print MAC-IP hash entry - called for display of all MACs.
@@ -1015,14 +1017,16 @@ zvni_print_macip_hash (struct hash_backet *backet, void *ctxt)
   struct vty *vty;
   zebra_macip_t *macip;
   char buf1[20];
+  struct macip_walk_ctx *wctx = ctxt;
 
-  vty = (struct vty *) ctxt;
+  vty = wctx->vty;
   macip = (zebra_macip_t *) backet->data;
   if (!macip)
     return;
 
   mac2str (&macip->emac, buf1, sizeof (buf1));
-  if (CHECK_FLAG(macip->flags, ZEBRA_MAC_LOCAL))
+  if (CHECK_FLAG(macip->flags, ZEBRA_MAC_LOCAL) &&
+      !(wctx->flags & SHOW_REMOTE_MAC_FROM_VTEP))
     {
       struct zebra_ns *zns;
       ifindex_t ifindex;
@@ -1039,15 +1043,68 @@ zvni_print_macip_hash (struct hash_backet *backet, void *ctxt)
               buf1, "local", ifp->name);
       if (vid)
         vty_out(vty, " %-5u", vid);
+      vty_out(vty, "%s", VTY_NEWLINE);
+      wctx->count++;
     }
   else
     {
-      vty_out(vty, "%-17s %-6s %-21s",
-              buf1, "remote",
-              inet_ntoa (macip->fwd_info.r_vtep_ip));
+      if (wctx->flags & SHOW_REMOTE_MAC_FROM_VTEP)
+        {
+          if (IPV4_ADDR_SAME(&macip->fwd_info.r_vtep_ip,
+                             &wctx->r_vtep_ip))
+            {
+              if (wctx->count == 0)
+                vty_out(vty, "%-17s %-6s %-21s %-5s%s",
+                        "MAC", "Type", "Intf/Remote VTEP",
+                        "VLAN", VTY_NEWLINE);
+
+              vty_out(vty, "%-17s %-6s %-21s%s",
+                      buf1, "remote",
+                      inet_ntoa (macip->fwd_info.r_vtep_ip),
+                      VTY_NEWLINE);
+              wctx->count++;
+            }
+        }
+      else
+        {
+          vty_out(vty, "%-17s %-6s %-21s%s",
+                  buf1, "remote",
+                  inet_ntoa (macip->fwd_info.r_vtep_ip), VTY_NEWLINE);
+          wctx->count++;
+        }
     }
 
-  vty_out(vty, "%s", VTY_NEWLINE);
+}
+
+/*
+ * Print MACIPs for all VNI.
+ */
+static void
+zvni_print_macip_hash_all_vni (struct hash_backet *backet, void *ctxt)
+{
+  struct vty *vty;
+  zebra_vni_t *zvni;
+  u_int32_t num_macs;
+  struct macip_walk_ctx wctx;
+
+  vty = (struct vty *) ctxt;
+  zvni = (zebra_vni_t *) backet->data;
+  if (!zvni)
+    return;
+
+  num_macs = hashcount(zvni->macip_table);
+  vty_out(vty, "%sVNI %u #MACs (local and remote) %u%s%s",
+          VTY_NEWLINE, zvni->vni, num_macs, VTY_NEWLINE, VTY_NEWLINE);
+  if (!num_macs)
+    return;
+
+  memset (&wctx, 0, sizeof (struct macip_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.vty = vty;
+
+  vty_out(vty, "%-17s %-6s %-21s %-5s%s",
+          "MAC", "Type", "Intf/Remote VTEP", "VLAN", VTY_NEWLINE);
+  hash_iterate(zvni->macip_table, zvni_print_macip_hash, &wctx);
 }
 
 /*
@@ -1957,6 +2014,7 @@ zebra_vxlan_print_macs_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
   zebra_vni_t *zvni;
   u_int32_t num_macs;
+  struct macip_walk_ctx wctx;
 
   if (!EVPN_ENABLED(zvrf))
     return;
@@ -1969,13 +2027,91 @@ zebra_vxlan_print_macs_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
   num_macs = hashcount(zvni->macip_table);
   if (!num_macs)
     return;
+
+  memset (&wctx, 0, sizeof (struct macip_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.vty = vty;
+
   vty_out(vty, "Number of MACs (local and remote) known for this VNI: %u%s",
           num_macs, VTY_NEWLINE);
   vty_out(vty, "%-17s %-6s %-21s %-5s%s",
           "MAC", "Type", "Intf/Remote VTEP", "VLAN", VTY_NEWLINE);
 
-  hash_iterate(zvni->macip_table, zvni_print_macip_hash, vty);
+  hash_iterate(zvni->macip_table, zvni_print_macip_hash, &wctx);
 }
+
+/*
+ * Display MACs for all VNIs (VTY command handler).
+ */
+void
+zebra_vxlan_print_macs_all_vni (struct vty *vty, struct zebra_vrf *zvrf)
+{
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  hash_iterate(zvrf->vni_table, zvni_print_macip_hash_all_vni, vty);
+}
+
+/*
+ * Display specific MAC for a VNI, if present (VTY command handler).
+ */
+void
+zebra_vxlan_print_specific_mac_vni (struct vty *vty, struct zebra_vrf *zvrf,
+                                    vni_t vni, struct ethaddr *mac)
+{
+  zebra_vni_t *zvni;
+  zebra_macip_t *macip;
+
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      vty_out (vty, "%% VNI %u does not exist%s", vni, VTY_NEWLINE);
+      return;
+    }
+  macip = zvni_macip_lookup (zvni, mac);
+  if (!macip)
+    {
+      vty_out (vty, "%% Requested MAC does not exist in VNI %u%s",
+               vni, VTY_NEWLINE);
+      return;
+    }
+
+  zvni_print_macip (macip, vty);
+}
+
+/*
+ * Display MACs for a VNI from specific VTEP (VTY command handler).
+ */
+void
+zebra_vxlan_print_macs_vni_vtep (struct vty *vty, struct zebra_vrf *zvrf,
+                                 vni_t vni, struct in_addr vtep_ip)
+{
+  zebra_vni_t *zvni;
+  u_int32_t num_macs;
+  struct macip_walk_ctx wctx;
+
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      vty_out (vty, "%% VNI %u does not exist%s", vni, VTY_NEWLINE);
+      return;
+    }
+  num_macs = hashcount(zvni->macip_table);
+  if (!num_macs)
+    return;
+
+  memset (&wctx, 0, sizeof (struct macip_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.vty = vty;
+  wctx.flags = SHOW_REMOTE_MAC_FROM_VTEP;
+  wctx.r_vtep_ip = vtep_ip;
+
+  hash_iterate(zvni->macip_table, zvni_print_macip_hash, &wctx);
+}
+
 
 /*
  * Display VNI information (VTY command handler).
