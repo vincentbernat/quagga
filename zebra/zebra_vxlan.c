@@ -1811,6 +1811,57 @@ zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
 }
 
 /*
+ * Handle remote MAC delete by kernel; readd the remote MAC if we have it.
+ * This can happen because the remote MAC entries are also added as "dynamic",
+ * so the kernel can ageout the entry.
+ */
+int
+zebra_vxlan_check_readd_remote_mac (struct interface *ifp,
+                                    struct interface *br_if,
+                                    struct ethaddr *mac, vlanid_t vid)
+{
+  struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
+  struct zebra_l2if_vxlan *_zl2if;
+  vni_t vni;
+  zebra_vni_t *zvni;
+  zebra_macip_t *macip;
+  char buf[MACADDR_STRLEN];
+
+  zif = ifp->info;
+  assert(zif);
+  _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  assert(_zl2if);
+  vni = _zl2if->vni;
+
+  /* Locate VRF corresponding to interface. */
+  zvrf = vrf_info_lookup(ifp->vrf_id);
+  assert(zvrf);
+
+  /* If EVPN is not enabled, nothing to do. */
+  if (!EVPN_ENABLED(zvrf))
+    return 0;
+
+  /* Locate hash entry; it is expected to exist. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    return 0;
+
+  /* If entry doesn't exist, nothing to do. */
+  macip = zvni_macip_lookup (zvni, mac);
+  if (!macip)
+    return 0;
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Del remote MAC %s intf %s(%u) VNI %u - readd",
+                ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
+                ifp->name, ifp->ifindex, vni);
+
+  zvni_macip_install (zvni, macip);
+  return 0;
+}
+
+/*
  * Handle message from client to add a remote MAC/IP for a VNI.
  */
 int 

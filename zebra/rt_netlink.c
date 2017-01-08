@@ -765,8 +765,11 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
     return 0;
 
   /* The interface should be something we're interested in. */
-  /* Drop on VxLAN */
-  if (IS_ZEBRA_IF_VXLAN(ifp))
+  /* Drop NEW notifications on VxLAN; if it is a DEL notification, see
+   * if we should re-add.
+   */
+  if (IS_ZEBRA_IF_VXLAN(ifp) &&
+      h->nlmsg_type != RTM_DELNEIGH)
     return 0;
   if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp))
     return 0;
@@ -824,6 +827,9 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   if (h->nlmsg_type == RTM_NEWNEIGH)
     return zebra_vxlan_local_mac_add_update (ifp, br_if, &mac, vid);
+
+  if (IS_ZEBRA_IF_VXLAN(ifp))
+    return zebra_vxlan_check_readd_remote_mac (ifp, br_if, &mac, vid);
 
   return zebra_vxlan_local_mac_del (ifp, br_if, &mac, vid);
 }
@@ -1496,7 +1502,7 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
     req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
   req.n.nlmsg_type = cmd;
   req.ndm.ndm_family = AF_BRIDGE;
-  req.ndm.ndm_state = NUD_NOARP | NUD_REACHABLE; // "static"
+  req.ndm.ndm_state = NUD_REACHABLE;
   req.ndm.ndm_flags |= NTF_SELF | NTF_MASTER;
 
   addattr_l (&req.n, sizeof (req), NDA_LLADDR, mac, 6);
