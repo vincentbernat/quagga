@@ -56,15 +56,15 @@ void pim_msg_build_header(uint8_t *pim_msg, int pim_msg_size,
    * Compute checksum
    */
 
-  *(uint16_t *) PIM_MSG_HDR_OFFSET_CHECKSUM(pim_msg) = 0;
+  *(uint16_t *) PIM_MSG_HDR_OFFSET_CHECKSUM (pim_msg) = 0;
   /*
    * The checksum for Registers is done only on the first 8 bytes of the packet,
    * including the PIM header and the next 4 bytes, excluding the data packet portion
    */
   if (pim_msg_type == PIM_MSG_TYPE_REGISTER)
-    checksum = in_cksum(pim_msg, PIM_MSG_REGISTER_LEN);
+    checksum = in_cksum (pim_msg, PIM_MSG_REGISTER_LEN);
   else
-    checksum = in_cksum(pim_msg, pim_msg_size);
+    checksum = in_cksum (pim_msg, pim_msg_size);
 
   *(uint16_t *) PIM_MSG_HDR_OFFSET_CHECKSUM(pim_msg) = checksum;
 }
