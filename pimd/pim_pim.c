@@ -200,25 +200,30 @@ int pim_pim_packet(struct interface *ifp, uint8_t *buf, size_t len)
 
   if (pim_type == PIM_MSG_TYPE_REGISTER)
   {
-      /* First 8 byte header checksum */
-      checksum = in_cksum(pim_msg, PIM_MSG_REGISTER_LEN);
-      if (checksum != pim_checksum) {
-          checksum = in_cksum(pim_msg, pim_msg_len);
-          if (checksum != pim_checksum) {
-              if (PIM_DEBUG_PIM_PACKETS)
-                  zlog_debug("Ignoring PIM pkt from %s with invalid checksum: received=%x calculated=%x",
-                          ifp->name, pim_checksum, checksum);
-              return -1;
-          }
-      }
-  } else {
+    /* First 8 byte header checksum */
+    checksum = in_cksum(pim_msg, PIM_MSG_REGISTER_LEN);
+    if (checksum != pim_checksum)
+    {
       checksum = in_cksum(pim_msg, pim_msg_len);
-      if (checksum != pim_checksum) {
-          if (PIM_DEBUG_PIM_PACKETS)
-              zlog_debug("Ignoring PIM pkt from %s with invalid checksum: received=%x calculated=%x",
-                      ifp->name, pim_checksum, checksum);
-          return -1;
+      if (checksum != pim_checksum)
+      {
+        if (PIM_DEBUG_PIM_PACKETS)
+          zlog_debug("Ignoring PIM pkt from %s with invalid checksum: received=%x calculated=%x",
+                          ifp->name, pim_checksum, checksum);
+
+        return -1;
       }
+    }
+  } else {
+    checksum = in_cksum(pim_msg, pim_msg_len);
+    if (checksum != pim_checksum)
+    {
+      if (PIM_DEBUG_PIM_PACKETS)
+        zlog_debug("Ignoring PIM pkt from %s with invalid checksum: received=%x calculated=%x",
+                      ifp->name, pim_checksum, checksum);
+
+      return -1;
+    }
   }
 
   if (PIM_DEBUG_PIM_PACKETS) {
