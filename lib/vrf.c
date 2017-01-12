@@ -627,7 +627,7 @@ vrf_bitmap_set (vrf_bitmap_t bmap, vrf_id_t vrf_id)
   u_char group = VRF_BITMAP_GROUP (vrf_id);
   u_char offset = VRF_BITMAP_BIT_OFFSET (vrf_id);
 
-  if (bmap == VRF_BITMAP_NULL)
+  if (bmap == VRF_BITMAP_NULL || vrf_id == VRF_UNKNOWN)
     return;
 
   if (bm->groups[group] == NULL)
@@ -645,7 +645,8 @@ vrf_bitmap_unset (vrf_bitmap_t bmap, vrf_id_t vrf_id)
   u_char group = VRF_BITMAP_GROUP (vrf_id);
   u_char offset = VRF_BITMAP_BIT_OFFSET (vrf_id);
 
-  if (bmap == VRF_BITMAP_NULL || bm->groups[group] == NULL)
+  if (bmap == VRF_BITMAP_NULL || vrf_id == VRF_UNKNOWN ||
+      bm->groups[group] == NULL)
     return;
 
   UNSET_FLAG (bm->groups[group][VRF_BITMAP_INDEX_IN_GROUP (offset)],
@@ -659,7 +660,8 @@ vrf_bitmap_check (vrf_bitmap_t bmap, vrf_id_t vrf_id)
   u_char group = VRF_BITMAP_GROUP (vrf_id);
   u_char offset = VRF_BITMAP_BIT_OFFSET (vrf_id);
 
-  if (bmap == VRF_BITMAP_NULL || bm->groups[group] == NULL)
+  if (bmap == VRF_BITMAP_NULL || vrf_id == VRF_UNKNOWN ||
+      bm->groups[group] == NULL)
     return 0;
 
   return CHECK_FLAG (bm->groups[group][VRF_BITMAP_INDEX_IN_GROUP (offset)],
