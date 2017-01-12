@@ -462,21 +462,21 @@ bgp_config_write_evpn_info (struct vty *vty, struct bgp *bgp, afi_t afi,
 {
   struct evpn_config_write cfg;
 
+  if (bgp->vnihash)
+    {
+      cfg.write = *write;
+      cfg.vty = vty;
+      hash_iterate (bgp->vnihash,
+                    (void (*) (struct hash_backet *, void *))
+                    write_vni_config_for_entry, &cfg);
+      *write = cfg.write;
+    }
+
   if (bgp->advertise_all_vni)
     {
       bgp_config_write_family_header (vty, afi, safi, write);
       vty_out (vty, "  advertise-all-vni%s", VTY_NEWLINE);
     }
-
-  cfg.write = *write;
-  cfg.vty = vty;
-  if (bgp->vnihash)
-    {
-      hash_iterate (bgp->vnihash,
-                    (void (*) (struct hash_backet *, void *))
-                    write_vni_config_for_entry, &cfg);
-    }
-  *write = cfg.write;
 }
 
 /*
