@@ -626,7 +626,7 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
         continue;
 
       for (ri = rn->info; ri; ri = ri->next)
-        if (CHECK_FLAG (ri->flags, BGP_INFO_SELECTED)
+        if (ri->peer == bgp->peer_self
             && ri->type == ZEBRA_ROUTE_BGP
             && ri->sub_type == BGP_ROUTE_STATIC)
           break;
@@ -709,7 +709,7 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
         continue;
 
       for (ri = rn->info; ri; ri = ri->next)
-        if (CHECK_FLAG (ri->flags, BGP_INFO_SELECTED)
+        if (ri->peer == bgp->peer_self
             && ri->type == ZEBRA_ROUTE_BGP
             && ri->sub_type == BGP_ROUTE_STATIC)
           break;
