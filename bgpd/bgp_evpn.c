@@ -1204,8 +1204,6 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   /* Get the VNI (in MPLS label field). */
   tagpnt = pfx;
   vni = tag2vni (tagpnt);
-  zlog_err ("%u:%s - Rx EVPN type-2 route with VNI %u",
-            peer->bgp->vrf_id, peer->host, vni);
 
   /* Process the route. */
   if (attr)
