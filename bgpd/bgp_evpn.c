@@ -1145,7 +1145,6 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   u_char ipaddr_len;
   u_char macaddr_len;
   u_char *tagpnt;
-  vni_t vni;
   int ret;
 
   /* Type-2 route should be either 33, 37 or 49 bytes:
@@ -1203,7 +1202,6 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
 
   /* Get the VNI (in MPLS label field). */
   tagpnt = pfx;
-  vni = tag2vni (tagpnt);
 
   /* Process the route. */
   if (attr)
