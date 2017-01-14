@@ -252,6 +252,7 @@ netlink_extract_bridge_info (struct rtattr *link_data,
   struct rtattr *attr[IFLA_BR_MAX+1];
 
   memset (zl2if, 0, sizeof (*zl2if));
+  memset (attr, 0, sizeof attr);
   parse_rtattr_nested(attr, IFLA_BR_MAX, link_data);
   if (attr[IFLA_BR_VLAN_FILTERING])
     zl2if->vlan_aware = *(u_char *)RTA_DATA(attr[IFLA_BR_VLAN_FILTERING]);
@@ -266,6 +267,7 @@ netlink_extract_vlan_info (struct rtattr *link_data,
   vlanid_t vid_in_msg;
 
   memset (zl2if, 0, sizeof (*zl2if));
+  memset (attr, 0, sizeof attr);
   parse_rtattr_nested(attr, IFLA_VLAN_MAX, link_data);
   if (!attr[IFLA_VLAN_ID])
     {
@@ -288,6 +290,7 @@ netlink_extract_vxlan_info (struct rtattr *link_data,
   struct in_addr vtep_ip_in_msg;
 
   memset (zl2if, 0, sizeof (*zl2if));
+  memset (attr, 0, sizeof attr);
   parse_rtattr_nested(attr, IFLA_VXLAN_MAX, link_data);
   if (!attr[IFLA_VXLAN_ID])
     {
@@ -512,6 +515,7 @@ netlink_interface_af_bridge (struct nlmsghdr *h, int len,
   /* There is a 1-to-1 mapping of VLAN to VxLAN - hence
    * only 1 access VLAN is accepted.
    */
+  memset (aftb, 0, sizeof aftb);
   parse_rtattr_nested(aftb, IFLA_BRIDGE_MAX, tb[IFLA_AF_SPEC]);
   if (!aftb[IFLA_BRIDGE_VLAN_INFO])
     return 0;
