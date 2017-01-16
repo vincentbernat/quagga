@@ -1346,9 +1346,9 @@ zebra_vxlan_if_add_update (struct interface *ifp,
                 ifp->vrf_id, ifp->name, ifp->ifindex, vni,
                 inet_ntoa (zl2if->vtep_ip));
 
-  /* Allocate/update L2 interface */
   if (!zif->l2if)
     {
+      /* Allocate L2 interface */
       zif->l2if = XCALLOC (MTYPE_ZEBRA_L2IF,
                            sizeof (struct zebra_l2if_vxlan));
       if (!zif->l2if)
@@ -1357,13 +1357,35 @@ zebra_vxlan_if_add_update (struct interface *ifp,
                     ifp->vrf_id, ifp->name, ifp->ifindex);
           return -1;
         }
-    }
-  _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
-  *_zl2if = *zl2if;
 
-  /* If bridge (master) is already known, link to it. */
-  if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
-    zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+      _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+      *_zl2if = *zl2if;
+
+      /* Set up link with master, if needed. */
+      if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+    }
+  else
+    {
+      /* The only changes we're concerned with are the "master"
+       * or local tunnel IP.
+       */
+      ifindex_t bridge_ifindex;
+
+      _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+      bridge_ifindex = _zl2if->br_slave.bridge_ifindex;
+      if (bridge_ifindex == zl2if->br_slave.bridge_ifindex &&
+          IPV4_ADDR_SAME(&_zl2if->vtep_ip, &zl2if->vtep_ip))
+        return 0;
+
+      *_zl2if = *zl2if;
+
+      /* Set up or remove link with master */
+      if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+      else if (bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_unmap_slave_from_bridge (&_zl2if->br_slave);
+    }
 
   /* If EVPN is not enabled, nothing further to be done. */
   if (!EVPN_ENABLED(zvrf))

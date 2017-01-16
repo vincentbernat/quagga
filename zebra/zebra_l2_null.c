@@ -11,8 +11,13 @@ void zebra_l2_map_slave_to_bridge (struct zebra_l2info_brslave *br_slave)
 {
 }
 
-int zebra_l2_bridge_add_update (struct interface *ifp,
-                                struct zebra_l2if_bridge *zl2if)
+void
+zebra_l2_unmap_slave_from_bridge (struct zebra_l2info_brslave *br_slave)
+{
+}
+
+int zebra_l2_bridge_add (struct interface *ifp,
+                         struct zebra_l2if_bridge *zl2if)
 {
   return 0;
 }

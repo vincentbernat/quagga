@@ -123,13 +123,19 @@ zebra_l2_map_slave_to_bridge (struct zebra_l2info_brslave *br_slave)
     br_slave->br_if = br_if;
 }
 
+void
+zebra_l2_unmap_slave_from_bridge (struct zebra_l2info_brslave *br_slave)
+{
+  br_slave->br_if = NULL;
+}
+
 /*
- * Handle Bridge interface add or update. Create/update Bridge L2
- * interface info.
+ * Handle Bridge interface add. Create/update Bridge L2 interface info
+ * and map slaves (if any) to the bridge.
  */
 int
-zebra_l2_bridge_add_update (struct interface *ifp,
-                            struct zebra_l2if_bridge *zl2if)
+zebra_l2_bridge_add (struct interface *ifp,
+                     struct zebra_l2if_bridge *zl2if)
 {
   struct zebra_if *zif;
   struct zebra_l2if_bridge *_zl2if;
@@ -173,9 +179,9 @@ zebra_l2_physif_add_update (struct interface *ifp,
   zif = ifp->info;
   assert(zif);
 
-  /* Allocate/update L2 interface */
   if (!zif->l2if)
     {
+      /* Allocate L2 interface */
       zif->l2if = XCALLOC (MTYPE_ZEBRA_L2IF,
                            sizeof (struct zebra_l2if_phys));
       if (!zif->l2if)
@@ -184,13 +190,31 @@ zebra_l2_physif_add_update (struct interface *ifp,
                     ifp->vrf_id, ifp->name, ifp->ifindex);
           return -1;
         }
+
+      _zl2if = (struct zebra_l2if_phys *)zif->l2if;
+      *_zl2if = *zl2if;
+
+      /* Set up link with master, if needed. */
+      if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
     }
+  else
+    {
+      /* The only change we're concerned with is the "master" */
+      ifindex_t bridge_ifindex;
 
-  _zl2if = (struct zebra_l2if_phys *)zif->l2if;
-  *_zl2if = *zl2if;
+      _zl2if = (struct zebra_l2if_phys *)zif->l2if;
+      bridge_ifindex = _zl2if->br_slave.bridge_ifindex;
+      if (bridge_ifindex == zl2if->br_slave.bridge_ifindex)
+        return 0;
+      _zl2if->br_slave.bridge_ifindex = zl2if->br_slave.bridge_ifindex;
 
-  /* If bridge (master) is already known, link to it. */
-  zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+      /* Set up or remove link with master */
+      if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+      else if (bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_unmap_slave_from_bridge (&_zl2if->br_slave);
+    }
 
   return 0;
 }
@@ -209,9 +233,9 @@ zebra_l2_vlanif_add_update (struct interface *ifp,
   zif = ifp->info;
   assert(zif);
 
-  /* Allocate/update L2 interface */
   if (!zif->l2if)
     {
+      /* Allocate L2 interface */
       zif->l2if = XCALLOC (MTYPE_ZEBRA_L2IF,
                            sizeof (struct zebra_l2if_vlan));
       if (!zif->l2if)
@@ -220,14 +244,31 @@ zebra_l2_vlanif_add_update (struct interface *ifp,
                     ifp->vrf_id, ifp->name, ifp->ifindex);
           return -1;
         }
+
+      _zl2if = (struct zebra_l2if_vlan *)zif->l2if;
+      *_zl2if = *zl2if;
+
+      /* Set up link with master, if needed. */
+      if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
     }
+  else
+    {
+      /* The only change we're concerned with is the "master" */
+      ifindex_t bridge_ifindex;
 
-  _zl2if = (struct zebra_l2if_vlan *)zif->l2if;
-  *_zl2if = *zl2if;
+      _zl2if = (struct zebra_l2if_vlan *)zif->l2if;
+      bridge_ifindex = _zl2if->br_slave.bridge_ifindex;
+      if (bridge_ifindex == zl2if->br_slave.bridge_ifindex)
+        return 0;
+      _zl2if->br_slave.bridge_ifindex = zl2if->br_slave.bridge_ifindex;
 
-  /* If bridge (master) is already known, link to it. */
-  if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
-    zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+      /* Set up or remove link with master */
+      if (_zl2if->br_slave.bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_map_slave_to_bridge (&_zl2if->br_slave);
+      else if (bridge_ifindex != IFINDEX_INTERNAL)
+        zebra_l2_unmap_slave_from_bridge (&_zl2if->br_slave);
+    }
 
   return 0;
 }
