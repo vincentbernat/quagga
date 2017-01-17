@@ -36,7 +36,7 @@ extern int kernel_address_add_ipv4 (struct interface *, struct connected *);
 extern int kernel_address_delete_ipv4 (struct interface *, struct connected *);
 extern int kernel_neigh_update (int, int, uint32_t, char *, int);
 extern int kernel_add_mac (struct interface *ifp, vlanid_t vid,
-                           struct ethaddr *mac, struct in_addr vtep_ip);
+                           struct ethaddr *mac, struct in_addr vtep_ip, int update);
 extern int kernel_del_mac (struct interface *ifp, vlanid_t vid,
                            struct ethaddr *mac, struct in_addr vtep_ip);
 
