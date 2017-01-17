@@ -111,7 +111,7 @@ static inline void
 encode_route_target_as4 (as_t as, u_int16_t val,
                          struct ecommunity_val *eval)
 {
-  eval->val[0] = ECOMMUNITY_ENCODE_AS;
+  eval->val[0] = ECOMMUNITY_ENCODE_AS4;
   eval->val[1] = ECOMMUNITY_ROUTE_TARGET;
   eval->val[2] = (as >> 24) & 0xff;
   eval->val[3] = (as >> 16) & 0xff;
