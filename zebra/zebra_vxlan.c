@@ -535,7 +535,8 @@ zvni_map_vlan (struct interface *ifp, struct interface *br_if, vlanid_t vid)
       if (!zif || zif->zif_type != ZEBRA_IF_VXLAN)
         continue;
       zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
-      assert (zl2if);
+      if (!zl2if)
+        continue;
 
       if (zl2if->br_slave.br_if != br_if)
         continue;
@@ -568,7 +569,8 @@ zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip)
 
   zif = zvni->vxlan_if->info;
   zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
-  assert(zl2if);
+  if (!zl2if)
+    return -1;
 
   return kernel_add_mac (zvni->vxlan_if, zl2if->access_vlan,
                          &macip->emac, macip->fwd_info.r_vtep_ip);
@@ -595,7 +597,8 @@ zvni_macip_uninstall (zebra_vni_t *zvni, zebra_macip_t *macip)
 
   zif = zvni->vxlan_if->info;
   zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
-  assert(zl2if);
+  if (!zl2if)
+    return -1;
 
   return kernel_del_mac (zvni->vxlan_if, zl2if->access_vlan,
                          &macip->emac, macip->fwd_info.r_vtep_ip);
@@ -781,7 +784,8 @@ zvni_build_hash_table (struct zebra_vrf *zvrf)
       if (!zif || zif->zif_type != ZEBRA_IF_VXLAN)
         continue;
       zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
-      assert (zl2if);
+      if (!zl2if)
+        continue;
 
       vni = zl2if->vni;
 

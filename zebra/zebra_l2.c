@@ -72,7 +72,8 @@ map_slaves_to_bridge (struct interface *br_if, int link)
            */
           br_slave = (struct zebra_l2info_brslave *)
                          (((struct zebra_if *)ifp->info)->l2if);
-          assert (br_slave);
+          if (!br_slave)
+            continue;
 
           if (link)
             {
