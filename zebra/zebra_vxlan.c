@@ -1614,8 +1614,6 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
   zebra_vtep_t *zvtep;
   char pbuf[PREFIX2STR_BUFFER];
 
-  assert (EVPN_ENABLED (zvrf));
-
   s = client->ibuf;
 
   while (l < length)
@@ -1651,8 +1649,9 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
       zvni = zvni_lookup (zvrf, vni);
       if (!zvni)
         {
-          zlog_err ("Failed to locate VNI hash upon remote VTEP DEL, VRF %d VNI %u",
-                    zvrf->vrf_id, vni);
+          if (IS_ZEBRA_DEBUG_VXLAN)
+            zlog_debug ("Failed to locate VNI hash upon remote VTEP DEL, "
+                        "VRF %d VNI %u", zvrf->vrf_id, vni);
           continue;
         }
 
@@ -2018,8 +2017,6 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
   u_short l = 0;
   char buf[MACADDR_STRLEN];
 
-  assert (EVPN_ENABLED (zvrf));
-
   s = client->ibuf;
 
   while (l < length)
@@ -2047,8 +2044,9 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
       zvni = zvni_lookup (zvrf, vni);
       if (!zvni)
         {
-          zlog_err ("Failed to locate VNI hash upon remote MAC-IP DEL, VRF %d VNI %u",
-                    zvrf->vrf_id, vni);
+          if (IS_ZEBRA_DEBUG_VXLAN)
+            zlog_debug ("Failed to locate VNI hash upon remote MAC-IP DEL, "
+                        "VRF %d VNI %u", zvrf->vrf_id, vni);
           continue;
         }
       if (!zvni->vxlan_if)
