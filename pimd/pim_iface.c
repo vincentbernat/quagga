@@ -965,10 +965,7 @@ int pim_if_del_vif(struct interface *ifp)
     return -1;
   }
 
-  if (pim_mroute_del_vif(pim_ifp->mroute_vif_index)) {
-    /* pim_mroute_del_vif reported error */
-    return -2;
-  }
+  pim_mroute_del_vif(pim_ifp->mroute_vif_index);
 
   /*
     Update highest vif_index
