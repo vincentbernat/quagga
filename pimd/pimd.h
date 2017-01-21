@@ -100,7 +100,6 @@ extern struct thread_master     *master;
 uint32_t                  qpim_debugs;
 int                       qpim_mroute_socket_fd;
 int64_t                   qpim_mroute_socket_creation; /* timestamp of creation */
-int                       qpim_mroute_oif_highest_vif_index;
 struct in_addr            qpim_all_pim_routers_addr;
 int                       qpim_t_periodic; /* Period between Join/Prune Messages */
 struct zclient           *qpim_zclient_update;
