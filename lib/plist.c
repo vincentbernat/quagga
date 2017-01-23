@@ -973,7 +973,10 @@ vty_prefix_list_install (struct vty *vty, afi_t afi, const char *name,
       apply_mask_ipv6 ((struct prefix_ipv6 *) &p_tmp);
 
       break;
-    case AFI_ETHER:
+    case AFI_L2VPN:
+    case AFI_IPMR:
+    case AFI_MAX:
+      break;
     default:
       vty_out (vty, "%% Unrecognized AFI (%d)%s", afi, VTY_NEWLINE);
       return CMD_WARNING;

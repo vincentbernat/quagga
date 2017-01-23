@@ -1,3 +1,65 @@
+quagga (1.0.0+cl3u7) RELEASED; urgency=medium
+
+  * Closes: Various Memory Leaks Fixed
+  * Closes: CM-13626 - Resolved problem with area range lsid creation
+  * Closes: CM-14060 - Fix unnecessary perturbations due to old style config
+  * Closes: CM-14090 - Stop potential uninitialized memory access
+  * Closes: CM-14019 - Allow 'neighbor X locay-as Y' to have large values
+  * Closes: CM-14099 - Allow tag values greater than 2 billion on arm
+  * Closes: CM-13425 - Fix for ignored non-default VRF single-hop BFD status
+    in Quagga
+  * Closes: CM-14059 - Don't overwrite Quagga.conf on reload, unless user
+    specified.
+  * Closes: CM-14259 - Handle lack of "seq" in prefix-list statements.
+  * Closes: CM-13771 - Fix some PIM debug messages
+  * Closes: CM-14260 - Reload: Handle deletes of entire interface context as
+    deleting each line
+  * Closes: CM-13485 - Do not allow prefix length on update source
+  * Closes: CM-14280 - Normalize prefix-lists and IP networks for avoiding
+    unnecessary reload
+  * Closes: CM-14351 - Fix unbound newaddr variable, fix too-broad except
+    clauses
+  * Closes: CM-12041 - Fix non-null register checksum
+  * Closes: CM-14313 - Add source of route as protocol string in ip route
+    pushed into kernel
+  * Closes: CM-12924 - PIM messages to neighbors should have TTL=1
+  * Closes: CM-14136 - Add decoded notification code strings to JSON output
+  * Closes: CM-14206 - Fix memory leak with certain inputs
+  * Closes: CM-14301 - Update BFD status when de-registering with PTM
+  * Closes: CM-14463 - timers config is accepted but not recorded in running
+    config
+  * Closes: CM-14034 - Track OIF Origination better.
+  * Closes: CM-13328 - send ipv4 singlepath delete messages to kernel w/out
+    nexthop
+  * Closes: CM-14056 - Fix ifdown not properly cleaning IIF in PIM
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Thu, 1 Dec 2016 07:45:32 -0700
+
+quagga (1.0.0+cl3u6) RELEASED; urgency=medium
+
+  * New Enabled: PIM GA
+  * New Enabled: Upstream Patch import
+  * New Enabled: Better integration of Watchquagga and systemd
+  * New Enabled: Various json commands added and json issues fixed.
+  * Closes: Various Memory Leaks fixed
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Thu, 1 Dec 2016 07:45:32 -0700
+
+quagga (0.99.24+cl3eau5) RELEASED; urgency=medium
+
+  * New Enabled: Fix PIM to work with new kernel
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 28 Oct 2016 20:46:33 -0700
+
+quagga (0.99.24+cl3eau4) RELEASED; urgency=medium
+
+  * New Enabled: PIM-SM Unnumbered functionality
+  * New Enabled: PIM-SM RP Prefix-lists
+  * New Enabled: PIM-SM CLI improvements
+  * New Enabled: EVPN functionality
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Mon, 19 Sep 2016 16:17:52 -0700
+
 quagga (0.99.24+cl3u5) RELEASED; urgency=medium
 
   * Closes: CM-12846 - Resolve Memory leaks in 'show ip bgp neighbor json'

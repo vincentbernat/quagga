@@ -51,6 +51,7 @@
 #include "zebra/zebra_rnh.h"
 #include "zebra/interface.h"
 #include "zebra/connected.h"
+#include "zebra/zebra_vxlan.h"
 
 /* Should we allow non Quagga processes to delete our routes */
 extern int allow_delete;
@@ -1636,7 +1637,7 @@ rib_process (struct route_node *rn)
   if (IS_ZEBRA_DEBUG_RIB_DETAILED)
     zlog_debug ("%u:%s/%d: Processing rn %p", vrf_id, buf, rn->p.prefixlen, rn);
 
-  RNODE_FOREACH_RIB (rn, rib)
+  RNODE_FOREACH_RIB_SAFE (rn, rib, next)
     {
       if (IS_ZEBRA_DEBUG_RIB_DETAILED)
         zlog_debug ("%u:%s/%d: Examine rib %p (type %d) status %x flags %x "
@@ -2420,7 +2421,7 @@ rib_delnode (struct route_node *rn, struct rib *rib)
  */
 
 void _rib_dump (const char * func,
-		union prefix46constptr pp, const struct rib * rib)
+		union prefixconstptr pp, const struct rib * rib)
 {
   const struct prefix *p = pp.p;
   char straddr[PREFIX_STRLEN];
@@ -2649,10 +2650,9 @@ rib_add_multipath (afi_t afi, safi_t safi, struct prefix *p,
         }
 
       if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-        rib_dump ((struct prefix *)p, rib);
+        rib_dump (p, rib);
     }
   rib_addnode (rn, rib, 1);
-  ret = 1;
 
   /* Free implicit route.*/
   if (same)
@@ -2802,8 +2802,6 @@ rib_delete (afi_t afi, safi_t safi, vrf_id_t vrf_id, int type, u_short instance,
   route_unlock_node (rn);
   return 0;
 }
-
-
 
 int
 rib_add (afi_t afi, safi_t safi, vrf_id_t vrf_id, int type,
@@ -3186,8 +3184,9 @@ rib_close (void)
         rib_close_table (zvrf->other_table[AFI_IP6][table_id]);
     }
 
-  zebra_mpls_close_tables(zvrf);
-
+  /* Cleanup Vxlan table and update kernel */
+  zebra_vxlan_close_tables (zvrf);
+  zebra_mpls_close_tables (zvrf);
 }
 
 /* Routing information base initialize. */

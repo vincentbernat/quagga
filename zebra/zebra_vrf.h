@@ -75,6 +75,15 @@ struct zebra_vrf
    */
   struct zebra_ns *zns;
 
+  /*
+   * VNI hash table (for EVPN). Only in default instance.
+   */
+  struct hash *vni_table;
+  /*
+   * Whether EVPN is enabled or not.
+   */
+  int advertise_vni;
+
   /* MPLS static LSP config table */
   struct hash *slsp_table;
 

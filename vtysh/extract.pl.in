@@ -59,6 +59,7 @@ $ignore{'"address-family ipv6 (unicast|multicast)"'} = "ignore";
 $ignore{'"address-family vpnv4"'} = "ignore";
 $ignore{'"address-family vpnv4 unicast"'} = "ignore";
 $ignore{'"address-family ipv4 vrf NAME"'} = "ignore";
+$ignore{'"address-family evpn"'} = "ignore";
 $ignore{'"address-family encap"'} = "ignore";
 $ignore{'"address-family encapv4"'} = "ignore";
 $ignore{'"address-family encapv6"'} = "ignore";
@@ -78,6 +79,8 @@ $ignore{'"who"'} = "ignore";
 $ignore{'"terminal monitor"'} = "ignore";
 $ignore{'"terminal no monitor"'} = "ignore";
 $ignore{'"show history"'} = "ignore";
+$ignore{'"vni " "<1-16777215>"'} = "ignore";
+$ignore{'"exit-vni"'} = "ignore";
 
 my $cli_stomp = 0;
 

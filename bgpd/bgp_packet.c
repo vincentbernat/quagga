@@ -47,11 +47,14 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_network.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_encap.h"
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_vty.h"
 #include "bgpd/bgp_updgrp.h"
+#include "bgpd/bgp_evpn.h"
+
 
 /* Set up BGP packet marker and packet type. */
 int
@@ -147,6 +150,8 @@ static struct stream *
 bgp_update_packet_eor (struct peer *peer, afi_t afi, safi_t safi)
 {
   struct stream *s;
+  iana_afi_t pkt_afi;
+  safi_t pkt_safi;
 
   if (DISABLE_BGP_ANNOUNCE)
     return NULL;
@@ -169,13 +174,16 @@ bgp_update_packet_eor (struct peer *peer, afi_t afi, safi_t safi)
     }
   else
     {
+      /* Convert AFI, SAFI to values for packet. */
+      bgp_map_afi_safi_int2iana (afi, safi, &pkt_afi, &pkt_safi);
+
       /* Total Path Attribute Length */
       stream_putw (s, 6);
       stream_putc (s, BGP_ATTR_FLAG_OPTIONAL);
       stream_putc (s, BGP_ATTR_MP_UNREACH_NLRI);
       stream_putc (s, 3);
-      stream_putw (s, afi);
-      stream_putc (s, safi);
+      stream_putw (s, pkt_afi);
+      stream_putc (s, pkt_safi);
     }
 
   bgp_packet_set_size (s);
@@ -341,7 +349,6 @@ bgp_write (struct thread *thread)
   u_char type;
   struct stream *s;
   int num;
-  int update_last_write = 0;
   unsigned int count = 0;
   unsigned int oc = 0;
 
@@ -433,7 +440,6 @@ bgp_write (struct thread *thread)
 
       /* OK we send packet so delete it. */
       bgp_packet_delete (peer);
-      update_last_write = 1;
     }
   while (++count < peer->bgp->wpkt_quanta &&
 	 (s = bgp_write_packet (peer)) != NULL);
@@ -441,12 +447,8 @@ bgp_write (struct thread *thread)
   bgp_write_proceed_actions (peer);
 
  done:
-  /* Update last_update if UPDATEs were written. */
+  /* Update the last write if some updates were written. */
   if (peer->update_out > oc)
-    peer->last_update = bgp_clock ();
-
-  /* If we TXed any flavor of packet update last_write */
-  if (update_last_write)
     peer->last_write = bgp_clock ();
 
   sockopt_cork (peer->fd, 0);
@@ -691,15 +693,16 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
   struct stream *s;
   struct bgp_filter *filter;
   int orf_refresh = 0;
+  iana_afi_t pkt_afi;
+  safi_t pkt_safi;
 
   if (DISABLE_BGP_ANNOUNCE)
     return;
 
   filter = &peer->filter[afi][safi];
 
-  /* Adjust safi code. */
-  if (safi == SAFI_MPLS_VPN)
-    safi = SAFI_MPLS_LABELED_VPN;
+  /* Convert AFI, SAFI to values for packet. */
+  bgp_map_afi_safi_int2iana (afi, safi, &pkt_afi, &pkt_safi);
   
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
@@ -710,9 +713,9 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
     bgp_packet_set_marker (s, BGP_MSG_ROUTE_REFRESH_OLD);
 
   /* Encode Route Refresh message. */
-  stream_putw (s, afi);
+  stream_putw (s, pkt_afi);
   stream_putc (s, 0);
-  stream_putc (s, safi);
+  stream_putc (s, pkt_safi);
  
   if (orf_type == ORF_TYPE_PREFIX
       || orf_type == ORF_TYPE_PREFIX_OLD)
@@ -735,7 +738,7 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
 	      zlog_debug ("%s sending REFRESH_REQ to remove ORF(%d) (%s) for afi/safi: %d/%d", 
 			 peer->host, orf_type,
 			 (when_to_refresh == REFRESH_DEFER ? "defer" : "immediate"),
-			 afi, safi);
+			 pkt_afi, pkt_safi);
 	  }
 	else
 	  {
@@ -747,7 +750,7 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
 	      zlog_debug ("%s sending REFRESH_REQ with pfxlist ORF(%d) (%s) for afi/safi: %d/%d", 
 			 peer->host, orf_type,
 			 (when_to_refresh == REFRESH_DEFER ? "defer" : "immediate"),
-			 afi, safi);
+			 pkt_afi, pkt_safi);
 	  }
 
 	/* Total ORF Entry Len. */
@@ -762,7 +765,7 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
     {
       if (! orf_refresh)
 	zlog_debug ("%s sending REFRESH_REQ for afi/safi: %d/%d", 
-		   peer->host, afi, safi);
+		   peer->host, pkt_afi, pkt_safi);
     }
 
   /* Add packet to the peer. */
@@ -777,10 +780,11 @@ bgp_capability_send (struct peer *peer, afi_t afi, safi_t safi,
 		     int capability_code, int action)
 {
   struct stream *s;
+  iana_afi_t pkt_afi;
+  safi_t pkt_safi;
 
-  /* Adjust safi code. */
-  if (safi == SAFI_MPLS_VPN)
-    safi = SAFI_MPLS_LABELED_VPN;
+  /* Convert AFI, SAFI to values for packet. */
+  bgp_map_afi_safi_int2iana (afi, safi, &pkt_afi, &pkt_safi);
 
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
@@ -793,14 +797,14 @@ bgp_capability_send (struct peer *peer, afi_t afi, safi_t safi,
       stream_putc (s, action);
       stream_putc (s, CAPABILITY_CODE_MP);
       stream_putc (s, CAPABILITY_CODE_MP_LEN);
-      stream_putw (s, afi);
+      stream_putw (s, pkt_afi);
       stream_putc (s, 0);
-      stream_putc (s, safi);
+      stream_putc (s, pkt_safi);
 
       if (bgp_debug_neighbor_events(peer))
         zlog_debug ("%s sending CAPABILITY has %s MP_EXT CAP for afi/safi: %d/%d",
 		   peer->host, action == CAPABILITY_ACTION_SET ?
-		   "Advertising" : "Removing", afi, safi);
+		   "Advertising" : "Removing", pkt_afi, pkt_safi);
     }
 
   /* Set packet size. */
@@ -1145,6 +1149,7 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       peer->afc_nego[AFI_IP][SAFI_MULTICAST] = peer->afc[AFI_IP][SAFI_MULTICAST];
       peer->afc_nego[AFI_IP6][SAFI_UNICAST] = peer->afc[AFI_IP6][SAFI_UNICAST];
       peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = peer->afc[AFI_IP6][SAFI_MULTICAST];
+      peer->afc_nego[AFI_L2VPN][SAFI_EVPN] = peer->afc[AFI_L2VPN][SAFI_EVPN];
     }
 
   /* When collision is detected and this peer is closed.  Retrun
@@ -1330,12 +1335,19 @@ bgp_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *packet)
       case SAFI_MULTICAST:
         return bgp_nlri_parse_ip (peer, attr, packet);
       case SAFI_MPLS_VPN:
-      case SAFI_MPLS_LABELED_VPN:
         return bgp_nlri_parse_vpn (peer, attr, packet);
       case SAFI_ENCAP:
         return bgp_nlri_parse_encap (peer, attr, packet);
+      case SAFI_EVPN:
+        return bgp_evpn_nlri_parse (peer, attr, packet);
     }
   return -1;
+}
+
+static inline int
+bgp_afi_safi_valid_indices (afi_t afi, safi_t safi)
+{
+  return (afi < AFI_MAX && safi < SAFI_MAX);
 }
 
 /* Parse BGP Update packet and make attribute object. */
@@ -1516,13 +1528,16 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
        *
        * Ignore unknown afi/safi NLRIs.
        *
+       * Note: The afi/safi values have already been mapped from the IANA
+       * (packet) values to internal ones, if the values are recognized. This
+       * happens during attribute parsing. Here, we just need to ignore if
+       * the afi/safi is unrecognized.
+       *
        * Note: This means nlri[x].afi/safi still can not be trusted for
        * indexing later in this function!
        *
-       * Note2: This will also remap the wire code-point for VPN safi to the
-       * internal safi_t point, as needs be.
        */
-      if(!bgp_afi_safi_valid_indices (nlris[i].afi, &nlris[i].safi))
+      if(!bgp_afi_safi_valid_indices (nlris[i].afi, nlris[i].safi))
         {
           zlog_info ("%s [Info] UPDATE with unsupported AFI/SAFI %u/%u",
                      peer->host, nlris[i].afi, nlris[i].safi);
@@ -1589,7 +1604,7 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
       else if (attr.flag & ATTR_FLAG_BIT (BGP_ATTR_MP_UNREACH_NLRI)
                && nlris[NLRI_MP_WITHDRAW].length == 0
                && bgp_afi_safi_valid_indices (nlris[NLRI_MP_WITHDRAW].afi,
-                                              &nlris[NLRI_MP_WITHDRAW].safi))
+                                              nlris[NLRI_MP_WITHDRAW].safi))
         {
           afi = nlris[NLRI_MP_WITHDRAW].afi;
           safi = nlris[NLRI_MP_WITHDRAW].safi;
@@ -1728,8 +1743,9 @@ bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
 static void
 bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
 {
+  iana_afi_t pkt_afi;
   afi_t afi;
-  safi_t safi;
+  safi_t pkt_safi, safi;
   struct stream *s;
   struct peer_af *paf;
   struct update_group *updgrp;
@@ -1758,27 +1774,21 @@ bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
   s = peer->ibuf;
   
   /* Parse packet. */
-  afi = stream_getw (s);
+  pkt_afi = stream_getw (s);
   (void)stream_getc (s);
-  safi = stream_getc (s);
+  pkt_safi = stream_getc (s);
 
   if (bgp_debug_update(peer, NULL, NULL, 0))
     zlog_debug ("%s rcvd REFRESH_REQ for afi/safi: %d/%d",
-	       peer->host, afi, safi);
+	       peer->host, pkt_afi, pkt_safi);
 
-  /* Check AFI and SAFI. */
-  if ((afi != AFI_IP && afi != AFI_IP6)
-      || (safi != SAFI_UNICAST && safi != SAFI_MULTICAST
-	  && safi != SAFI_MPLS_LABELED_VPN))
+  /* Convert AFI, SAFI to internal values and check. */
+  if (bgp_map_afi_safi_iana2int (pkt_afi, pkt_safi, &afi, &safi))
     {
       zlog_info ("%s REFRESH_REQ for unrecognized afi/safi: %d/%d - ignored",
-		 peer->host, afi, safi);
+		 peer->host, pkt_afi, pkt_safi);
       return;
     }
-
-  /* Adjust safi code. */
-  if (safi == SAFI_MPLS_LABELED_VPN)
-    safi = SAFI_MPLS_VPN;
 
   if (size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE - BGP_HEADER_SIZE)
     {
@@ -1955,8 +1965,9 @@ bgp_capability_msg_parse (struct peer *peer, u_char *pnt, bgp_size_t length)
   struct capability_mp_data mpc;
   struct capability_header *hdr;
   u_char action;
+  iana_afi_t pkt_afi;
   afi_t afi;
-  safi_t safi;
+  safi_t pkt_safi, safi;
 
   end = pnt + length;
 
@@ -2000,18 +2011,19 @@ bgp_capability_msg_parse (struct peer *peer, u_char *pnt, bgp_size_t length)
       /* We know MP Capability Code. */
       if (hdr->code == CAPABILITY_CODE_MP)
         {
-	  afi = ntohs (mpc.afi);
-	  safi = mpc.safi;
+	  pkt_afi = ntohs (mpc.afi);
+	  pkt_safi = mpc.safi;
 
           /* Ignore capability when override-capability is set. */
           if (CHECK_FLAG (peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
 	    continue;
           
-          if (!bgp_afi_safi_valid_indices (afi, &safi))
+          /* Convert AFI, SAFI to internal values. */
+          if (bgp_map_afi_safi_iana2int (pkt_afi, pkt_safi, &afi, &safi))
             {
               if (bgp_debug_neighbor_events(peer))
                 zlog_debug ("%s Dynamic Capability MP_EXT afi/safi invalid "
-                            "(%u/%u)", peer->host, afi, safi);
+                            "(%u/%u)", peer->host, pkt_afi, pkt_safi);
               continue;
             }
           
@@ -2021,7 +2033,7 @@ bgp_capability_msg_parse (struct peer *peer, u_char *pnt, bgp_size_t length)
                        peer->host,
                        action == CAPABILITY_ACTION_SET 
                        ? "Advertising" : "Removing",
-                       ntohs(mpc.afi) , mpc.safi);
+                       pkt_afi, pkt_safi);
               
           if (action == CAPABILITY_ACTION_SET)
             {

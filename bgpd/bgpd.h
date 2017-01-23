@@ -72,6 +72,7 @@ enum bgp_af_index
   BGP_AF_IPV6_VPN,
   BGP_AF_IPV4_ENCAP,
   BGP_AF_IPV6_ENCAP,
+  BGP_AF_L2VPN_EVPN,
   BGP_AF_MAX
 };
 
@@ -351,6 +352,12 @@ struct bgp
 
   u_int32_t addpath_tx_id;
   int addpath_tx_used[AFI_MAX][SAFI_MAX];
+
+  /* EVPN: vnihash for vni's */
+  struct hash *vnihash;
+  int advertise_vni; /* Redistribute VNIs into BGP? */
+  /* EVPN: import_rt_hash for auto/configured import route target */
+  struct hash *import_rt_hash;
 
 #if ENABLE_BGP_VNC
   struct rfapi_cfg *rfapi_cfg;
@@ -789,8 +796,7 @@ struct peer
   /* Syncronization list and time.  */
   struct bgp_synchronize *sync[AFI_MAX][SAFI_MAX];
   time_t synctime;
-  time_t last_write;  /* timestamp when the last msg was written */
-  time_t last_update;  /* timestamp when the last UPDATE msg was written */
+  time_t last_write;  /* timestamp when the last UPDATE msg was written */
 
   /* Send prefix count. */
   unsigned long scount[AFI_MAX][SAFI_MAX];
@@ -1153,6 +1159,7 @@ typedef enum
 } bgp_policy_type_e;
 
 extern struct bgp_master *bm;
+extern unsigned int multipath_num;
 
 /* Prototypes. */
 extern void bgp_terminate (void);
@@ -1195,7 +1202,7 @@ extern struct peer *peer_unlock_with_caller(const char *, struct peer *);
 extern bgp_peer_sort_t peer_sort (struct peer *peer);
 extern int peer_active (struct peer *);
 extern int peer_active_nego (struct peer *);
-extern void bgp_recalculate_all_bestpaths (struct bgp *bgp);
+extern void bgp_recalculate_all_bestpaths (struct bgp *, afi_t, safi_t);
 extern struct peer *peer_create(union sockunion *, const char *, struct bgp *,
                                 as_t, as_t, int, afi_t, safi_t, struct peer_group *);
 extern struct peer *peer_create_accept (struct bgp *);
@@ -1349,6 +1356,13 @@ extern void bgp_route_map_terminate(void);
 
 extern int peer_cmp (struct peer *p1, struct peer *p2);
 
+extern int
+bgp_map_afi_safi_iana2int (iana_afi_t pkt_afi, safi_t pkt_safi,
+                           afi_t *afi, safi_t *safi);
+extern int
+bgp_map_afi_safi_int2iana (afi_t afi, safi_t safi,
+                           iana_afi_t *pkt_afi, safi_t *pkt_safi);
+
 extern struct peer_af * peer_af_create (struct peer *, afi_t, safi_t);
 extern struct peer_af * peer_af_find (struct peer *, afi_t, safi_t);
 extern int peer_af_delete (struct peer *, afi_t, safi_t);
@@ -1400,6 +1414,16 @@ afindex (afi_t afi, safi_t safi)
 	  break;
 	}
       break;
+    case AFI_L2VPN:
+      switch (safi)
+        {
+        case SAFI_EVPN:
+          return BGP_AF_L2VPN_EVPN;
+          break;
+        default:
+          return BGP_AF_MAX;
+          break;
+        }
     default:
       return BGP_AF_MAX;
       break;
@@ -1422,7 +1446,8 @@ peer_afi_active_nego (const struct peer *peer, afi_t afi)
   if (peer->afc_nego[afi][SAFI_UNICAST]
       || peer->afc_nego[afi][SAFI_MULTICAST]
       || peer->afc_nego[afi][SAFI_MPLS_VPN]
-      || peer->afc_nego[afi][SAFI_ENCAP])
+      || peer->afc_nego[afi][SAFI_ENCAP]
+      || peer->afc_nego[afi][SAFI_EVPN])
     return 1;
   return 0;
 }
@@ -1440,7 +1465,8 @@ peer_group_af_configured (struct peer_group *group)
       || peer->afc[AFI_IP6][SAFI_UNICAST]
       || peer->afc[AFI_IP6][SAFI_MULTICAST]
       || peer->afc[AFI_IP6][SAFI_MPLS_VPN]
-      || peer->afc[AFI_IP6][SAFI_ENCAP])
+      || peer->afc[AFI_IP6][SAFI_ENCAP]
+      || peer->afc[AFI_L2VPN][SAFI_EVPN])
     return 1;
   return 0;
 }

@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #ifndef PIM_ZLOOKUP_H
@@ -30,18 +29,20 @@
 #define PIM_NEXTHOP_LOOKUP_MAX (3) /* max. recursive route lookup */
 
 struct pim_zlookup_nexthop {
-  struct in_addr nexthop_addr;
+  struct prefix  nexthop_addr;
   ifindex_t      ifindex;
   uint32_t       route_metric;
   uint8_t        protocol_distance;
 };
 
-struct zclient *zclient_lookup_new(void);
+void zclient_lookup_new (void);
 
-int zclient_lookup_nexthop(struct zclient *zlookup,
-			   struct pim_zlookup_nexthop nexthop_tab[],
+int zclient_lookup_nexthop(struct pim_zlookup_nexthop nexthop_tab[],
 			   const int tab_size,
 			   struct in_addr addr,
 			   int max_lookup);
 
+void pim_zlookup_show_ip_multicast (struct vty *vty);
+
+int pim_zlookup_sg_statistics (struct channel_oil *c_oil);
 #endif /* PIM_ZLOOKUP_H */

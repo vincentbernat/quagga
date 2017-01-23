@@ -211,7 +211,7 @@ afi2family (afi_t afi)
   else if (afi == AFI_IP6)
     return AF_INET6;
 #endif /* HAVE_IPV6 */
-  else if (afi == AFI_ETHER)
+  else if (afi == AFI_L2VPN)
     return AF_ETHERNET;
   return 0;
 }
@@ -226,7 +226,7 @@ family2afi (int family)
     return AFI_IP6;
 #endif /* HAVE_IPV6 */
   else if (family == AF_ETHERNET)
-    return AFI_ETHER;
+    return AFI_L2VPN;
   return 0;
 }
 
@@ -238,8 +238,8 @@ afi2str(afi_t afi)
 	return "IPv4";
     case AFI_IP6:
 	return "IPv6";
-    case AFI_ETHER:
-	return "ethernet";
+    case AFI_L2VPN:
+	return "L2VPN";
     case AFI_MAX:
         return "bad-value";
     default:
@@ -260,6 +260,8 @@ safi2str(safi_t safi)
 	return "encap";
     case SAFI_MPLS_VPN:
 	return "vpn";
+    case SAFI_EVPN:
+	return "evpn";
   }
   return NULL;
 }
@@ -306,6 +308,10 @@ prefix_copy (struct prefix *dest, const struct prefix *src)
   else if (src->family == AF_INET6)
     dest->u.prefix6 = src->u.prefix6;
 #endif /* HAVE_IPV6 */
+  else if (src->family == AF_ETHERNET)
+    {
+      memcpy (&dest->u.prefix_evpn, &src->u.prefix_evpn, sizeof (struct evpn_addr));
+    }
   else if (src->family == AF_UNSPEC)
     {
       dest->u.lp.id = src->u.lp.id;
@@ -350,10 +356,9 @@ prefix_same (const struct prefix *p1, const struct prefix *p2)
 	if (IPV6_ADDR_SAME (&p1->u.prefix6.s6_addr, &p2->u.prefix6.s6_addr))
 	  return 1;
 #endif /* HAVE_IPV6 */
-      if (p1->family == AF_ETHERNET) {
-	if (!memcmp(p1->u.prefix_eth.octet, p2->u.prefix_eth.octet, ETHER_ADDR_LEN))
-	    return 1;
-      }
+      if (p1->family == AF_ETHERNET )
+        if (!memcmp (&p1->u.prefix_evpn, &p2->u.prefix_evpn, sizeof (struct evpn_addr)))
+          return 1;
     }
   return 0;
 }
@@ -414,10 +419,10 @@ prefix_common_bits (const struct prefix *p1, const struct prefix *p2)
 
   if (p1->family == AF_INET)
     length = IPV4_MAX_BYTELEN;
-#ifdef HAVE_IPV6
   if (p1->family == AF_INET6)
     length = IPV6_MAX_BYTELEN;
-#endif
+  if (p1->family == AF_ETHERNET)
+    length = 8 * sizeof (struct evpn_addr);
   if (p1->family != p2->family || !length)
     return -1;
 
@@ -890,32 +895,61 @@ str2prefix (const char *str, struct prefix *p)
 }
 
 const char *
-prefix2str (union prefix46constptr pu, char *str, int size)
+prefix2str (union prefixconstptr pu, char *str, int size)
 {
   const struct prefix *p = pu.p;
   char buf[PREFIX2STR_BUFFER];
+  char buf2[MACADDR_STRLEN];
 
-  if (p->family == AF_ETHERNET) {
-    int		i;
-    char	*s = str;
+  switch (p->family)
+    {
+      u_char family;
 
-    assert(size > (3*ETHER_ADDR_LEN) + 1 /* slash */ + 3 /* plen */ );
-    for (i = 0; i < ETHER_ADDR_LEN; ++i) {
-	sprintf(s, "%02x", p->u.prefix_eth.octet[i]);
-	if (i < (ETHER_ADDR_LEN - 1)) {
-	    *(s+2) = ':';
-	    s += 3;
-	} else {
-	    s += 2;
-	}
+      case AF_INET:
+      case AF_INET6:
+        snprintf (str, size, "%s/%d",
+                  inet_ntop (p->family, &p->u.prefix, buf, PREFIX2STR_BUFFER),
+                  p->prefixlen);
+        break;
+
+      case AF_ETHERNET:
+        if (p->u.prefix_evpn.route_type == 3)
+          {
+            family = IS_EVPN_PREFIX_IPADDR_V4((struct prefix_evpn *)p) ? \
+                     AF_INET : AF_INET6;
+            snprintf (str, size, "[%d]:[%s]/%d",
+                      p->u.prefix_evpn.route_type,
+                      inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                                 buf, PREFIX2STR_BUFFER),
+                      p->prefixlen);
+          }
+        else if (p->u.prefix_evpn.route_type == 2)
+          {
+            if (IS_EVPN_PREFIX_IPADDR_NONE((struct prefix_evpn *)p))
+              snprintf (str, size, "[%d]:[%s]/%d",
+                        p->u.prefix_evpn.route_type,
+                        mac2str (&p->u.prefix_evpn.mac, buf2, sizeof (buf2)),
+                        p->prefixlen);
+            else
+              {
+                family = IS_EVPN_PREFIX_IPADDR_V4((struct prefix_evpn *)p) ? \
+                         AF_INET : AF_INET6;
+                snprintf (str, size, "[%d]:[%s]:[%s]/%d",
+                          p->u.prefix_evpn.route_type,
+                          mac2str (&p->u.prefix_evpn.mac, buf2, sizeof (buf2)),
+                          inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                                     buf, PREFIX2STR_BUFFER),
+                          p->prefixlen);
+              }
+          }
+
+        break;
+
+      default:
+        sprintf (str, "UNK prefix");
+        break;
     }
-    sprintf(s, "/%d", p->prefixlen);
-    return 0;
-  }
 
-  snprintf (str, size, "%s/%d",
-	    inet_ntop (p->family, &p->u.prefix, buf, PREFIX2STR_BUFFER),
-		       p->prefixlen);
   return str;
 }
 
@@ -1053,3 +1087,13 @@ inet6_ntoa (struct in6_addr addr)
   return buf;
 }
 #endif /* HAVE_IPV6 */
+
+const char *
+mac2str (const struct ethaddr *mac, char *buf, int size)
+{
+  snprintf (buf, size, "%02x:%02x:%02x:%02x:%02x:%02x",
+            mac->octet[0], mac->octet[1], mac->octet[2],
+            mac->octet[3], mac->octet[4], mac->octet[5]);
+  return buf;
+
+}

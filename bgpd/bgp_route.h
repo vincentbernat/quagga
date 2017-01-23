@@ -241,6 +241,7 @@ bgp_bump_version (struct bgp_node *node)
 extern void bgp_process_queue_init (void);
 extern void bgp_route_init (void);
 extern void bgp_route_finish (void);
+extern void bgp_install_routes_for_afi_safi (struct bgp *, afi_t, safi_t);
 extern void bgp_cleanup_routes (void);
 extern void bgp_announce_route (struct peer *, afi_t, safi_t);
 extern void bgp_stop_announce_route_timer(struct peer_af *paf);
@@ -255,6 +256,9 @@ extern void bgp_clear_stale_route (struct peer *, afi_t, safi_t);
 extern struct bgp_node *bgp_afi_node_get (struct bgp_table *table, afi_t afi,
                                           safi_t safi, struct prefix *p,
                                           struct prefix_rd *prd);
+extern struct bgp_node *bgp_afi_node_lookup (struct bgp_table *table, afi_t afi,
+                                             safi_t safi, struct prefix *p,
+                                             struct prefix_rd *prd);
 extern struct bgp_info *bgp_info_lock (struct bgp_info *);
 extern struct bgp_info *bgp_info_unlock (struct bgp_info *);
 extern void bgp_info_add (struct bgp_node *rn, struct bgp_info *ri);
@@ -318,6 +322,10 @@ extern u_char bgp_distance_apply (struct prefix *, struct bgp_info *, afi_t, saf
 extern afi_t bgp_node_afi (struct vty *);
 extern safi_t bgp_node_safi (struct vty *);
 
+struct bgp_info *
+info_make (int type, int sub_type, u_short instance, struct peer *peer,
+           struct attr *attr, struct bgp_node *rn);
+
 extern void route_vty_out (struct vty *, struct prefix *, struct bgp_info *, int, safi_t, json_object *);
 extern void route_vty_out_tag (struct vty *, struct prefix *, struct bgp_info *, int, safi_t, json_object *);
 extern void route_vty_out_tmp (struct vty *, struct prefix *, struct attr *, safi_t, u_char, json_object *);
@@ -334,6 +342,13 @@ extern int subgroup_announce_check(struct bgp_info *ri,
 
 extern void bgp_peer_clear_node_queue_drain_immediate (struct peer *peer);
 extern void bgp_process_queues_drain_immediate (void);
+extern void route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
+                                  struct bgp_info *binfo, afi_t afi, safi_t safi,
+                                  json_object *json_paths);
+extern void route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
+			     struct bgp_node *rn,
+                             struct prefix_rd *prd, afi_t afi, safi_t safi,
+                             json_object *json);
 
 /* for encap/vpn */
 extern struct bgp_node *

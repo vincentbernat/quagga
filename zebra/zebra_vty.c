@@ -30,8 +30,8 @@
 #include "rib.h"
 #include "nexthop.h"
 #include "vrf.h"
+#include "vxlan.h"
 #include "mpls.h"
-#include "lib/json.h"
 #include "routemap.h"
 
 #include "zebra/zserv.h"
@@ -40,7 +40,9 @@
 #include "zebra/zebra_rnh.h"
 #include "zebra/redistribute.h"
 #include "zebra/zebra_routemap.h"
+#include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_static.h"
+#include "lib/json.h"
 
 extern int allow_delete;
 
@@ -104,7 +106,7 @@ zebra_static_ipv4 (struct vty *vty, safi_t safi, int add_cmd,
 
   /* tag */
   if (tag_str)
-    tag = atol(tag_str);
+    VTY_GET_INTEGER_RANGE("tag", tag, tag_str, 0, 4294967295);
 
   /* VRF id */
   zvrf = zebra_vrf_list_lookup_by_name (vrf_id_str);
@@ -2707,11 +2709,11 @@ DEFUN (show_ip_route_tag,
 
   if (argc > 1)
     {
-      tag = atol(argv[1]);
+      VTY_GET_INTEGER_RANGE("tag", tag, argv[1], 0, 4294967295);
       VRF_GET_ID (vrf_id, argv[0]);
     }
   else
-    tag = atol(argv[0]);
+    VTY_GET_INTEGER_RANGE("tag", tag, argv[0], 0, 4294967295);
 
   table = zebra_vrf_table (AFI_IP, SAFI_UNICAST, vrf_id);
   if (! table)
@@ -3341,7 +3343,7 @@ DEFUN (show_ip_route_vrf_all_tag,
   route_tag_t tag = 0;
 
   if (argv[0])
-    tag = atol(argv[0]);
+    VTY_GET_INTEGER_RANGE("tag", tag, argv[0], 0, 4294967295);
 
   for (iter = vrf_first (); iter != VRF_ITER_INVALID; iter = vrf_next (iter))
     {
@@ -3668,7 +3670,7 @@ DEFUN (show_ip_route_vrf_all_summary_prefix,
 
 /* Write IPv4 static route configuration. */
 static int
-static_config_ipv4 (struct vty *vty, safi_t safi, const char *cmd)
+static_config (struct vty *vty, afi_t afi, safi_t safi, const char *cmd)
 {
   struct route_node *rn;
   struct static_route *si;
@@ -3680,7 +3682,7 @@ static_config_ipv4 (struct vty *vty, safi_t safi, const char *cmd)
 
   for (ALL_LIST_ELEMENTS_RO (zvrf_list, node, zvrf))
     {
-      if ((stable = zvrf->stable[AFI_IP][safi]) == NULL)
+      if ((stable = zvrf->stable[afi][safi]) == NULL)
         continue;
 
       for (rn = route_top (stable); rn; rn = route_next (rn))
@@ -3699,6 +3701,14 @@ static_config_ipv4 (struct vty *vty, safi_t safi, const char *cmd)
               case STATIC_BLACKHOLE:
                 vty_out (vty, " Null0");
                 break;
+	      case STATIC_IPV6_GATEWAY:
+		vty_out (vty, " %s", inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ));
+		break;
+	      case STATIC_IPV6_GATEWAY_IFINDEX:
+		vty_out (vty, " %s %s",
+			 inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ),
+			 ifindex2ifname_vrf (si->ifindex, si->vrf_id));
+		break;
               }
 
             /* flags are incompatible with STATIC_BLACKHOLE */
@@ -3773,7 +3783,7 @@ static_ipv6_func (struct vty *vty, int add_cmd, const char *dest_str,
 
   /* tag */
   if (tag_str)
-    tag = atol(tag_str);
+    VTY_GET_INTEGER_RANGE("tag", tag, tag_str, 0, 4294967295);
 
   /* When gateway is valid IPv6 addrees, then gate is treated as
      nexthop address other case gate is treated as interface name. */
@@ -5022,10 +5032,10 @@ DEFUN (show_ipv6_route_tag,
   if (argc > 1)
     {
       VRF_GET_ID (vrf_id, argv[0]);
-      tag = atol(argv[1]);
+      VTY_GET_INTEGER_RANGE("tag", tag, argv[1], 0, 4294967295);
     }
   else
-    tag = atol(argv[0]);
+    VTY_GET_INTEGER_RANGE("tag", tag, argv[0], 0, 4294967295);
 
   table = zebra_vrf_table (AFI_IP6, SAFI_UNICAST, vrf_id);
   if (! table)
@@ -5465,7 +5475,7 @@ DEFUN (show_ipv6_route_vrf_all_tag,
   route_tag_t tag = 0;
 
   if (argv[0])
-    tag = atol(argv[0]);
+    VTY_GET_INTEGER_RANGE("tag", tag, argv[0], 0, 4294967295);
 
   for (iter = vrf_first (); iter != VRF_ITER_INVALID; iter = vrf_next (iter))
     {
@@ -5773,80 +5783,6 @@ DEFUN (show_ipv6_route_vrf_all_summary_prefix,
   return CMD_SUCCESS;
 }
 
-/* Write IPv6 static route configuration. */
-static int
-static_config_ipv6 (struct vty *vty)
-{
-  struct route_node *rn;
-  struct static_route *si;
-  int write = 0;
-  char buf[PREFIX_STRLEN];
-  struct route_table *stable;
-  struct zebra_vrf *zvrf;
-  struct listnode *node;
-
-  for (ALL_LIST_ELEMENTS_RO (zvrf_list, node, zvrf))
-    {
-      if ((stable = zvrf->stable[AFI_IP6][SAFI_UNICAST]) == NULL)
-        continue;
-
-      for (rn = route_top (stable); rn; rn = route_next (rn))
-        for (si = rn->info; si; si = si->next)
-          {
-            vty_out (vty, "ipv6 route %s", prefix2str (&rn->p, buf, sizeof buf));
-
-	    switch (si->type)
-	      {
-	      case STATIC_IPV6_GATEWAY:
-		vty_out (vty, " %s", inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ));
-		break;
-	      case STATIC_IFINDEX:
-		vty_out (vty, " %s", si->ifname);
-		break;
-	      case STATIC_BLACKHOLE:
-		vty_out (vty, " Null0" );
-		break;
-	      case STATIC_IPV6_GATEWAY_IFINDEX:
-		vty_out (vty, " %s %s",
-			 inet_ntop (AF_INET6, &si->addr.ipv6, buf, BUFSIZ),
-			 ifindex2ifname_vrf (si->ifindex, si->vrf_id));
-		break;
-	      }
-
-            /* flags are incompatible with STATIC_BLACKHOLE */
-            if (si->type != STATIC_BLACKHOLE)
-              {
-                if (CHECK_FLAG(si->flags, ZEBRA_FLAG_REJECT))
-                  vty_out (vty, " %s", "reject");
-                if (CHECK_FLAG(si->flags, ZEBRA_FLAG_BLACKHOLE))
-                  vty_out (vty, " %s", "blackhole");
-              }
-
-            if (si->tag)
-              vty_out (vty, " tag %"ROUTE_TAG_PRI, si->tag);
-
-            if (si->distance != ZEBRA_STATIC_DISTANCE_DEFAULT)
-              vty_out (vty, " %d", si->distance);
-
-            if (si->vrf_id != VRF_DEFAULT)
-              {
-                vty_out (vty, " vrf %s", zvrf->name);
-              }
-
-            /* Label information */
-            if (si->snh_label.num_labels)
-              vty_out (vty, " label %s",
-                       mpls_label2str (si->snh_label.num_labels,
-                                       si->snh_label.label, buf, sizeof buf));
-
-            vty_out (vty, "%s", VTY_NEWLINE);
-
-            write = 1;
-          }
-    }
-  return write;
-}
-
 DEFUN (allow_external_route_update,
        allow_external_route_update_cmd,
        "allow-external-route-update",
@@ -5894,17 +5830,64 @@ DEFUN (show_vrf,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_evpn_vni,
+       show_evpn_vni_cmd,
+       "show evpn vni",
+       SHOW_STR
+       "EVPN\n"
+       "VxLAN information\n")
+{
+  struct zebra_vrf *zvrf;
+
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_vnis(vty, zvrf);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_vni_vni,
+       show_evpn_vni_vni_cmd,
+       "show evpn vni " CMD_VNI_RANGE,
+       SHOW_STR
+       "EVPN\n"
+       "VxLAN information\n"
+       "VNI number\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_vni(vty, zvrf, vni);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_vni_mac,
+       show_evpn_vni_mac_cmd,
+       "show evpn vni " CMD_VNI_RANGE " mac",
+       SHOW_STR
+       "EVPN\n"
+       "VxLAN information\n"
+       "VNI number\n"
+       "MAC addresses\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_vni_macs(vty, zvrf, vni);
+  return CMD_SUCCESS;
+}
+
 /* Static ip route configuration write function. */
 static int
 zebra_ip_config (struct vty *vty)
 {
   int write = 0;
 
-  write += static_config_ipv4 (vty, SAFI_UNICAST, "ip route");
-  write += static_config_ipv4 (vty, SAFI_MULTICAST, "ip mroute");
-#ifdef HAVE_IPV6
-  write += static_config_ipv6 (vty);
-#endif /* HAVE_IPV6 */
+  write += static_config (vty, AFI_IP, SAFI_UNICAST, "ip route");
+  write += static_config (vty, AFI_IP, SAFI_MULTICAST, "ip mroute");
+  write += static_config (vty, AFI_IP6, SAFI_UNICAST, "ipv6 route");
 
   write += zebra_import_table_config (vty);
   return write;
@@ -6346,4 +6329,8 @@ zebra_vty_init (void)
 
   install_element (VIEW_NODE, &show_ipv6_mroute_vrf_all_cmd);
 #endif /* HAVE_IPV6 */
+
+  install_element (VIEW_NODE, &show_evpn_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_vni_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_vni_mac_cmd);
 }

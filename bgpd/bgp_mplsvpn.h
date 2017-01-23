@@ -55,20 +55,6 @@ typedef enum {
      (label) == MPLS_LABEL_IPV6_EXPLICIT_NULL || \
      (label) == MPLS_LABEL_IMPLICIT_NULL)
 
-struct rd_as
-{
-  u_int16_t type;
-  as_t as;
-  u_int32_t val;
-};
-
-struct rd_ip
-{
-  u_int16_t type;
-  struct in_addr ip;
-  u_int16_t val;
-};
-
 #if ENABLE_BGP_VNC
 struct rd_vnc_eth
 {
@@ -78,20 +64,13 @@ struct rd_vnc_eth
 };
 #endif
 
-extern u_int16_t decode_rd_type (u_char *);
-extern void encode_rd_type (u_int16_t, u_char *);
 extern void bgp_mplsvpn_init (void);
 extern int bgp_nlri_parse_vpn (struct peer *, struct attr *, struct bgp_nlri *);
 extern u_int32_t decode_label (u_char *);
 extern void encode_label(u_int32_t, u_char *);
-extern void decode_rd_as (u_char *, struct rd_as *);
-extern void decode_rd_as4 (u_char *, struct rd_as *);
-extern void decode_rd_ip (u_char *, struct rd_ip *);
 #if ENABLE_BGP_VNC
 extern void decode_vnc_eth (u_char *, struct rd_vnc_eth *);
 #endif
-extern int str2prefix_rd (const char *, struct prefix_rd *);
 extern int str2tag (const char *, u_char *);
-extern char *prefix_rd2str (struct prefix_rd *, char *, size_t);
 
 #endif /* _QUAGGA_BGP_MPLSVPN_H */

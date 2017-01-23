@@ -16,8 +16,7 @@
   along with this program; see the file COPYING; if not, write to the
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
-  
-  $QuaggaId: $Format:%an, %ai, %h$ $
+
 */
 
 #include <zebra.h>
@@ -45,10 +44,9 @@
 #include "pim_version.h"
 #include "pim_signals.h"
 #include "pim_zebra.h"
-
-#ifdef PIM_ZCLIENT_DEBUG
-extern int zclient_debug;
-#endif
+#include "pim_msdp.h"
+#include "pim_iface.h"
+#include "pim_rp.h"
 
 extern struct host host;
 
@@ -72,6 +70,7 @@ zebra_capabilities_t _caps_p [] =
   ZCAP_NET_ADMIN,
   ZCAP_SYS_ADMIN,
   ZCAP_NET_RAW,
+  ZCAP_BIND,
 };
 
 /* pimd privileges to run with */
@@ -106,18 +105,9 @@ Daemon which manages PIM.\n\n\
 -A, --vty_addr       Set vty's bind address\n\
 -P, --vty_port       Set vty's port number\n\
 -v, --version        Print program version\n\
-"
-
-#ifdef PIM_ZCLIENT_DEBUG
-"\
--Z, --debug_zclient  Enable zclient debugging\n\
-"
-#endif
-
-"\
 -h, --help           Display this help and exit\n\
 \n\
-Report bugs to %s\n", progname, PIMD_BUG_ADDRESS);
+Report bugs to %s\n", progname, PACKAGE_BUGREPORT);
   }
 
   exit (status);
@@ -179,11 +169,6 @@ int main(int argc, char** argv, char** envp) {
       print_version(QUAGGA_PROGNAME);
       exit (0);
       break;
-#ifdef PIM_ZCLIENT_DEBUG
-    case 'Z':
-      zclient_debug = 1;
-      break;
-#endif
     case 'h':
       usage (0);
       break;
@@ -208,8 +193,12 @@ int main(int argc, char** argv, char** envp) {
   vrf_init ();
   access_list_init();
   prefix_list_init ();
+  prefix_list_add_hook (pim_rp_prefix_list_update);
+  prefix_list_delete_hook (pim_rp_prefix_list_update);
+
   pim_route_map_init ();
   pim_init();
+  pim_msdp_init (master);
 
   /*
    * Initialize zclient "update" and "lookup" sockets
@@ -254,11 +243,6 @@ int main(int argc, char** argv, char** envp) {
   PIM_DO_DEBUG_IGMP_PACKETS;
   PIM_DO_DEBUG_IGMP_TRACE;
   PIM_DO_DEBUG_ZEBRA;
-#endif
-
-#ifdef PIM_ZCLIENT_DEBUG
-  zlog_notice("PIM_ZCLIENT_DEBUG: zclient debugging is supported, mode is %s (see option -Z)",
-	      zclient_debug ? "ON" : "OFF");
 #endif
 
 #ifdef PIM_CHECK_RECV_IFINDEX_SANITY

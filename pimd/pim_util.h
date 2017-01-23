@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #ifndef PIM_UTIL_H
@@ -34,4 +33,6 @@ uint16_t igmp_msg_decode8to16(uint8_t code);
 
 void pim_pkt_dump(const char *label, const uint8_t *buf, int size);
 
+int pim_is_group_224_0_0_0_24 (struct in_addr group_addr);
+int pim_is_group_224_4 (struct in_addr group_addr);
 #endif /* PIM_UTIL_H */

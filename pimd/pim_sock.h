@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #ifndef PIM_SOCK_H
@@ -38,6 +37,8 @@
 #define PIM_SOCK_ERR_NAME    (-10) /* Socket name (getsockname) */
 #define PIM_SOCK_ERR_BIND    (-11) /* Can't bind to interface */
 
+int pim_socket_bind (int fd, struct interface *ifp);
+int pim_socket_ip_hdr (int fd);
 int pim_socket_raw(int protocol);
 int pim_socket_mcast(int protocol, struct in_addr ifaddr, int ifindex, int loop);
 int pim_socket_join(int fd, struct in_addr group,

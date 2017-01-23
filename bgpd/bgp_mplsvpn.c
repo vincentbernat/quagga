@@ -33,37 +33,13 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_table.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_packet.h"
 
 #if ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
 #endif
-
-u_int16_t
-decode_rd_type (u_char *pnt)
-{
-  u_int16_t v;
-  
-  v = ((u_int16_t) *pnt++ << 8);
-#if ENABLE_BGP_VNC
-  /*
-   * VNC L2 stores LHI in lower byte, so omit it
-   */
-  if (v != RD_TYPE_VNC_ETH)
-    v |= (u_int16_t) *pnt;
-#else                           /* duplicate code for clarity */
-  v |= (u_int16_t) *pnt;
-#endif
-
-  return v;
-}
-
-void
-encode_rd_type (u_int16_t v, u_char *pnt)
-{
-  *((u_int16_t *)pnt) = htons(v);
-}
 
 u_int32_t
 decode_label (u_char *pnt)
@@ -87,42 +63,6 @@ encode_label(u_int32_t label,
     *pnt++ = ((label<<4)+1) & 0xff; /* S=1 */
 }
 
-/* type == RD_TYPE_AS */
-void
-decode_rd_as (u_char *pnt, struct rd_as *rd_as)
-{
-  rd_as->as = (u_int16_t) *pnt++ << 8;
-  rd_as->as |= (u_int16_t) *pnt++;
-  
-  rd_as->val = ((u_int32_t) *pnt++ << 24);
-  rd_as->val |= ((u_int32_t) *pnt++ << 16);
-  rd_as->val |= ((u_int32_t) *pnt++ << 8);
-  rd_as->val |= (u_int32_t) *pnt;
-}
-
-/* type == RD_TYPE_AS4 */
-void
-decode_rd_as4 (u_char *pnt, struct rd_as *rd_as)
-{
-  rd_as->as  = (u_int32_t) *pnt++ << 24;
-  rd_as->as |= (u_int32_t) *pnt++ << 16;
-  rd_as->as |= (u_int32_t) *pnt++ << 8;
-  rd_as->as |= (u_int32_t) *pnt++;
-
-  rd_as->val  = ((u_int16_t) *pnt++ << 8);
-  rd_as->val |= (u_int16_t) *pnt;
-}
-
-/* type == RD_TYPE_IP */
-void
-decode_rd_ip (u_char *pnt, struct rd_ip *rd_ip)
-{
-  memcpy (&rd_ip->ip, pnt, 4);
-  pnt += 4;
-  
-  rd_ip->val = ((u_int16_t) *pnt++ << 8);
-  rd_ip->val |= (u_int16_t) *pnt;
-}
 
 #if ENABLE_BGP_VNC
 /* type == RD_TYPE_VNC_ETH */
@@ -305,66 +245,6 @@ bgp_nlri_parse_vpn (struct peer *peer, struct attr *attr,
 }
 
 int
-str2prefix_rd (const char *str, struct prefix_rd *prd)
-{
-  int ret; /* ret of called functions */
-  int lret; /* local ret, of this func */
-  char *p;
-  char *p2;
-  struct stream *s = NULL;
-  char *half = NULL;
-  struct in_addr addr;
-
-  s = stream_new (8);
-
-  prd->family = AF_UNSPEC;
-  prd->prefixlen = 64;
-
-  lret = 0;
-  p = strchr (str, ':');
-  if (! p)
-    goto out;
-
-  if (! all_digit (p + 1))
-    goto out;
-
-  half = XMALLOC (MTYPE_TMP, (p - str) + 1);
-  memcpy (half, str, (p - str));
-  half[p - str] = '\0';
-
-  p2 = strchr (str, '.');
-
-  if (! p2)
-    {
-      if (! all_digit (half))
-        goto out;
-
-      stream_putw (s, RD_TYPE_AS);
-      stream_putw (s, atoi (half));
-      stream_putl (s, atol (p + 1));
-    }
-  else
-    {
-      ret = inet_aton (half, &addr);
-      if (! ret)
-        goto out;
-
-      stream_putw (s, RD_TYPE_IP);
-      stream_put_in_addr (s, &addr);
-      stream_putw (s, atol (p + 1));
-    }
-  memcpy (prd->val, s->data, 8);
-  lret = 1;
-
-out:
-  if (s)
-    stream_free (s);
-  if (half)
-    XFREE(MTYPE_TMP, half);
-  return lret;
-}
-
-int
 str2tag (const char *str, u_char *tag)
 {
   unsigned long l;
@@ -387,57 +267,6 @@ str2tag (const char *str, u_char *tag)
   tag[2] = (u_char)(t << 4);
 
   return 1;
-}
-
-char *
-prefix_rd2str (struct prefix_rd *prd, char *buf, size_t size)
-{
-  u_char *pnt;
-  u_int16_t type;
-  struct rd_as rd_as;
-  struct rd_ip rd_ip;
-
-  if (size < RD_ADDRSTRLEN)
-    return NULL;
-
-  pnt = prd->val;
-
-  type = decode_rd_type (pnt);
-
-  if (type == RD_TYPE_AS)
-    {
-      decode_rd_as (pnt + 2, &rd_as);
-      snprintf (buf, size, "%u:%d", rd_as.as, rd_as.val);
-      return buf;
-    }
-  else if (type == RD_TYPE_AS4)
-    {
-      decode_rd_as4 (pnt + 2, &rd_as);
-      snprintf (buf, size, "%u:%d", rd_as.as, rd_as.val);
-      return buf;
-    }
-  else if (type == RD_TYPE_IP)
-    {
-      decode_rd_ip (pnt + 2, &rd_ip);
-      snprintf (buf, size, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
-      return buf;
-    }
-#if ENABLE_BGP_VNC
-  else if (type == RD_TYPE_VNC_ETH)
-    {
-      snprintf(buf, size, "LHI:%d, %02x:%02x:%02x:%02x:%02x:%02x",
-	    *(pnt+1),	/* LHI */
-	    *(pnt+2),	/* MAC[0] */
-	    *(pnt+3),
-	    *(pnt+4),
-	    *(pnt+5),
-	    *(pnt+6),
-	    *(pnt+7));
-
-      return buf;
-    }
-#endif
-  return NULL;
 }
 
 /* For testing purpose, static route of MPLS-VPN. */

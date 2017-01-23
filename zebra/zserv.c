@@ -52,6 +52,8 @@
 #include "zebra/interface.h"
 #include "zebra/zebra_ptm.h"
 #include "zebra/rtadv.h"
+#include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_mroute.h"
 #include "zebra/zebra_mpls.h"
 #include "zebra/zebra_fpm.h"
 
@@ -785,8 +787,6 @@ zsend_write_nexthop (struct stream *s, struct nexthop *nexthop)
   switch (nexthop->type)
     {
     case NEXTHOP_TYPE_IPV4:
-      stream_put_in_addr (s, &nexthop->gate.ipv4);
-      break;
     case NEXTHOP_TYPE_IPV4_IFINDEX:
       stream_put_in_addr (s, &nexthop->gate.ipv4);
       stream_putl (s, nexthop->ifindex);
@@ -954,7 +954,7 @@ zsend_ipv4_nexthop_lookup_mrib (struct zserv *client, struct in_addr addr, struc
        * chain of nexthops. */
       for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
 	if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
-	    num += zsend_write_nexthop (s, nexthop);
+	  num += zsend_write_nexthop (s, nexthop);
     
       stream_putc_at (s, nump, num); /* store nexthop_num */
     }
@@ -1043,12 +1043,12 @@ zread_interface_delete (struct zserv *client, u_short length, struct zebra_vrf *
 void
 zserv_nexthop_num_warn (const char *caller, const struct prefix *p, const unsigned int nexthop_num)
 {
-  if (nexthop_num > MULTIPATH_NUM)
+  if (nexthop_num > multipath_num)
     {
       char buff[PREFIX2STR_BUFFER];
       prefix2str(p, buff, sizeof (buff));
       zlog_warn("%s: Prefix %s has %d nexthops, but we can only use the first %d",
-		caller, buff, nexthop_num, MULTIPATH_NUM);
+		caller, buff, nexthop_num, multipath_num);
     }
 }
 
@@ -1267,7 +1267,7 @@ zread_ipv4_nexthop_lookup_mrib (struct zserv *client, u_short length, struct zeb
 static int
 zread_ipv4_route_ipv6_nexthop_add (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
 {
-  int i;
+  unsigned int i;
   struct stream *s;
   struct in6_addr nexthop;
   struct rib *rib;
@@ -1311,9 +1311,9 @@ zread_ipv4_route_ipv6_nexthop_add (struct zserv *client, u_short length, struct 
    * next-hop-addr/next-hop-ifindices. */
   if (CHECK_FLAG (message, ZAPI_MESSAGE_NEXTHOP))
     {
-      int nh_count = 0;
-      int if_count = 0;
-      int max_nh_if = 0;
+      unsigned int nh_count = 0;
+      unsigned int if_count = 0;
+      unsigned int max_nh_if = 0;
 
       nexthop_num = stream_getc (s);
       zserv_nexthop_num_warn(__func__, (const struct prefix *)&p, nexthop_num);
@@ -1325,12 +1325,12 @@ zread_ipv4_route_ipv6_nexthop_add (struct zserv *client, u_short length, struct 
 	    {
 	    case NEXTHOP_TYPE_IPV6:
 	      stream_get (&nexthop, s, 16);
-              if (nh_count < MULTIPATH_NUM) {
+              if (nh_count < multipath_num) {
 	        nexthops[nh_count++] = nexthop;
               }
 	      break;
 	    case NEXTHOP_TYPE_IFINDEX:
-              if (if_count < MULTIPATH_NUM) {
+              if (if_count < multipath_num) {
 	        ifindices[if_count++] = stream_getl (s);
               }
 	      break;
@@ -1394,7 +1394,7 @@ zread_ipv4_route_ipv6_nexthop_add (struct zserv *client, u_short length, struct 
 static int
 zread_ipv6_add (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
 {
-  int i;
+  unsigned int i;
   struct stream *s;
   struct in6_addr nexthop;
   struct rib *rib;
@@ -1435,9 +1435,9 @@ zread_ipv6_add (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
    * next-hop-addr/next-hop-ifindices. */
   if (CHECK_FLAG (message, ZAPI_MESSAGE_NEXTHOP))
     {
-      int nh_count = 0;
-      int if_count = 0;
-      int max_nh_if = 0;
+      unsigned int nh_count = 0;
+      unsigned int if_count = 0;
+      unsigned int max_nh_if = 0;
 
       nexthop_num = stream_getc (s);
       zserv_nexthop_num_warn(__func__, (const struct prefix *)&p, nexthop_num);
@@ -1449,12 +1449,12 @@ zread_ipv6_add (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
 	    {
 	    case NEXTHOP_TYPE_IPV6:
 	      stream_get (&nexthop, s, 16);
-              if (nh_count < MULTIPATH_NUM) {
+              if (nh_count < multipath_num) {
 	        nexthops[nh_count++] = nexthop;
               }
 	      break;
 	    case NEXTHOP_TYPE_IFINDEX:
-              if (if_count < MULTIPATH_NUM) {
+              if (if_count < multipath_num) {
 	        ifindices[if_count++] = stream_getl (s);
               }
 	      break;
@@ -1521,7 +1521,7 @@ zread_ipv6_delete (struct zserv *client, u_short length, struct zebra_vrf *zvrf)
   struct stream *s;
   struct zapi_ipv6 api;
   struct in6_addr nexthop;
-  union g_addr *pnexthop;
+  union g_addr *pnexthop = NULL;
   unsigned long ifindex;
   struct prefix p;
   
@@ -2029,9 +2029,27 @@ zebra_client_read (struct thread *thread)
     case ZEBRA_INTERFACE_DISABLE_RADV:
       zebra_interface_radv_set (client, sock, length, zvrf, 0);
       break;
+    case ZEBRA_REMOTE_VTEP_ADD:
+      zebra_vxlan_remote_vtep_add (client, sock, length, zvrf);
+      break;
+    case ZEBRA_REMOTE_VTEP_DEL:
+      zebra_vxlan_remote_vtep_del (client, sock, length, zvrf);
+      break;
+    case ZEBRA_ADVERTISE_VNI:
+      zebra_vxlan_advertise_vni (client, sock, length, zvrf);
+      break;
+    case ZEBRA_IPMR_ROUTE_STATS:
+      zebra_ipmr_route_stats (client, sock, length, zvrf);
+      break;
     case ZEBRA_MPLS_LABELS_ADD:
     case ZEBRA_MPLS_LABELS_DELETE:
       zread_mpls_labels (command, client, length, vrf_id);
+      break;
+    case ZEBRA_REMOTE_MACIP_ADD:
+      zebra_vxlan_remote_macip_add (client, sock, length, zvrf);
+      break;
+    case ZEBRA_REMOTE_MACIP_DEL:
+      zebra_vxlan_remote_macip_del (client, sock, length, zvrf);
       break;
     default:
       zlog_info ("Zebra received unknown command %d", command);
@@ -2330,6 +2348,14 @@ zebra_show_client_detail (struct vty *vty, struct zserv *client)
 	   VTY_NEWLINE);
   vty_out (vty, "Interface Down Notifications: %d%s", client->ifdown_cnt,
 	   VTY_NEWLINE);
+  vty_out (vty, "VNI add notifications: %d%s", client->vniadd_cnt,
+           VTY_NEWLINE);
+  vty_out (vty, "VNI delete notifications: %d%s", client->vnidel_cnt,
+           VTY_NEWLINE);
+  vty_out (vty, "MAC-IP add notifications: %d%s", client->macipadd_cnt,
+           VTY_NEWLINE);
+  vty_out (vty, "MAC-IP delete notifications: %d%s", client->macipdel_cnt,
+           VTY_NEWLINE);
 
   vty_out (vty, "%s", VTY_NEWLINE);
   return;
@@ -2351,6 +2377,21 @@ zebra_show_client_brief (struct vty *vty, struct zserv *client)
 	   client->v6_route_add_cnt+client->v6_route_upd8_cnt,
 	   client->v6_route_del_cnt, VTY_NEWLINE);
 
+}
+
+struct zserv *
+zebra_find_client (u_char proto)
+{
+  struct listnode *node, *nnode;
+  struct zserv *client;
+
+  for (ALL_LIST_ELEMENTS (zebrad.client_list, node, nnode, client))
+    {
+      if (client->proto == proto)
+        return client;
+    }
+
+  return NULL;
 }
 
 

@@ -386,7 +386,7 @@ bgp_show_nexthops (struct vty *vty, struct bgp *bgp, int detail)
   afi_t afi;
 
   vty_out (vty, "Current BGP nexthop cache:%s", VTY_NEWLINE);
-  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
+  for (afi = AFI_IP ; afi < AFI_L2VPN ; afi++)
     {
       if (!bgp->nexthop_cache_table[afi])
         continue;
@@ -561,10 +561,6 @@ bgp_scan_init (struct bgp *bgp)
   bgp->nexthop_cache_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
   bgp->connected_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
   bgp->import_check_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
-
-  bgp->nexthop_cache_table[AFI_ETHER] = bgp_table_init (AFI_ETHER, SAFI_UNICAST);
-  bgp->connected_table[AFI_ETHER] = bgp_table_init (AFI_ETHER, SAFI_UNICAST);
-  bgp->import_check_table[AFI_ETHER] = bgp_table_init (AFI_ETHER, SAFI_UNICAST);
 }
 
 void

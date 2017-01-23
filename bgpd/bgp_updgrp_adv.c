@@ -47,6 +47,7 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_packet.h"
 #include "bgpd/bgp_fsm.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_advertise.h"
@@ -573,8 +574,9 @@ subgroup_clear_table (struct update_subgroup *subgrp)
 
   SUBGRP_FOREACH_ADJ_SAFE (subgrp, aout, taout)
   {
-    bgp_unlock_node (aout->rn);
-    bgp_adj_out_remove_subgroup (aout->rn, aout, subgrp);
+    struct bgp_node *rn = aout->rn;
+    bgp_adj_out_remove_subgroup (rn, aout, subgrp);
+    bgp_unlock_node (rn);
   }
 }
 
@@ -604,6 +606,7 @@ subgroup_announce_table (struct update_subgroup *subgrp,
 
   if (safi != SAFI_MPLS_VPN
       && safi != SAFI_ENCAP
+      && safi != SAFI_EVPN
       && CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE))
     subgroup_default_originate (subgrp, 0);
 
@@ -667,7 +670,8 @@ subgroup_announce_route (struct update_subgroup *subgrp)
     return;
 
   if (SUBGRP_SAFI (subgrp) != SAFI_MPLS_VPN &&
-      SUBGRP_SAFI (subgrp) != SAFI_ENCAP)
+      SUBGRP_SAFI (subgrp) != SAFI_ENCAP &&
+      SUBGRP_SAFI (subgrp) != SAFI_EVPN)
     subgroup_announce_table (subgrp, NULL);
   else
     for (rn = bgp_table_top (update_subgroup_rib (subgrp)); rn;

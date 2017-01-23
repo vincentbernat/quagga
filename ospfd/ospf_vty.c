@@ -1290,10 +1290,15 @@ DEFUN (no_ospf_area_vlink,
 	  /* message-digest-key */
 	  /* Delete one key */
 	  i++;
-	  vl_config.crypto_key_id = strtol (argv[i], NULL, 10);
-	  if (vl_config.crypto_key_id < 0)
+	  if (i < argc)
+	    {
+	      vl_config.crypto_key_id = strtol (argv[i], NULL, 10);
+	      if (vl_config.crypto_key_id < 0)
+		return CMD_WARNING;
+	      vl_config.md5_key = NULL;
+	    }
+	  else
 	    return CMD_WARNING;
-	  vl_config.md5_key = NULL; 
 	  break;
 
 	case 'h':
@@ -3299,8 +3304,10 @@ show_ip_ospf_common (struct vty *vty, struct ospf *ospf, u_char use_json)
   json_object *json_areas = NULL;
 
   if (use_json)
-    json = json_object_new_object();
-    json_areas = json_object_new_object();
+    {
+      json = json_object_new_object();
+      json_areas = json_object_new_object();
+    }
 
   if (ospf->instance)
     {
@@ -3959,9 +3966,14 @@ show_ip_ospf_interface_common (struct vty *vty, struct ospf *ospf, int argc,
             {
               show_ip_ospf_interface_sub (vty, ospf, ifp, json_interface_sub, use_json);
 	      if (use_json)
-		json_object_object_add(json, ifp->name, json_interface_sub);
+		{
+		  json_object_object_add(json, ifp->name, json_interface_sub);
+		  json_interface_sub = json_object_new_object ();
+		}
 	    }
 	}
+      if (use_json)
+	json_object_free (json_interface_sub);
     }
   else
     {
@@ -4588,10 +4600,15 @@ show_ip_ospf_neighbor_detail_sub (struct vty *vty, struct ospf_interface *oi,
   /* Show Router Dead interval timer. */
   if (use_json)
     {
-      struct timeval res = tv_sub (nbr->t_inactivity->u.sands, recent_relative_time ());
-      unsigned long time_store = 0;
-      time_store = (1000 * res.tv_sec) + (res.tv_usec / 1000);
-      json_object_int_add(json_sub, "routerDeadIntervalTimerDueMsec", time_store);
+      if (nbr->t_inactivity)
+	{
+	  struct timeval res = tv_sub (nbr->t_inactivity->u.sands, recent_relative_time ());
+	  unsigned long time_store = 0;
+	  time_store = (1000 * res.tv_sec) + (res.tv_usec / 1000);
+	  json_object_int_add(json_sub, "routerDeadIntervalTimerDueMsec", time_store);
+	}
+      else
+	json_object_int_add(json_sub, "routerDeadIntervalTimerDueMsec", -1);
     }
   else
     vty_out (vty, "    Dead timer due in %s%s",
@@ -6745,7 +6762,6 @@ DEFUN (no_ip_ospf_cost,
   int ret;
   struct ospf_if_params *params;
   
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   if (argc == 1)
@@ -6814,7 +6830,6 @@ DEFUN (no_ip_ospf_cost2,
   int ret;
   struct ospf_if_params *params;
 
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   /* According to the semantics we are mimicking "no ip ospf cost N" is
@@ -7048,13 +7063,12 @@ DEFUN (no_ip_ospf_dead_interval,
        "Address of interface")
 {
   struct interface *ifp = vty->index;
-  struct in_addr addr;
+  struct in_addr addr = { 0 };
   int ret;
   struct ospf_if_params *params;
   struct ospf_interface *oi;
   struct route_node *rn;
 
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   if (argc == 2)
@@ -7229,7 +7243,6 @@ DEFUN (no_ip_ospf_hello_interval,
   int ret;
   struct ospf_if_params *params;
   
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   if (argc == 2)
@@ -7507,7 +7520,6 @@ DEFUN (no_ip_ospf_priority,
   int ret;
   struct ospf_if_params *params;
   
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   if (argc == 2)
@@ -7654,7 +7666,6 @@ DEFUN (no_ip_ospf_retransmit_interval,
   struct ospf_if_params *params;
   int addr_index;
   
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   if (argc >= 1)
@@ -7726,7 +7737,6 @@ DEFUN (no_ip_ospf_retransmit_interval_sec,
   struct interface *ifp = vty->index;
   struct ospf_if_params *params;
 
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   UNSET_IF_PARAM (params, retransmit_interval);
@@ -7811,7 +7821,6 @@ DEFUN (no_ip_ospf_transmit_delay,
   struct ospf_if_params *params;
   int addr_index;
   
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   if (argc >= 1)
@@ -7884,7 +7893,6 @@ DEFUN (no_ip_ospf_transmit_delay_sec,
   struct interface *ifp = vty->index;
   struct ospf_if_params *params;
 
-  ifp = vty->index;
   params = IF_DEF_PARAMS (ifp);
 
   UNSET_IF_PARAM (params, transmit_delay);

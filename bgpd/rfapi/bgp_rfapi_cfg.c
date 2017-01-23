@@ -32,6 +32,7 @@
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_route.h"
+#include "bgpd/bgp_rd.h"
 
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/rfapi/rfapi.h"

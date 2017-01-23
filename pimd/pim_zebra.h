@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #ifndef PIM_ZEBRA_H
@@ -40,4 +39,5 @@ void igmp_source_forward_stop(struct igmp_source *source);
 void pim_forward_start(struct pim_ifchannel *ch);
 void pim_forward_stop(struct pim_ifchannel *ch);
 
+void sched_rpf_cache_refresh(void);
 #endif /* PIM_ZEBRA_H */

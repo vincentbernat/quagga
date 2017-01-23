@@ -1,5 +1,6 @@
 etc/logrotate.d/
 etc/quagga/
+etc/iproute2/rt_protos.d/
 usr/share/doc/quagga/
 usr/share/doc/quagga/examples/
 usr/share/lintian/overrides/

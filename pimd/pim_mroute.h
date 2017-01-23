@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #ifndef PIM_MROUTE_H
@@ -159,6 +158,10 @@ struct igmpmsg
 #endif
 #endif
 
+#ifndef IGMPMSG_WRVIFWHOLE
+#define IGMPMSG_WRVIFWHOLE 4
+#endif
+
 /*
   Above: from <linux/mroute.h>
 */
@@ -169,8 +172,8 @@ int pim_mroute_socket_disable(void);
 int pim_mroute_add_vif(struct interface *ifp, struct in_addr ifaddr, unsigned char flags);
 int pim_mroute_del_vif(int vif_index);
 
-int pim_mroute_add(struct channel_oil *c_oil);
-int pim_mroute_del(struct channel_oil *c_oil);
+int pim_mroute_add(struct channel_oil *c_oil, const char *name);
+int pim_mroute_del(struct channel_oil *c_oil, const char *name);
 
 int pim_mroute_msg(int fd, const char *buf, int buf_size);
 

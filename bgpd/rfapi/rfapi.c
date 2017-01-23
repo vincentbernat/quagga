@@ -37,6 +37,7 @@
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_mplsvpn.h"
+#include "bgpd/bgp_rd.h"
 
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
 #include "bgpd/rfapi/rfapi.h"
@@ -1441,7 +1442,7 @@ rfapi_open_inner (
 #define RFD_RTINIT(rh, ary) do {\
     RFD_RTINIT_AFI(rh, ary, AFI_IP);\
     RFD_RTINIT_AFI(rh, ary, AFI_IP6);\
-    RFD_RTINIT_AFI(rh, ary, AFI_ETHER);\
+    RFD_RTINIT_AFI(rh, ary, AFI_L2VPN);\
 } while(0)
 
   RFD_RTINIT(rfd, rfd->rib);
@@ -3753,7 +3754,7 @@ DEFUN (debug_rfapi_show_import,
                           &cursor))
         {
 
-          if (it->imported_vpn[AFI_ETHER])
+          if (it->imported_vpn[AFI_L2VPN])
             {
               lni = lni_as_ptr;
               if (first_l2)
@@ -3763,7 +3764,7 @@ DEFUN (debug_rfapi_show_import,
                   first_l2 = 0;
                 }
               snprintf (buf, BUFSIZ, "L2VPN LNI=%u", lni);
-              rfapiShowImportTable (vty, buf, it->imported_vpn[AFI_ETHER], 1);
+              rfapiShowImportTable (vty, buf, it->imported_vpn[AFI_L2VPN], 1);
             }
         }
     }

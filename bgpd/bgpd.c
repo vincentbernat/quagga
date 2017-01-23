@@ -61,6 +61,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_filter.h"
 #include "bgpd/bgp_nexthop.h"
 #include "bgpd/bgp_damp.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_encap.h"
 #if ENABLE_BGP_VNC
@@ -77,6 +78,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #endif /* HAVE_SNMP */
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_bfd.h"
+#include "bgpd/bgp_evpn.h"
 #include "bgpd/bgp_memory.h"
 
 /* BGP process wide configuration.  */
@@ -87,6 +89,8 @@ struct bgp_master *bm;
 
 /* BGP community-list.  */
 struct community_list_handler *bgp_clist;
+
+unsigned int multipath_num = MULTIPATH_NUM;
 
 static void bgp_if_init (struct bgp *bgp);
 static void bgp_if_finish (struct bgp *bgp);
@@ -223,7 +227,15 @@ bgp_router_id_set (struct bgp *bgp, const struct in_addr *id)
   if (IPV4_ADDR_SAME (&bgp->router_id, id))
     return 0;
 
+  /* EVPN uses router id in RD, withdraw them */
+  if (bgp->advertise_vni)
+    bgp_evpn_handle_router_id_update (bgp, TRUE);
+
   IPV4_ADDR_COPY (&bgp->router_id, id);
+
+  /* EVPN uses router id in RD, update them */
+  if (bgp->advertise_vni)
+    bgp_evpn_handle_router_id_update (bgp, FALSE);
 
   /* Set all peer's local identifier with this value. */
   for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))
@@ -648,6 +660,35 @@ bgp_listen_limit_unset (struct bgp *bgp)
   return 0;
 }
 
+int
+bgp_map_afi_safi_iana2int (iana_afi_t pkt_afi, safi_t pkt_safi,
+                           afi_t *afi, safi_t *safi)
+{
+  /* Map from IANA values to internal values, return error if
+   * values are unrecognized.
+   */
+  *afi = afi_iana2int (pkt_afi);
+  *safi = safi_iana2int (pkt_safi);
+  if (*afi == AFI_MAX || *safi == SAFI_MAX)
+    return -1;
+
+  return 0;
+}
+
+int
+bgp_map_afi_safi_int2iana (afi_t afi, safi_t safi,
+                           iana_afi_t *pkt_afi, safi_t *pkt_safi)
+{
+  /* Map from internal values to IANA values, return error if
+   * internal values are bad (unexpected).
+   */
+  if (afi == AFI_MAX || safi == SAFI_MAX)
+    return -1;
+  *pkt_afi = afi_int2iana (afi);
+  *pkt_safi = safi_int2iana (safi);
+  return 0;
+}
+
 struct peer_af *
 peer_af_create (struct peer *peer, afi_t afi, safi_t safi)
 {
@@ -1019,8 +1060,6 @@ peer_free (struct peer *peer)
 {
   assert (peer->status == Deleted);
 
-  bgp_unlock(peer->bgp);
-
   /* this /ought/ to have been done already through bgp_stop earlier,
    * but just to be sure.. 
    */
@@ -1085,6 +1124,8 @@ peer_free (struct peer *peer)
     }
 
   bfd_info_free(&(peer->bfd_info));
+
+  bgp_unlock(peer->bgp);
 
   memset (peer, 0, sizeof (struct peer));
   
@@ -1427,22 +1468,52 @@ bgp_peer_conf_if_to_su_update (struct peer *peer)
  * when 'bgp bestpath' commands are entered.
  */
 void
-bgp_recalculate_all_bestpaths (struct bgp *bgp)
+bgp_recalculate_all_bestpaths (struct bgp *bgp, afi_t this_afi, safi_t this_safi)
 {
   afi_t afi;
   safi_t safi;
-  struct bgp_node *rn;
+  struct bgp_node *rn, *nrn;
 
-  for (afi = AFI_IP; afi < AFI_MAX; afi++)
+  if (this_afi == AFI_MAX)
     {
-      for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
+      for (afi = AFI_IP; afi < AFI_MAX; afi++)
         {
-          for (rn = bgp_table_top (bgp->rib[afi][safi]); rn; rn = bgp_route_next (rn))
+          for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
             {
-              if (rn->info != NULL)
+              for (rn = bgp_table_top (bgp->rib[afi][safi]); rn; 
+                   rn = bgp_route_next (rn))
                 {
-                  bgp_process (bgp, rn, afi, safi);
+                  if (rn->info != NULL)
+                    {
+                      if (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP || 
+                          safi == SAFI_EVPN)
+                        {
+                          for (nrn = bgp_table_top((struct bgp_table *)(rn->info));
+                               nrn; nrn = bgp_route_next (nrn))
+                            bgp_process (bgp, nrn, afi, safi);
+                        }
+                      else
+                        bgp_process (bgp, rn, afi, safi);
+                    }
                 }
+            }
+        }
+    }
+  else
+    {
+      for (rn = bgp_table_top (bgp->rib[this_afi][this_safi]); rn; rn = bgp_route_next (rn))
+        {
+          if (rn->info != NULL)
+            {
+              if (this_safi == SAFI_MPLS_VPN || this_safi == SAFI_ENCAP ||
+                  this_safi == SAFI_EVPN)
+                {
+                  for (nrn = bgp_table_top((struct bgp_table *)(rn->info));
+                       nrn; nrn = bgp_route_next (nrn))
+                    bgp_process (bgp, nrn, this_afi, this_safi);
+                }
+              else
+                bgp_process (bgp, rn, this_afi, this_safi);
             }
         }
     }
@@ -1599,6 +1670,8 @@ peer_as_change (struct peer *peer, as_t as, int as_specified)
       UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_MPLS_VPN],
 		  PEER_FLAG_REFLECTOR_CLIENT);
       UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_ENCAP],
+		  PEER_FLAG_REFLECTOR_CLIENT);
+      UNSET_FLAG (peer->af_flags[AFI_L2VPN][SAFI_EVPN],
 		  PEER_FLAG_REFLECTOR_CLIENT);
     }
 
@@ -1973,7 +2046,8 @@ peer_delete (struct peer *peer)
   bgp_fsm_change_status (peer, Deleted);
   
   /* Remove from NHT */
-  bgp_unlink_nexthop_by_peer (peer);
+  if (CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
+    bgp_unlink_nexthop_by_peer (peer);
   
   /* Password configuration */
   if (peer->password)
@@ -2646,7 +2720,7 @@ peer_group_bind (struct bgp *bgp, union sockunion *su, struct peer *peer,
        * Capability extended-nexthop is enabled for an interface neighbor by
        * default. So, fix that up here.
        */
-      if (peer->ifp && cap_enhe_preset)
+      if (peer->conf_if && cap_enhe_preset)
         peer_flag_set (peer, PEER_FLAG_CAPABILITY_ENHE);
 
       for (afi = AFI_IP; afi < AFI_MAX; afi++)
@@ -2865,13 +2939,17 @@ bgp_create (as_t *as, const char *name, enum bgp_instance_type inst_type)
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
+        u_int16_t maxpaths;
+
 	bgp->route[afi][safi] = bgp_table_init (afi, safi);
 	bgp->aggregate[afi][safi] = bgp_table_init (afi, safi);
 	bgp->rib[afi][safi] = bgp_table_init (afi, safi);
 
-        /* Enable maximum-paths */
-        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_EBGP, MULTIPATH_NUM, 0);
-        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_IBGP, MULTIPATH_NUM, 0);
+        /* Enable maximum-paths  - based on (AFI,SAFI) */
+        maxpaths = (afi == AFI_L2VPN && safi == SAFI_EVPN) ?
+                   0 : multipath_num;
+        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_EBGP, maxpaths, 0);
+        bgp_maximum_paths_set (bgp, afi, safi, BGP_PEER_IBGP, maxpaths, 0);
       }
 
   bgp->v_update_delay = BGP_UPDATE_DELAY_DEF;
@@ -2912,6 +2990,7 @@ bgp_create (as_t *as, const char *name, enum bgp_instance_type inst_type)
   bgp->coalesce_time = BGP_DEFAULT_SUBGROUP_COALESCE_TIME;
 
   update_bgp_group_init(bgp);
+  bgp_evpn_init(bgp);
   return bgp;
 }
 
@@ -3224,6 +3303,8 @@ bgp_free (struct bgp *bgp)
   afi_t afi;
   safi_t safi;
   struct vrf *vrf;
+  struct bgp_table *table;
+  struct bgp_node *rn;
 
   list_delete (bgp->group);
   list_delete (bgp->peer);
@@ -3237,6 +3318,15 @@ bgp_free (struct bgp *bgp)
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
+        if (safi == SAFI_EVPN)
+          {
+            for (rn = bgp_table_top(bgp->rib[afi][safi]); rn;
+                 rn = bgp_route_next (rn))
+              {
+                table = (struct bgp_table *) rn->info;
+                bgp_table_finish(&table);
+              }
+          }
 	if (bgp->route[afi][safi])
           bgp_table_finish (&bgp->route[afi][safi]);
 	if (bgp->aggregate[afi][safi])
@@ -3246,6 +3336,8 @@ bgp_free (struct bgp *bgp)
       }
 
   bgp_address_destroy (bgp);
+
+  bgp_evpn_cleanup (bgp);
 
   /* If Default instance or VRF, unlink from the VRF structure. */
   vrf = bgp_vrf_lookup_by_instance_type (bgp);
@@ -3552,7 +3644,9 @@ peer_active (struct peer *peer)
       || peer->afc[AFI_IP6][SAFI_UNICAST]
       || peer->afc[AFI_IP6][SAFI_MULTICAST]
       || peer->afc[AFI_IP6][SAFI_MPLS_VPN]
-      || peer->afc[AFI_IP6][SAFI_ENCAP])
+      || peer->afc[AFI_IP6][SAFI_ENCAP]
+      || peer->afc[AFI_L2VPN][SAFI_EVPN]
+     )
     return 1;
   return 0;
 }
@@ -3568,7 +3662,9 @@ peer_active_nego (struct peer *peer)
       || peer->afc_nego[AFI_IP6][SAFI_UNICAST]
       || peer->afc_nego[AFI_IP6][SAFI_MULTICAST]
       || peer->afc_nego[AFI_IP6][SAFI_MPLS_VPN]
-      || peer->afc_nego[AFI_IP6][SAFI_ENCAP])
+      || peer->afc_nego[AFI_IP6][SAFI_ENCAP]
+      || peer->afc_nego[AFI_L2VPN][SAFI_EVPN]
+     )
     return 1;
   return 0;
 }
@@ -4006,7 +4102,7 @@ peer_af_flag_modify (struct peer *peer, afi_t afi, safi_t safi, u_int32_t flag,
                             " for addpath-tx-bestpath-per-AS",
                             peer->host);
                   bgp_flag_set (bgp, BGP_FLAG_DETERMINISTIC_MED);
-                  bgp_recalculate_all_bestpaths (bgp);
+                  bgp_recalculate_all_bestpaths (bgp, AFI_MAX, SAFI_MAX);
                 }
             }
         }
@@ -6238,7 +6334,7 @@ peer_clear_soft (struct peer *peer, afi_t afi, safi_t safi,
 char *
 peer_uptime (time_t uptime2, char *buf, size_t len, u_char use_json, json_object *json)
 {
-  time_t uptime1;
+  time_t uptime1, epoch_tbuf;
   struct tm *tm;
 
   /* Check buffer length. */
@@ -6292,8 +6388,10 @@ peer_uptime (time_t uptime2, char *buf, size_t len, u_char use_json, json_object
 
   if (use_json)
     {
+      epoch_tbuf = time(NULL) - uptime1;
       json_object_string_add(json, "peerUptime", buf);
       json_object_long_add(json, "peerUptimeMsec", uptime1 * 1000);
+      json_object_int_add(json, "peerUptimeEstablishedEpoch", epoch_tbuf);
     }
 
   return buf;
@@ -6676,26 +6774,27 @@ bgp_config_write_peer_global (struct vty *vty, struct bgp *bgp,
     }
 
   /* advertisement-interval */
-  if (CHECK_FLAG (peer->config, PEER_CONFIG_ROUTEADV)
-      && peer->v_routeadv != BGP_DEFAULT_EBGP_ROUTEADV
-      && ! peer_group_active (peer))
+  if (CHECK_FLAG (peer->config, PEER_CONFIG_ROUTEADV) &&
+      ((! peer_group_active (peer) && peer->v_routeadv != BGP_DEFAULT_EBGP_ROUTEADV) ||
+       (peer_group_active (peer) && peer->v_routeadv != g_peer->v_routeadv)))
     {
       vty_out (vty, " neighbor %s advertisement-interval %d%s",
                addr, peer->v_routeadv, VTY_NEWLINE);
     }
 
   /* timers */
-  if (CHECK_FLAG (peer->config, PEER_CONFIG_TIMER)
-      && (peer->keepalive != BGP_DEFAULT_KEEPALIVE || peer->holdtime != BGP_DEFAULT_HOLDTIME)
-      && ! peer_group_active (peer))
+  if (CHECK_FLAG (peer->config, PEER_CONFIG_TIMER) &&
+      ((! peer_group_active (peer) && (peer->keepalive != BGP_DEFAULT_KEEPALIVE || peer->holdtime != BGP_DEFAULT_HOLDTIME)) ||
+       (peer_group_active (peer) && (peer->keepalive != g_peer->keepalive || peer->holdtime != g_peer->holdtime))))
     {
       vty_out (vty, " neighbor %s timers %d %d%s", addr,
                peer->keepalive, peer->holdtime, VTY_NEWLINE);
     }
 
   if (CHECK_FLAG (peer->config, PEER_CONFIG_CONNECT) &&
-      peer->connect != BGP_DEFAULT_CONNECT_RETRY &&
-      ! peer_group_active (peer))
+      ((! peer_group_active (peer) && peer->connect != BGP_DEFAULT_CONNECT_RETRY) ||
+       (peer_group_active (peer) && peer->connect != g_peer->connect)))
+
     {
       vty_out (vty, " neighbor %s timers connect %d%s", addr,
                peer->connect, VTY_NEWLINE);
@@ -7153,6 +7252,11 @@ bgp_config_write_family_header (struct vty *vty, afi_t afi, safi_t safi,
       else if (safi == SAFI_ENCAP)
         vty_out (vty, "encapv6");
     }
+  else if (afi == AFI_L2VPN)
+    {
+      if (safi == SAFI_EVPN)
+	vty_out (vty, "evpn");
+    }
 
   vty_out (vty, "%s", VTY_NEWLINE);
 
@@ -7191,6 +7295,9 @@ bgp_config_write_family (struct vty *vty, struct bgp *bgp, afi_t afi,
 
   bgp_config_write_maxpaths (vty, bgp, afi, safi, &write);
   bgp_config_write_table_map (vty, bgp, afi, safi, &write);
+
+  if (safi == SAFI_EVPN)
+    bgp_config_write_evpn_info (vty, bgp, afi, safi, &write);
 
   if (write)
     vty_out (vty, " exit-address-family%s", VTY_NEWLINE);
@@ -7450,6 +7557,8 @@ bgp_config_write (struct vty *vty)
       /* ENCAPv6 configuration.  */
       write += bgp_config_write_family (vty, bgp, AFI_IP6, SAFI_ENCAP);
 
+      /* EVPN configuration.  */
+      write += bgp_config_write_family (vty, bgp, AFI_L2VPN, SAFI_EVPN);
 #if ENABLE_BGP_VNC
       write += bgp_rfapi_cfg_write(vty, bgp);
 #endif

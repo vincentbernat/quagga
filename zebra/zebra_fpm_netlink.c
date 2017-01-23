@@ -27,6 +27,7 @@
 
 #include "log.h"
 #include "rib.h"
+#include "prefix.h"
 
 #include "zebra/zserv.h"
 #include "zebra/zebra_ns.h"
@@ -138,7 +139,7 @@ typedef struct netlink_route_info_t_
   u_char af;
   struct prefix *prefix;
   uint32_t *metric;
-  int num_nhs;
+  unsigned int num_nhs;
 
   /*
    * Nexthop structures
@@ -253,10 +254,15 @@ netlink_route_info_fill (netlink_route_info_t *ri, int cmd,
    * particularly in our communication with the FPM.
    */
   if (cmd == RTM_DELROUTE && !rib)
-    goto skip;
+    return 1;
 
-  if (rib)
-    ri->rtm_protocol = netlink_proto_from_route_type (rib->type);
+  if (!rib)
+    {
+      zfpm_debug ("%s: Expected non-NULL rib pointer", __PRETTY_FUNCTION__);
+      return 0;
+    }
+
+  ri->rtm_protocol = netlink_proto_from_route_type (rib->type);
 
   if ((rib->flags & ZEBRA_FLAG_BLACKHOLE) || (rib->flags & ZEBRA_FLAG_REJECT))
     discard = 1;
@@ -281,13 +287,11 @@ netlink_route_info_fill (netlink_route_info_t *ri, int cmd,
   ri->metric = &rib->metric;
 
   if (discard)
-    {
-      goto skip;
-    }
+    return 1;
 
   for (ALL_NEXTHOPS_RO(rib->nexthop, nexthop, tnexthop, recursing))
     {
-      if (ri->num_nhs >= MULTIPATH_NUM)
+      if (ri->num_nhs >= multipath_num)
         break;
 
       if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
@@ -309,7 +313,6 @@ netlink_route_info_fill (netlink_route_info_t *ri, int cmd,
       return 0;
     }
 
- skip:
   return 1;
 }
 
@@ -324,7 +327,7 @@ netlink_route_info_encode (netlink_route_info_t *ri, char *in_buf,
 			   size_t in_buf_len)
 {
   size_t bytelen;
-  int nexthop_num = 0;
+  unsigned int nexthop_num = 0;
   size_t buf_offset;
   netlink_nh_info_t *nhi;
 
@@ -446,7 +449,7 @@ static void
 zfpm_log_route_info (netlink_route_info_t *ri, const char *label)
 {
   netlink_nh_info_t *nhi;
-  int i;
+  unsigned int i;
 
   zfpm_debug ("%s : %s %s/%d, Proto: %s, Metric: %u", label,
 	      nl_msg_type_to_str (ri->nlmsg_type),

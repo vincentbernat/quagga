@@ -31,6 +31,7 @@ unsigned long zebra_debug_kernel;
 unsigned long zebra_debug_rib;
 unsigned long zebra_debug_fpm;
 unsigned long zebra_debug_nht;
+unsigned long zebra_debug_vxlan;
 unsigned long zebra_debug_mpls;
 
 DEFUN (show_debugging_zebra,
@@ -83,6 +84,8 @@ DEFUN (show_debugging_zebra,
     vty_out (vty, "  Zebra FPM debugging is on%s", VTY_NEWLINE);
   if (IS_ZEBRA_DEBUG_NHT)
     vty_out (vty, "  Zebra next-hop tracking debugging is on%s", VTY_NEWLINE);
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    vty_out (vty, "  Zebra VxLAN (EVPN) debugging is on%s", VTY_NEWLINE);
   if (IS_ZEBRA_DEBUG_MPLS)
     vty_out (vty, "  Zebra MPLS debugging is on%s", VTY_NEWLINE);
 
@@ -108,6 +111,17 @@ DEFUN (debug_zebra_nht,
        "Debug option set for zebra next hop tracking\n")
 {
   zebra_debug_nht = ZEBRA_DEBUG_NHT;
+  return CMD_WARNING;
+}
+
+DEFUN (debug_zebra_vxlan,
+       debug_zebra_vxlan_cmd,
+       "debug zebra vxlan",
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra VxLAN (EVPN)\n")
+{
+  zebra_debug_vxlan = ZEBRA_DEBUG_VXLAN;
   return CMD_WARNING;
 }
 
@@ -256,6 +270,18 @@ DEFUN (no_debug_zebra_nht,
        "Debug option set for zebra next hop tracking\n")
 {
   zebra_debug_nht = 0;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_zebra_vxlan,
+       no_debug_zebra_vxlan_cmd,
+       "no debug zebra vxlan",
+       NO_STR
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra VxLAN (EVPN)\n")
+{
+  zebra_debug_vxlan = 0;
   return CMD_SUCCESS;
 }
 
@@ -427,6 +453,11 @@ config_write_debug (struct vty *vty)
       vty_out (vty, "debug zebra fpm%s", VTY_NEWLINE);
       write++;
     }
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    {
+      vty_out (vty, "debug zebra vxlan%s", VTY_NEWLINE);
+      write++;
+    }
   if (IS_ZEBRA_DEBUG_MPLS)
     {
       vty_out (vty, "debug zebra mpls%s", VTY_NEWLINE);
@@ -443,6 +474,7 @@ zebra_debug_init (void)
   zebra_debug_kernel = 0;
   zebra_debug_rib = 0;
   zebra_debug_fpm = 0;
+  zebra_debug_vxlan = 0;
   zebra_debug_mpls = 0;
 
   install_node (&debug_node, config_write_debug);
@@ -451,6 +483,7 @@ zebra_debug_init (void)
 
   install_element (ENABLE_NODE, &debug_zebra_events_cmd);
   install_element (ENABLE_NODE, &debug_zebra_nht_cmd);
+  install_element (ENABLE_NODE, &debug_zebra_vxlan_cmd);
   install_element (ENABLE_NODE, &debug_zebra_mpls_cmd);
   install_element (ENABLE_NODE, &debug_zebra_packet_cmd);
   install_element (ENABLE_NODE, &debug_zebra_packet_direct_cmd);
@@ -462,6 +495,7 @@ zebra_debug_init (void)
   install_element (ENABLE_NODE, &debug_zebra_fpm_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_events_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_nht_cmd);
+  install_element (ENABLE_NODE, &no_debug_zebra_vxlan_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_mpls_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_packet_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_kernel_cmd);
@@ -472,6 +506,7 @@ zebra_debug_init (void)
 
   install_element (CONFIG_NODE, &debug_zebra_events_cmd);
   install_element (CONFIG_NODE, &debug_zebra_nht_cmd);
+  install_element (CONFIG_NODE, &debug_zebra_vxlan_cmd);
   install_element (CONFIG_NODE, &debug_zebra_mpls_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_direct_cmd);
@@ -483,6 +518,7 @@ zebra_debug_init (void)
   install_element (CONFIG_NODE, &debug_zebra_fpm_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_events_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_nht_cmd);
+  install_element (CONFIG_NODE, &no_debug_zebra_vxlan_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_mpls_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_packet_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_kernel_cmd);

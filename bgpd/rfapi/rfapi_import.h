@@ -167,7 +167,7 @@ rfapiBgpInfoFilteredImportVPN (
   struct peer			*peer,
   void				*rfd,		/* set for looped back routes */
   struct prefix			*p,
-  struct prefix			*aux_prefix,	/* AFI_ETHER: optional IP */
+  struct prefix			*aux_prefix,	/* AFI_L2VPN: optional IP */
   afi_t				afi,
   struct prefix_rd		*prd,
   struct attr			*attr,		/* part of bgp_info */

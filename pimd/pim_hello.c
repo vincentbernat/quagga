@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #include <zebra.h>
@@ -39,7 +38,7 @@ static void on_trace(const char *label,
 		     struct interface *ifp, struct in_addr src)
 {
   if (PIM_DEBUG_PIM_TRACE) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src, src_str, sizeof(src_str));
     zlog_debug("%s: from %s on %s",
 	       label, src_str, ifp->name);
@@ -51,7 +50,7 @@ static void tlv_trace_bool(const char *label, const char *tlv_name,
 			   int isset, int value)
 {
   if (isset) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
     zlog_debug("%s: PIM hello option from %s on interface %s: %s=%d",
 	       label, 
@@ -65,7 +64,7 @@ static void tlv_trace_uint16(const char *label, const char *tlv_name,
 			     int isset, uint16_t value)
 {
   if (isset) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
     zlog_debug("%s: PIM hello option from %s on interface %s: %s=%u",
 	       label, 
@@ -79,7 +78,7 @@ static void tlv_trace_uint32(const char *label, const char *tlv_name,
 			     int isset, uint32_t value)
 {
   if (isset) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
     zlog_debug("%s: PIM hello option from %s on interface %s: %s=%u",
 	       label, 
@@ -93,7 +92,7 @@ static void tlv_trace_uint32_hex(const char *label, const char *tlv_name,
 				 int isset, uint32_t value)
 {
   if (isset) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
     zlog_debug("%s: PIM hello option from %s on interface %s: %s=%08x",
 	       label, 
@@ -108,7 +107,7 @@ static void tlv_trace(const char *label, const char *tlv_name,
 		      int isset)
 {
   if (isset) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
     zlog_debug("%s: PIM hello option from %s on interface %s: %s",
 	       label, 
@@ -123,7 +122,7 @@ static void tlv_trace_list(const char *label, const char *tlv_name,
 			   int isset, struct list *addr_list)
 {
   if (isset) {
-    char src_str[100];
+    char src_str[INET_ADDRSTRLEN];
     pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
     zlog_debug("%s: PIM hello option from %s on interface %s: %s size=%d list=%p",
 	       label, 
@@ -183,7 +182,7 @@ int pim_hello_recv(struct interface *ifp,
 
     if (remain < PIM_TLV_MIN_SIZE) {
       if (PIM_DEBUG_PIM_HELLO) {
-	char src_str[100];
+	char src_str[INET_ADDRSTRLEN];
 	pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	zlog_debug("%s: short PIM hello TLV size=%d < min=%d from %s on interface %s",
 		   __PRETTY_FUNCTION__,
@@ -200,7 +199,7 @@ int pim_hello_recv(struct interface *ifp,
 
     if ((tlv_curr + option_len) > tlv_pastend) {
       if (PIM_DEBUG_PIM_HELLO) {
-	char src_str[100];
+	char src_str[INET_ADDRSTRLEN];
 	pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	zlog_debug("%s: long PIM hello TLV type=%d length=%d > left=%td from %s on interface %s",
 		   __PRETTY_FUNCTION__,
@@ -211,7 +210,7 @@ int pim_hello_recv(struct interface *ifp,
     }
 
     if (PIM_DEBUG_PIM_HELLO) {
-      char src_str[100];
+      char src_str[INET_ADDRSTRLEN];
       pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
       zlog_debug("%s: parse left_size=%d: PIM hello TLV type=%d length=%d from %s on %s",
 		 __PRETTY_FUNCTION__,
@@ -269,7 +268,7 @@ int pim_hello_recv(struct interface *ifp,
       break;
     case PIM_MSG_OPTION_TYPE_DM_STATE_REFRESH:
       if (PIM_DEBUG_PIM_HELLO) {
-	char src_str[100];
+	char src_str[INET_ADDRSTRLEN];
 	pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	zlog_debug("%s: ignoring PIM hello dense-mode state refresh TLV option type=%d length=%d from %s on interface %s",
 		   __PRETTY_FUNCTION__,
@@ -279,7 +278,7 @@ int pim_hello_recv(struct interface *ifp,
       break;
     default:
       if (PIM_DEBUG_PIM_HELLO) {
-	char src_str[100];
+	char src_str[INET_ADDRSTRLEN];
 	pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	zlog_debug("%s: ignoring unknown PIM hello TLV type=%d length=%d from %s on interface %s",
 		   __PRETTY_FUNCTION__,
@@ -328,7 +327,7 @@ int pim_hello_recv(struct interface *ifp,
 
   if (!PIM_OPTION_IS_SET(hello_options, PIM_OPTION_MASK_HOLDTIME)) {
     if (PIM_DEBUG_PIM_HELLO) {
-      char src_str[100];
+      char src_str[INET_ADDRSTRLEN];
       pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
       zlog_debug("%s: PIM hello missing holdtime from %s on interface %s",
 		__PRETTY_FUNCTION__,
@@ -351,10 +350,11 @@ int pim_hello_recv(struct interface *ifp,
 			     hello_option_override_interval,
 			     hello_option_dr_priority,
 			     hello_option_generation_id,
-			     hello_option_addr_list);
+			     hello_option_addr_list,
+			     PIM_NEIGHBOR_SEND_DELAY);
     if (!neigh) {
       if (PIM_DEBUG_PIM_HELLO) {
-	char src_str[100];
+	char src_str[INET_ADDRSTRLEN];
 	pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	zlog_warn("%s: failure creating PIM neighbor %s on interface %s",
 		  __PRETTY_FUNCTION__,
@@ -375,15 +375,10 @@ int pim_hello_recv(struct interface *ifp,
     /* GenID mismatch ? */
     if (!PIM_OPTION_IS_SET(neigh->hello_options, PIM_OPTION_MASK_GENERATION_ID) ||
 	(hello_option_generation_id != neigh->generation_id)) {
-
-      /* GenID changed */
-
-      pim_upstream_rpf_genid_changed(neigh->source_addr);
-
       /* GenID mismatch, then replace neighbor */
       
       if (PIM_DEBUG_PIM_HELLO) {
-	char src_str[100];
+	char src_str[INET_ADDRSTRLEN];
 	pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	zlog_debug("%s: GenId mismatch new=%08x old=%08x: replacing neighbor %s on %s",
 		   __PRETTY_FUNCTION__,
@@ -402,10 +397,11 @@ int pim_hello_recv(struct interface *ifp,
 			       hello_option_override_interval,
 			       hello_option_dr_priority,
 			       hello_option_generation_id,
-			       hello_option_addr_list);
+			       hello_option_addr_list,
+			       PIM_NEIGHBOR_SEND_NOW);
       if (!neigh) {
 	if (PIM_DEBUG_PIM_HELLO) {
-	  char src_str[100];
+	  char src_str[INET_ADDRSTRLEN];
 	  pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
 	  zlog_debug("%s: failure re-creating PIM neighbor %s on interface %s",
 		     __PRETTY_FUNCTION__,

@@ -17,7 +17,6 @@
   Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
   MA 02110-1301 USA
   
-  $QuaggaId: $Format:%an, %ai, %h$ $
 */
 
 #ifndef PIM_IGMP_H
@@ -53,6 +52,7 @@
 #define IGMP_V3_GROUP_RECORD_NUMSOURCES_OFFSET (2)
 #define IGMP_V3_GROUP_RECORD_GROUP_OFFSET      (4)
 #define IGMP_V3_GROUP_RECORD_SOURCE_OFFSET     (8)
+#define IGMP_CHECKSUM_OFFSET                   (2)
 
 /* RFC 3376: 8.1. Robustness Variable - Default: 2 */
 #define IGMP_DEFAULT_ROBUSTNESS_VARIABLE           (2)
@@ -65,6 +65,8 @@
 
 /* RFC 3376: 8.8. Last Member Query Interval - Default: 10 deciseconds */
 #define IGMP_SPECIFIC_QUERY_MAX_RESPONSE_TIME_DSEC (10)
+
+#define IGMP_DEFAULT_VERSION (3)
 
 struct igmp_join {
   struct in_addr group_addr;
@@ -99,7 +101,7 @@ struct igmp_sock *pim_igmp_sock_add(struct list *igmp_sock_list,
 				    struct interface *ifp);
 void igmp_sock_delete(struct igmp_sock *igmp);
 void igmp_sock_free(struct igmp_sock *igmp);
-
+void igmp_sock_delete_all (struct interface *ifp);
 int pim_igmp_packet(struct igmp_sock *igmp, char *buf, size_t len);
 
 void pim_igmp_general_query_on(struct igmp_sock *igmp);
@@ -153,6 +155,9 @@ struct igmp_group {
      since sources have their counters) */
   int               group_specific_query_retransmit_count;
 
+  /* compatibility mode - igmp v1, v2 or v3 */
+  int               igmp_version;
+
   struct in_addr    group_addr;
   int               group_filtermode_isexcl;  /* 0=INCLUDE, 1=EXCLUDE */
   struct list      *group_source_list;        /* list of struct igmp_source */
@@ -177,4 +182,18 @@ void igmp_group_timer_on(struct igmp_group *group,
 struct igmp_source *
 source_new (struct igmp_group *group,
 	    struct in_addr src_addr);
+
+void igmp_send_query(int igmp_version,
+                     struct igmp_group *group,
+                     int fd,
+                     const char *ifname,
+                     char *query_buf,
+                     int query_buf_size,
+                     int num_sources,
+                     struct in_addr dst_addr,
+                     struct in_addr group_addr,
+                     int query_max_response_time_dsec,
+                     uint8_t s_flag,
+                     uint8_t querier_robustness_variable,
+                     uint16_t querier_query_interval);
 #endif /* PIM_IGMP_H */

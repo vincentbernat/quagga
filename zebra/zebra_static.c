@@ -49,6 +49,8 @@ static_install_route (afi_t afi, safi_t safi, struct prefix *p, struct static_ro
   if (! table)
     return;
 
+  memset (&nh_p, 0, sizeof (nh_p));
+
   /* Lookup existing route */
   rn = route_node_get (table, p);
   RNODE_FOREACH_RIB (rn, rib)
@@ -364,7 +366,7 @@ static_add_route (afi_t afi, safi_t safi, u_char type, struct prefix *p,
 		  union g_addr *gate, ifindex_t ifindex,
 		  const char *ifname, u_char flags, route_tag_t tag,
 		  u_char distance, struct zebra_vrf *zvrf,
-		  struct static_nh_label *snh_label)
+                  struct static_nh_label *snh_label)
 {
   struct route_node *rn;
   struct static_route *si;

@@ -50,7 +50,7 @@
 
 #### Check for systemd or init.d (upstart)
 # Check for init.d (upstart) as used in CentOS 6 or systemd (ie CentOS 7)
-%{expand: %%global initsystem %(if [[ `/sbin/init --version 2> /dev/null` =~ upstart ]]; then echo upstart; elif [[ `systemctl` =~ -\.mount ]]; then echo systemd; fi)}
+%{expand: %%global initsystem %(if [[ `/sbin/init --version 2> /dev/null` =~ upstart ]]; then echo upstart; elif [[ /sbin/init -ef /lib/systemd/systemd ]]; then echo systemd; fi)}
 #
 # If init system is systemd, then always disable watchquagga
 #
@@ -72,7 +72,7 @@
 %{!?quagga_gid:		%global         quagga_gid      92 }
 %{!?vty_gid:		%global		vty_gid		85 }
 
-%define		daemon_list	zebra ripd ospfd bgpd isisd pimd ripngd ospfd6d
+%define		daemon_list	zebra ripd ospfd bgpd isisd pimd ripngd ospf6d
 
 %if %{with_ldpd}
 %define         daemon_ldpd	ldpd
@@ -245,7 +245,8 @@ developing OSPF-API and quagga applications.
 	--enable-gcc-rdynamic \
 	--enable-isisd=yes \
 	--enable-systemd=yes \
-	--enable-poll=yes
+	--enable-poll=yes \
+	--enable-evpn=yes
 
 make %{?_smp_mflags} MAKEINFO="makeinfo --no-split"
 

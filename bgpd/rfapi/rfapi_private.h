@@ -156,7 +156,7 @@ struct rfapi_descriptor
 #define RFAPI_QUEUED_FLAG(afi) (					\
     ((afi) == AFI_IP)? RFAPI_HD_FLAG_CALLBACK_SCHEDULED_AFI_IP: 	\
     (((afi) == AFI_IP6)? RFAPI_HD_FLAG_CALLBACK_SCHEDULED_AFI_IP6:	\
-    (((afi) == AFI_ETHER)? RFAPI_HD_FLAG_CALLBACK_SCHEDULED_AFI_ETHER:	\
+    (((afi) == AFI_L2VPN)? RFAPI_HD_FLAG_CALLBACK_SCHEDULED_AFI_ETHER:	\
     (assert(0), 0) )))
 
 

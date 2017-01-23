@@ -48,6 +48,7 @@
 #include "zebra/zebra_ptm.h"
 #include "zebra/rt_netlink.h"
 #include "zebra/interface.h"
+#include "zebra/zebra_vxlan.h"
 
 #define ZEBRA_PTM_SUPPORT
 
@@ -129,6 +130,9 @@ if_zebra_delete_hook (struct interface *ifp)
       rtadv = &zebra_if->rtadv;
       list_free (rtadv->AdvPrefixList);
  #endif /* HAVE_RTADV */
+
+      if (zebra_if->l2if)
+        XFREE (MTYPE_ZEBRA_L2IF, zebra_if->l2if);
 
       XFREE (MTYPE_TMP, zebra_if);
     }
@@ -678,6 +682,10 @@ if_delete_update (struct interface *ifp)
      for setting ifindex to IFINDEX_INTERNAL after processing the
      interface deletion message. */
   ifp->ifindex = IFINDEX_INTERNAL;
+
+  /* if the ifp is in a vrf, move it to default so vrf can be deleted if desired */
+  if (ifp->vrf_id)
+    if_handle_vrf_change (ifp, VRF_DEFAULT);
 }
 
 /* VRF change for an interface */
@@ -829,6 +837,10 @@ if_up (struct interface *ifp)
   rib_update (ifp->vrf_id, RIB_UPDATE_IF_CHANGE);
 
   zebra_vrf_static_route_interface_fixup (ifp);
+
+  /* Notification for VxLAN interfaces - for EVPN. */
+  if (IS_ZEBRA_IF_VXLAN (ifp))
+    zebra_vxlan_if_up (ifp);
 }
 
 /* Interface goes down.  We have to manage different behavior of based
@@ -841,6 +853,10 @@ if_down (struct interface *ifp)
   zif = ifp->info;
   zif->down_count++;
   quagga_timestamp (2, zif->down_last, sizeof (zif->down_last));
+
+  /* Notification for VxLAN interfaces - for EVPN. */
+  if (IS_ZEBRA_IF_VXLAN (ifp))
+    zebra_vxlan_if_down (ifp);
 
   /* Notify to the protocol daemons. */
   zebra_interface_down_update (ifp);
@@ -988,6 +1004,37 @@ nd_dump_vty (struct vty *vty, struct interface *ifp)
 }
 #endif /* HAVE_RTADV */
 
+static const char *
+zebra_ziftype_2str (zebra_iftype_t zif_type)
+{
+  switch (zif_type)
+    {
+      case ZEBRA_IF_OTHER:
+        return "Other";
+        break;
+
+      case ZEBRA_IF_BRIDGE:
+        return "Bridge";
+        break;
+
+      case ZEBRA_IF_VLAN:
+        return "Vlan";
+        break;
+
+      case ZEBRA_IF_VXLAN:
+        return "Vxlan";
+        break;
+
+      case ZEBRA_IF_VRF:
+        return "VRF";
+        break;
+
+      default:
+        return "Unknown";
+        break;
+    }
+}
+
 /* Interface's information print out to vty interface. */
 static void
 if_dump_vty (struct vty *vty, struct interface *ifp)
@@ -1087,6 +1134,48 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 	connected_dump_vty (vty, connected);
     }
 
+  vty_out(vty, "  Interface Type %s%s",
+          zebra_ziftype_2str (zebra_if->zif_type), VTY_NEWLINE);
+  if (IS_ZEBRA_IF_BRIDGE (ifp))
+    {
+      struct zebra_l2if_bridge *zl2if;
+
+      zl2if = (struct zebra_l2if_bridge *)zebra_if->l2if;
+      vty_out(vty, "  Bridge VLAN-aware: %s%s",
+              zl2if->vlan_aware ? "yes" : "no", VTY_NEWLINE);
+    }
+  else if (IS_ZEBRA_IF_VLAN(ifp))
+    {
+      struct zebra_l2if_vlan *zl2if;
+
+      zl2if = (struct zebra_l2if_vlan *)zebra_if->l2if;
+      vty_out(vty, "  VLAN Id %u%s",
+              zl2if->vid, VTY_NEWLINE);
+    }
+  else if (IS_ZEBRA_IF_VXLAN (ifp))
+    {
+      struct zebra_l2if_vxlan *zl2if;
+
+      zl2if = (struct zebra_l2if_vxlan *)zebra_if->l2if;
+      vty_out(vty, "  VxLAN Id %u%s", zl2if->vni, VTY_NEWLINE);
+      if (zl2if->access_vlan)
+        vty_out(vty, "  Access VLAN Id %u%s",
+                zl2if->access_vlan, VTY_NEWLINE);
+    }
+
+  if (IS_ZEBRA_IF_BRIDGE_SLAVE (ifp))
+    {
+      struct zebra_l2info_brslave *br_slave;
+
+      /* NOTE: This assumes 'zebra_l2info_brslave' is the first field
+       * for any L2 interface.
+       */
+      br_slave = (struct zebra_l2info_brslave *)zebra_if->l2if;
+      if (br_slave->bridge_ifindex != IFINDEX_INTERNAL)
+        vty_out(vty, "  Master (bridge) ifindex %u ifp %p%s",
+                br_slave->bridge_ifindex, br_slave->br_if, VTY_NEWLINE);
+    }
+
   if (HAS_LINK_PARAMS(ifp))
     {
       int i;
@@ -1131,9 +1220,6 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
         vty_out(vty, "    Neighbor ASBR IP: %s AS: %u %s", inet_ntoa(iflp->rmt_ip), iflp->rmt_as, VTY_NEWLINE);
     }
 
- #ifdef RTADV
-   nd_dump_vty (vty, ifp);
- #endif /* RTADV */
 #if defined (HAVE_RTADV)
   nd_dump_vty (vty, ifp);
 #endif /* HAVE_RTADV */
@@ -1845,7 +1931,7 @@ DEFUN (link_params_metric,
   VTY_GET_ULONG("metric", metric, argv[0]);
 
   /* Update TE metric if needed */
-  link_param_cmd_set_uint32 (ifp, &iflp->te_metric, LP_TE, metric);
+  link_param_cmd_set_uint32 (ifp, &iflp->te_metric, LP_TE | LP_TE_METRIC, metric);
 
   return CMD_SUCCESS;
 }
@@ -1859,7 +1945,7 @@ DEFUN (no_link_params_metric,
   VTY_DECLVAR_CONTEXT (interface, ifp);
 
   /* Unset TE Metric */
-  link_param_cmd_unset(ifp, LP_TE);
+  link_param_cmd_unset(ifp, LP_TE | LP_TE_METRIC);
 
   return CMD_SUCCESS;
 }
@@ -2787,20 +2873,21 @@ link_params_config_write (struct vty *vty, struct interface *ifp)
 
   vty_out (vty, " link-params%s", VTY_NEWLINE);
   vty_out(vty, "  enable%s", VTY_NEWLINE);
-  if (IS_PARAM_SET(iflp, LP_TE))
+  if (IS_PARAM_SET(iflp, LP_TE) && IS_PARAM_SET(iflp, LP_TE_METRIC))
     vty_out(vty, "  metric %u%s",iflp->te_metric, VTY_NEWLINE);
-  if (IS_PARAM_SET(iflp, LP_MAX_BW))
+  if (IS_PARAM_SET(iflp, LP_MAX_BW) && iflp->max_bw != iflp->default_bw)
     vty_out(vty, "  max-bw %g%s", iflp->max_bw, VTY_NEWLINE);
-  if (IS_PARAM_SET(iflp, LP_MAX_RSV_BW))
+  if (IS_PARAM_SET(iflp, LP_MAX_RSV_BW) && iflp->max_rsv_bw != iflp->default_bw)
     vty_out(vty, "  max-rsv-bw %g%s", iflp->max_rsv_bw, VTY_NEWLINE);
   if (IS_PARAM_SET(iflp, LP_UNRSV_BW))
     {
       for (i = 0; i < 8; i++)
-        vty_out(vty, "  unrsv-bw %d %g%s",
-            i, iflp->unrsv_bw[i], VTY_NEWLINE);
+	if (iflp->unrsv_bw[i] != iflp->default_bw)
+	  vty_out(vty, "  unrsv-bw %d %g%s",
+		  i, iflp->unrsv_bw[i], VTY_NEWLINE);
     }
   if (IS_PARAM_SET(iflp, LP_ADM_GRP))
-    vty_out(vty, "  admin-grp %u%s", iflp->admin_grp, VTY_NEWLINE);
+    vty_out(vty, "  admin-grp 0x%x%s", iflp->admin_grp, VTY_NEWLINE);
   if (IS_PARAM_SET(iflp, LP_DELAY))
     {
       vty_out(vty, "  delay %u", iflp->av_delay);

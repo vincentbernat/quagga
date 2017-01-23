@@ -394,6 +394,7 @@ typedef enum {
   ZEBRA_REDISTRIBUTE_DELETE,
   ZEBRA_REDISTRIBUTE_DEFAULT_ADD,
   ZEBRA_REDISTRIBUTE_DEFAULT_DELETE,
+  ZEBRA_INTERFACE_RENAME,
   ZEBRA_ROUTER_ID_ADD,
   ZEBRA_ROUTER_ID_DELETE,
   ZEBRA_ROUTER_ID_UPDATE,
@@ -424,6 +425,12 @@ typedef enum {
   ZEBRA_INTERFACE_ENABLE_RADV,
   ZEBRA_INTERFACE_DISABLE_RADV,
   ZEBRA_IPV4_NEXTHOP_LOOKUP_MRIB,
+  ZEBRA_VNI_ADD,
+  ZEBRA_VNI_DEL,
+  ZEBRA_REMOTE_VTEP_ADD,
+  ZEBRA_REMOTE_VTEP_DEL,
+  ZEBRA_ADVERTISE_VNI,
+  ZEBRA_IPMR_ROUTE_STATS,
   ZEBRA_INTERFACE_LINK_PARAMS,
   ZEBRA_MPLS_LABELS_ADD,
   ZEBRA_MPLS_LABELS_DELETE,
@@ -431,6 +438,10 @@ typedef enum {
   ZEBRA_IPV4_NEXTHOP_DELETE,
   ZEBRA_IPV6_NEXTHOP_ADD,
   ZEBRA_IPV6_NEXTHOP_DELETE,
+  ZEBRA_MACIP_ADD,
+  ZEBRA_MACIP_DEL,
+  ZEBRA_REMOTE_MACIP_ADD,
+  ZEBRA_REMOTE_MACIP_DEL,
 } zebra_message_types_t;
 
 /* Marker value used in new Zserv, in the byte location corresponding
@@ -488,8 +499,9 @@ extern const char *zserv_command_string (unsigned int command);
 typedef enum {
   AFI_IP  = 1,
   AFI_IP6 = 2,
-  AFI_ETHER = 3,                /* RFC 1700 has "6" for 802.* */
-  AFI_MAX = 4
+  AFI_L2VPN = 3,
+  AFI_IPMR = 4,
+  AFI_MAX = 5
 } afi_t;
 
 /* Subsequent Address Family Identifier. */
@@ -497,8 +509,34 @@ typedef enum {
 #define SAFI_MULTICAST            2
 #define SAFI_RESERVED_3           3
 #define SAFI_MPLS_VPN             4
-#define SAFI_ENCAP		  7 /* per IANA */
-#define SAFI_MAX                  8
+#define SAFI_ENCAP                5
+#define SAFI_EVPN                 6
+#define SAFI_MAX                  7
+
+/*
+ * The above AFI and SAFI definitions are for internal use. The protocol
+ * definitions (IANA values) as for example used in BGP protocol packets
+ * are defined below and these will get mapped to/from the internal values
+ * in the appropriate places.
+ * The rationale is that the protocol (IANA) values may be sparse and are
+ * not optimal for use in data-structure sizing.
+ * Note: Only useful (i.e., supported) values are defined below.
+ */
+typedef enum {
+  IANA_AFI_RESERVED = 0,
+  IANA_AFI_IPV4 = 1,
+  IANA_AFI_IPV6 = 2,
+  IANA_AFI_L2VPN = 25,
+  IANA_AFI_IPMR = 128,
+  IANA_AFI_IP6MR = 129
+} iana_afi_t;
+
+#define IANA_SAFI_RESERVED            0
+#define IANA_SAFI_UNICAST             1
+#define IANA_SAFI_MULTICAST           2
+#define IANA_SAFI_ENCAP               7
+#define IANA_SAFI_MPLS_VPN            128
+#define IANA_SAFI_EVPN                70
 
 /* Default Administrative Distance of each protocol. */
 #define ZEBRA_KERNEL_DISTANCE_DEFAULT      0
@@ -527,6 +565,62 @@ typedef u_int16_t zebra_command_t;
 
 /* VRF ID type. */
 typedef u_int16_t vrf_id_t;
+
+static inline afi_t afi_iana2int (iana_afi_t iana_afi)
+{
+  if (iana_afi == IANA_AFI_IPV4)
+    return AFI_IP;
+  if (iana_afi == IANA_AFI_IPV6)
+    return AFI_IP6;
+  if (iana_afi == IANA_AFI_L2VPN)
+    return AFI_L2VPN;
+  if (iana_afi == IANA_AFI_IPMR)
+    return AFI_IPMR;
+  return AFI_MAX;
+}
+
+static inline iana_afi_t afi_int2iana (afi_t afi)
+{
+  if (afi == AFI_IP)
+    return IANA_AFI_IPV4;
+  if (afi == AFI_IP6)
+    return IANA_AFI_IPV6;
+  if (afi == AFI_L2VPN)
+    return IANA_AFI_L2VPN;
+  if (afi == AFI_IPMR)
+    return IANA_AFI_IPMR;
+  return IANA_AFI_RESERVED;
+}
+
+static inline safi_t safi_iana2int (safi_t safi)
+{
+  if (safi == IANA_SAFI_UNICAST)
+    return SAFI_UNICAST;
+  if (safi == IANA_SAFI_MULTICAST)
+    return SAFI_MULTICAST;
+  if (safi == IANA_SAFI_MPLS_VPN)
+    return SAFI_MPLS_VPN;
+  if (safi == IANA_SAFI_ENCAP)
+    return SAFI_ENCAP;
+  if (safi == IANA_SAFI_EVPN)
+    return SAFI_EVPN;
+  return SAFI_MAX;
+}
+
+static inline safi_t safi_int2iana (safi_t safi)
+{
+  if (safi == SAFI_UNICAST)
+    return IANA_SAFI_UNICAST;
+  if (safi == SAFI_MULTICAST)
+    return IANA_SAFI_MULTICAST;
+  if (safi == SAFI_MPLS_VPN)
+    return IANA_SAFI_MPLS_VPN;
+  if (safi == SAFI_ENCAP)
+    return IANA_SAFI_ENCAP;
+  if (safi == SAFI_EVPN)
+    return IANA_SAFI_EVPN;
+  return IANA_SAFI_RESERVED;
+}
 
 typedef uint32_t route_tag_t;
 #define ROUTE_TAG_MAX UINT32_MAX

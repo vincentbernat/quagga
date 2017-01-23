@@ -84,3 +84,9 @@ route_read (struct zebra_ns *zns)
 
   return;
 }
+
+/* Only implemented for netlink method. */
+void
+neigh_read (struct zebra_ns *zns)
+{
+}

@@ -28,6 +28,14 @@
 
 #define NL_DEFAULT_ROUTE_METRIC 20
 
+/* Additional protocol strings to push into routes */
+#define RTPROT_BGP         186
+#define RTPROT_ISIS        187
+#define RTPROT_OSPF        188
+#define RTPROT_RIP         189
+#define RTPROT_RIPNG       190
+
+
 extern void
 clear_nhlfe_installed (zebra_lsp_t *lsp);
 extern int
@@ -36,7 +44,14 @@ netlink_mpls_multipath (int cmd, zebra_lsp_t *lsp);
 extern int netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                                  ns_id_t ns_id);
 extern int netlink_route_read (struct zebra_ns *zns);
+extern int netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
+                                 ns_id_t ns_id);
+extern int netlink_neigh_read (struct zebra_ns *zns);
 
+extern int netlink_vxlan_flood_list_update (struct interface *ifp,
+                                            struct prefix *vtep, int cmd);
+
+extern int netlink_get_ipmr_sg_stats (void *mroute);
 #endif /* HAVE_NETLINK */
 
 #endif /* _ZEBRA_RT_NETLINK_H */

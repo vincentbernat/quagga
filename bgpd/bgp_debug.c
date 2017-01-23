@@ -39,6 +39,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_updgrp.h"
+#include "bgpd/bgp_ecommunity.h"
+#include "bgpd/bgp_rd.h"
 
 unsigned long conf_bgp_debug_as4;
 unsigned long conf_bgp_debug_neighbor_events;
@@ -407,6 +409,9 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
         snprintf (buf + strlen (buf), size - strlen (buf), "(%s)",
                   inet_ntop (AF_INET6, &attr->extra->mp_nexthop_local, 
                              addrbuf, BUFSIZ));
+
+      if (attr->extra->mp_nexthop_len == BGP_ATTR_NHLEN_IPV4)
+        snprintf (buf, size, "nexthop %s", inet_ntoa (attr->nexthop));
     }
 #endif /* HAVE_IPV6 */
 
@@ -421,6 +426,10 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
   if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES))) 
     snprintf (buf + strlen (buf), size - strlen (buf), ", community %s",
 	      community_str (attr->community));
+
+  if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES)))
+    snprintf (buf + strlen (buf), size - strlen (buf), ", extcommunity %s",
+	      ecommunity_str (attr->extra->ecommunity));
 
   if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE)))
     snprintf (buf + strlen (buf), size - strlen (buf), ", atomic-aggregate");
@@ -2075,4 +2084,32 @@ bgp_debug_zebra (struct prefix *p)
     }
 
   return 0;
+}
+
+const char *
+bgp_debug_rdpfxpath2str (struct prefix_rd *prd, union prefixconstptr pu,
+                         int addpath_valid, u_int32_t addpath_id,
+                         char *str, int size)
+{
+  char rd_buf[RD_ADDRSTRLEN];
+  char pfx_buf[PREFIX_STRLEN];
+  char pathid_buf[20];
+
+  if (size < BGP_PRD_PATH_STRLEN)
+    return NULL;
+
+  /* Note: Path-id is created by default, but only included in update sometimes. */
+  pathid_buf[0] = '\0';
+  if (addpath_valid)
+    sprintf(pathid_buf, " with addpath ID %d", addpath_id);
+
+  if (prd)
+    snprintf (str, size, "RD %s %s%s",
+              prefix_rd2str(prd, rd_buf, sizeof (rd_buf)),
+              prefix2str (pu, pfx_buf, sizeof (pfx_buf)), pathid_buf);
+  else
+    snprintf (str, size, "%s%s",
+              prefix2str (pu, pfx_buf, sizeof (pfx_buf)), pathid_buf);
+
+  return str;
 }

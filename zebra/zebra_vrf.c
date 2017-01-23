@@ -30,6 +30,8 @@
 #include "zebra/rib.h"
 #include "zebra/zebra_vrf.h"
 #include "zebra/router-id.h"
+#include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_static.h"
 #include "zebra/zebra_memory.h"
 #include "zebra/zebra_static.h"
 #include "zebra/zebra_mpls.h"
@@ -333,6 +335,7 @@ zebra_vrf_alloc (vrf_id_t vrf_id, const char *name)
       zvrf->name[strlen(name)] = '\0';
     }
 
+  zebra_vxlan_init_tables (zvrf);
   zebra_mpls_init_tables (zvrf);
 
   return zvrf;

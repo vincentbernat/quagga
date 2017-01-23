@@ -53,6 +53,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_filter.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_vty.h"
@@ -2788,8 +2789,9 @@ bgp_route_map_process_update (struct bgp *bgp, const char *rmap_name, int route_
             if (BGP_DEBUG (zebra, ZEBRA))
 	      zlog_debug("Processing route_map %s update on "
 			 "table map", rmap_name);
-	    if (route_update)
-	      bgp_zebra_announce_table(bgp, afi, safi);
+	    if (route_update
+                && is_bgp_zebra_rib_route (bgp, afi, safi))
+	      bgp_install_routes_for_afi_safi (bgp, afi, safi);
 	  }
 
         /* For network route-map updates. */

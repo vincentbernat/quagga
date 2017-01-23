@@ -40,6 +40,7 @@
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_vnc_types.h"
+#include "bgpd/bgp_rd.h"
 
 #include "bgpd/rfapi/rfapi.h"
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
@@ -893,7 +894,7 @@ process_pending_node (
   zlog_debug ("%s: afi=%d, %s pn->info=%p",
               __func__, afi, buf_prefix, pn->info);
 
-  if (AFI_ETHER != afi)
+  if (AFI_L2VPN != afi)
     {
       rfapiQprefix2Rprefix (&pn->p, &hp);
     }
@@ -1223,7 +1224,7 @@ callback:
           else
             {
               new->prefix = hp;
-              if (AFI_ETHER == afi)
+              if (AFI_L2VPN == afi)
                 {
                   /* hp is 0; need to set length to match AF of vn */
                   new->prefix.length =
@@ -1311,7 +1312,7 @@ callback:
               else
                 {
                   new->prefix = hp;
-                  if (AFI_ETHER == afi)
+                  if (AFI_L2VPN == afi)
                     {
                       /* hp is 0; need to set length to match AF of vn */
                       new->prefix.length =
@@ -1953,7 +1954,7 @@ rfapiRibPreload (
               continue;
             }
 
-          afi = AFI_ETHER;
+          afi = AFI_L2VPN;
           rfapiL2o2Qprefix (pL2o, &pfx);
         }
       else
@@ -2158,7 +2159,7 @@ rfapiRibPendingDeleteRoute (
   zlog_debug ("%s: entry, it=%p, afi=%d, it_node=%p, pfx=%s",
               __func__, it, afi, it_node, buf);
 
-  if (AFI_ETHER == afi)
+  if (AFI_L2VPN == afi)
     {
       /*
        * ethernet import tables are per-LNI and each ethernet monitor 

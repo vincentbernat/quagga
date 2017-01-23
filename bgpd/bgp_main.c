@@ -43,6 +43,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_rd.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_dump.h"
@@ -71,6 +72,7 @@ static const struct option longopts[] =
   { "vty_port",    required_argument, NULL, 'P'},
   { "retain",      no_argument,       NULL, 'r'},
   { "no_kernel",   no_argument,       NULL, 'n'},
+  { "ecmp",        required_argument, NULL, 'e'},
   { "user",        required_argument, NULL, 'u'},
   { "group",       required_argument, NULL, 'g'},
   { "skip_runas",  no_argument,       NULL, 'S'},
@@ -167,6 +169,7 @@ redistribution between different routing protocols.\n\n\
 -P, --vty_port     Set vty's port number\n\
 -r, --retain       When program terminates, retain added route by bgpd.\n\
 -n, --no_kernel    Do not install route to kernel.\n\
+-e, --ecmp         Specify ECMP to use.\n\
 -u, --user         User to run as\n\
 -g, --group        Group to run as\n\
 -S, --skip_runas   Skip user and group run as\n\
@@ -467,6 +470,13 @@ main (int argc, char **argv)
 	case 'A':
 	  vty_addr = optarg;
 	  break;
+	case 'e':
+	  multipath_num = atoi (optarg);
+	  if (multipath_num > MULTIPATH_NUM || multipath_num <= 0)
+	    {
+	      zlog_err ("Multipath Number specified must be less than %d or greater than 0", MULTIPATH_NUM);
+	      return 1;
+	    }
 	case 'P':
           /* Deal with atoi() returning 0 on failure, and bgpd not
              listening on bgp port... */

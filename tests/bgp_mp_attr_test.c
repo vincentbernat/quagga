@@ -343,7 +343,7 @@ static struct test_segment {
   { "IPv4-VPNv4-bogus-plen",
     "IPv4/MPLS-labeled VPN MP Reach, RD, Nexthop, NLRI / bogus p'len", 
     {
-      /* AFI / SAFI */		0x0, AFI_IP, SAFI_MPLS_LABELED_VPN,
+      /* AFI / SAFI */		0x0, AFI_IP, IANA_SAFI_MPLS_VPN,
       /* nexthop bytes */	12,
       /* RD */			0, 0, 1, 2,
                                 0, 0xff, 3, 4,
@@ -625,19 +625,15 @@ static struct test_segment mp_unreach_segments [] =
   { "IPv4-unreach-VPNv4",
     "IPv4/MPLS-labeled VPN MP Unreach, RD, 3 NLRIs", 
     {
-      /* AFI / SAFI */		0x0, AFI_IP, SAFI_MPLS_LABELED_VPN,
-      /* NLRI tuples */		88 + 16,
-                                  0, 1, 2,   /* tag */
-                                  /* rd, 8 octets */
-                                    0, 0, /* RD_TYPE_AS */
-                                    0, 2, 0, 0xff, 3, 4, /* AS(2):val(4) */
-                                  10, 1,    /* 10.1/16 */
-                                88 + 17,
-                                  0xff, 0, 0,   /* tag */
-                                  /* rd, 8 octets */
-                                    0, 0, /* RD_TYPE_IP */
-                                    192, 168, 0, 1, /* IPv4 */
-                                  10, 2, 3,  /* 10.2.3/17 */
+      /* AFI / SAFI */		0x0, AFI_IP, IANA_SAFI_MPLS_VPN,
+      /* nexthop bytes */	12,
+      /* RD */			0, 0, 1, 2,
+                                0, 0xff, 3, 4,
+      /* Nexthop */		192, 168,   0,  1, 
+      /* SNPA (defunct, MBZ) */	0x0,
+      /* NLRI tuples */		16, 10, 1,    /* 10.1/16 */
+                                17, 10, 2, 3,  /* 10.2.3/17 */
+                                0, /* 0/0 */
     },
     (3 + (1+3+8+2) + (1+3+8+3)),
     SHOULD_PARSE,
@@ -719,7 +715,22 @@ parse_test (struct peer *peer, struct test_segment *t, int type)
   if (type == BGP_ATTR_MP_REACH_NLRI)
     parse_ret = bgp_mp_reach_parse (&attr_args, &nlri);
   else
-    parse_ret = bgp_mp_unreach_parse (&attr_args, &nlri);
+    ret = bgp_mp_unreach_parse (&attr_args, &nlri);
+
+  if (!ret)
+    {
+      afi_t afi;
+      safi_t safi;
+      
+      /* Convert AFI, SAFI to internal values, check. */
+      if (bgp_map_afi_safi_iana2int (t->afi, t->safi, &afi, &safi))
+        failed++;
+      
+      printf ("MP: %u/%u (%u): recv %u, nego %u\n",
+              t->afi, t->safi, safi,
+              peer->afc_recv[afi][safi],
+              peer->afc_nego[afi][safi]);
+    }
   
   if (parse_ret == 0 && t->afi_valid == VALID_AFI)
     assert (nlri.afi == t->afi && nlri.safi == t->safi);

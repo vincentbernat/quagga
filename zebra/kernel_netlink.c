@@ -91,7 +91,27 @@ static const struct message rtproto_str[] = {
 #ifdef RTPROT_BIRD
   {RTPROT_BIRD,     "BIRD"},
 #endif /* RTPROT_BIRD */
+  {RTPROT_BGP,      "BGP"},
+  {RTPROT_OSPF,     "OSPF"},
+  {RTPROT_ISIS,     "IS-IS"},
+  {RTPROT_RIP,      "RIP"},
+  {RTPROT_RIPNG,    "RIPNG"},
   {0,               NULL}
+};
+
+static const struct message family_str[] = {
+  {AF_INET,           "ipv4"},
+  {AF_INET6,          "ipv6"},
+  {AF_BRIDGE,         "bridge"},
+  {RTNL_FAMILY_IPMR,  "ipv4MR"},
+  {RTNL_FAMILY_IP6MR, "ipv6MR"},
+  {0,                 NULL},
+};
+
+static const struct message rttype_str[] = {
+  {RTN_UNICAST,   "unicast"},
+  {RTN_MULTICAST, "multicast"},
+  {0,             NULL},
 };
 
 extern struct thread_master *master;
@@ -99,7 +119,7 @@ extern u_int32_t nl_rcvbufsize;
 
 extern struct zebra_privs_t zserv_privs;
 
-static int
+int
 netlink_talk_filter (struct sockaddr_nl *snl, struct nlmsghdr *h,
     ns_id_t ns_id)
 {
@@ -244,6 +264,12 @@ netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h,
     case RTM_DELADDR:
       return netlink_interface_addr (snl, h, ns_id);
       break;
+    case RTM_NEWNEIGH:
+      return netlink_neigh_change (snl, h, ns_id);
+      break;
+    case RTM_DELNEIGH:
+      return netlink_neigh_change (snl, h, ns_id);
+      break;
     default:
       zlog_warn ("Unknown netlink nlmsg_type %d vrf %u\n", h->nlmsg_type,
                  ns_id);
@@ -271,17 +297,21 @@ static void netlink_install_filter (int sock, __u32 pid)
   struct sock_filter filter[] = {
     /* 0: ldh [4]	          */
     BPF_STMT(BPF_LD|BPF_ABS|BPF_H, offsetof(struct nlmsghdr, nlmsg_type)),
-    /* 1: jeq 0x18 jt 3 jf 6  */
-    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(RTM_NEWROUTE), 1, 0),
-    /* 2: jeq 0x19 jt 3 jf 6  */
-    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(RTM_DELROUTE), 0, 3),
-    /* 3: ldw [12]		  */
+    /* 1: jeq 0x18 jt 5 jf next  */
+    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(RTM_NEWROUTE), 3, 0),
+    /* 2: jeq 0x19 jt 5 jf next  */
+    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(RTM_DELROUTE), 2, 0),
+    /* 3: jeq 0x19 jt 5 jf next  */
+    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(RTM_NEWNEIGH), 1, 0),
+    /* 4: jeq 0x19 jt 5 jf 8  */
+    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(RTM_DELNEIGH), 0, 3),
+    /* 5: ldw [12]		  */
     BPF_STMT(BPF_LD|BPF_ABS|BPF_W, offsetof(struct nlmsghdr, nlmsg_pid)),
-    /* 4: jeq XX  jt 5 jf 6   */
+    /* 6: jeq XX  jt 7 jf 8   */
     BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htonl(pid), 0, 1),
-    /* 5: ret 0    (skip)     */
+    /* 7: ret 0    (skip)     */
     BPF_STMT(BPF_RET|BPF_K, 0),
-    /* 6: ret 0xffff (keep)   */
+    /* 8: ret 0xffff (keep)   */
     BPF_STMT(BPF_RET|BPF_K, 0xffff),
   };
 
@@ -321,7 +351,12 @@ addattr_l (struct nlmsghdr *n, unsigned int maxlen, int type,
   rta = (struct rtattr *) (((char *) n) + NLMSG_ALIGN (n->nlmsg_len));
   rta->rta_type = type;
   rta->rta_len = len;
-  memcpy (RTA_DATA (rta), data, alen);
+
+  if (data)
+    memcpy (RTA_DATA (rta), data, alen);
+  else
+    assert (len == 0);
+
   n->nlmsg_len = NLMSG_ALIGN (n->nlmsg_len) + RTA_ALIGN (len);
 
   return 0;
@@ -342,10 +377,21 @@ rta_addattr_l (struct rtattr *rta, unsigned int maxlen, int type,
   subrta = (struct rtattr *) (((char *) rta) + RTA_ALIGN (rta->rta_len));
   subrta->rta_type = type;
   subrta->rta_len = len;
-  memcpy (RTA_DATA (subrta), data, alen);
+
+  if (data)
+    memcpy (RTA_DATA (subrta), data, alen);
+  else
+    assert (len == 0);
+
   rta->rta_len = NLMSG_ALIGN (rta->rta_len) + RTA_ALIGN (len);
 
   return 0;
+}
+
+int
+addattr16 (struct nlmsghdr *n, unsigned int maxlen, int type, u_int16_t data)
+{
+  return addattr_l(n, maxlen, type, &data, sizeof(u_int16_t));
 }
 
 int
@@ -397,6 +443,19 @@ nl_rtproto_to_str (u_char rtproto)
 {
   return lookup (rtproto_str, rtproto);
 }
+
+const char *
+nl_family_to_str (u_char family)
+{
+  return lookup (family_str, family);
+}
+
+const char *
+nl_rttype_to_str (u_char rttype)
+{
+  return lookup (rttype_str, rttype);
+}
+
 /* Receive message from netlink interface and pass those information
    to the given function. */
 int
@@ -592,7 +651,9 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *,
 
 /* sendmsg() to netlink socket then recvmsg(). */
 int
-netlink_talk (struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns)
+netlink_talk (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *,
+			     ns_id_t),
+	      struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns)
 {
   int status;
   struct sockaddr_nl snl;
@@ -619,7 +680,7 @@ netlink_talk (struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns)
   if (IS_ZEBRA_DEBUG_KERNEL)
     zlog_debug ("netlink_talk: %s type %s(%u), len=%d seq=%u flags 0x%x",
                nl->name,
-               nl_msg_type_to_str (n->nlmsg_type), n->nlmsg_type,
+               lookup (nlmsg_str, n->nlmsg_type), n->nlmsg_type,
                n->nlmsg_len, n->nlmsg_seq, n->nlmsg_flags);
 
   /* Send message to netlink interface. */
@@ -644,20 +705,31 @@ netlink_talk (struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns)
     }
 
 
-  /*
-   * Get reply from netlink socket.
+  /* 
+   * Get reply from netlink socket. 
    * The reply should either be an acknowlegement or an error.
    */
-  return netlink_parse_info (netlink_talk_filter, nl, zns, 0);
+  return netlink_parse_info (filter, nl, zns, 0);
 }
 
 /* Get type specified information from netlink. */
 int
-netlink_request (int family, int type, struct nlsock *nl)
+netlink_request (int family, int type, struct nlsock *nl,
+                 u_int32_t filter_mask)
 {
   int ret;
   struct sockaddr_nl snl;
   int save_errno;
+  size_t size;
+  void *ptr = NULL;
+
+  struct
+  {
+    struct nlmsghdr nlh;
+    struct ifinfomsg ifm;
+    struct rtattr ext_req;
+    u_int32_t ext_filter_mask;
+  } reqfilter;
 
   struct
   {
@@ -676,12 +748,34 @@ netlink_request (int family, int type, struct nlsock *nl)
   snl.nl_family = AF_NETLINK;
 
   memset (&req, 0, sizeof req);
-  req.nlh.nlmsg_len = sizeof req;
-  req.nlh.nlmsg_type = type;
-  req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
-  req.nlh.nlmsg_pid = nl->snl.nl_pid;
-  req.nlh.nlmsg_seq = ++nl->seq;
-  req.g.rtgen_family = family;
+
+  if (!filter_mask)
+    {
+      memset (&req, 0, sizeof req);
+      req.nlh.nlmsg_len = sizeof req;
+      req.nlh.nlmsg_type = type;
+      req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
+      req.nlh.nlmsg_pid = nl->snl.nl_pid;
+      req.nlh.nlmsg_seq = ++nl->seq;
+      req.g.rtgen_family = family;
+      size = sizeof req;
+      ptr = &req;
+    }
+  else
+    {
+      memset (&reqfilter, 0, sizeof reqfilter);
+      reqfilter.nlh.nlmsg_len = sizeof reqfilter;
+      reqfilter.nlh.nlmsg_type = type;
+      reqfilter.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
+      reqfilter.nlh.nlmsg_pid = nl->snl.nl_pid;
+      reqfilter.nlh.nlmsg_seq = ++nl->seq;
+      reqfilter.ifm.ifi_family = family;
+      reqfilter.ext_req.rta_type = IFLA_EXT_MASK;
+      reqfilter.ext_req.rta_len = RTA_LENGTH(sizeof(__u32));
+      reqfilter.ext_filter_mask = filter_mask;
+      size = sizeof reqfilter;
+      ptr = &reqfilter;
+    }
 
   /* linux appears to check capabilities on every message
    * have to raise caps for every message sent
@@ -692,7 +786,8 @@ netlink_request (int family, int type, struct nlsock *nl)
       return -1;
     }
 
-  ret = sendto (nl->sock, (void *) &req, sizeof req, 0,
+
+  ret = sendto (nl->sock, ptr, size, 0,
 		(struct sockaddr *) &snl, sizeof snl);
   save_errno = errno;
 
@@ -717,9 +812,9 @@ kernel_init (struct zebra_ns *zns)
   unsigned long groups;
 
   groups = RTMGRP_LINK | RTMGRP_IPV4_ROUTE | RTMGRP_IPV4_IFADDR;
-#ifdef HAVE_IPV6
   groups |= RTMGRP_IPV6_ROUTE | RTMGRP_IPV6_IFADDR;
-#endif /* HAVE_IPV6 */
+  groups |= RTMGRP_NEIGH;
+
   netlink_socket (&zns->netlink, groups, zns->ns_id);
   netlink_socket (&zns->netlink_cmd, 0, zns->ns_id);
 

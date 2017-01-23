@@ -90,6 +90,7 @@ struct option longopts[] =
   { "help",         no_argument,       NULL, 'h'},
   { "vty_addr",     required_argument, NULL, 'A'},
   { "vty_port",     required_argument, NULL, 'P'},
+  { "ecmp",         required_argument, NULL, 'e'},
   { "retain",       no_argument,       NULL, 'r'},
   { "dryrun",       no_argument,       NULL, 'C'},
 #ifdef HAVE_NETLINK
@@ -128,6 +129,8 @@ char config_default[] = SYSCONFDIR DEFAULT_CONFIG_FILE;
 
 /* Process ID saved for use by init system */
 const char *pid_file = PATH_ZEBRA_PID;
+
+unsigned int multipath_num = MULTIPATH_NUM;
 
 /* Help information display. */
 static void
@@ -295,6 +298,13 @@ main (int argc, char **argv)
 	case 'A':
 	  vty_addr = optarg;
 	  break;
+	case 'e':
+	  multipath_num = atoi (optarg);
+	  if (multipath_num > MULTIPATH_NUM || multipath_num <= 0)
+	    {
+	      zlog_err ("Multipath Number specified must be less than %d or greater than 0", MULTIPATH_NUM);
+	      return 1;
+	    }
         case 'i':
           pid_file = optarg;
           break;

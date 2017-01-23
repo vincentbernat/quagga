@@ -29,3 +29,8 @@ void route_read (struct zebra_ns *zns)
 {
   netlink_route_read (zns);
 }
+
+void neigh_read (struct zebra_ns *zns)
+{
+  netlink_neigh_read (zns);
+}

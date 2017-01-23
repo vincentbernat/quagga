@@ -44,15 +44,17 @@ zebra_SOURCES = \
 	redistribute.c debug.c rtadv.c zebra_snmp.c zebra_vty.c \
 	irdp_main.c irdp_interface.c irdp_packet.c router-id.c zebra_fpm.c \
 	$(othersrc) zebra_ptm.c zebra_rnh.c zebra_ptm_redistribute.c \
-	zebra_ns.c zebra_vrf.c zebra_static.c zebra_mpls.c zebra_mpls_vty.c \
+	zebra_ns.c zebra_vrf.c zebra_vxlan.c zebra_mroute.c \
+	zebra_static.c zebra_mpls.c zebra_mpls_vty.c zebra_l2.c \
 	$(protobuf_srcs) \
 	$(dev_srcs)
 
 testzebra_SOURCES = test_main.c zebra_rib.c interface.c connected.c debug.c \
 	zebra_vty.c zebra_ptm.c zebra_routemap.c zebra_ns.c zebra_vrf.c \
 	kernel_null.c  redistribute_null.c ioctl_null.c misc_null.c zebra_rnh_null.c \
-	zebra_ptm_null.c rtadv_null.c if_null.c zserv_null.c zebra_static.c \
-	zebra_memory.c zebra_mpls.c zebra_mpls_vty.c zebra_mpls_null.c
+	zebra_ptm_null.c rtadv_null.c if_null.c zserv_null.c zebra_vxlan_null.c \
+	zebra_static.c zebra_memory.c zebra_mpls.c zebra_mpls_vty.c zebra_mpls_null.c \
+	zebra_l2_null.c
 
 noinst_HEADERS = \
 	zebra_memory.h \
@@ -60,8 +62,9 @@ noinst_HEADERS = \
 	interface.h ipforward.h irdp.h router-id.h kernel_socket.h \
 	rt_netlink.h zebra_fpm.h zebra_fpm_private.h zebra_rnh.h \
 	zebra_ptm_redistribute.h zebra_ptm.h zebra_routemap.h \
-	zebra_ns.h zebra_vrf.h ioctl_solaris.h zebra_static.h zebra_mpls.h \
-	kernel_netlink.h if_netlink.h
+	zebra_ns.h zebra_vrf.h ioctl_solaris.h zebra_vxlan.h \
+	zebra_mroute.h zebra_static.h zebra_mpls.h \
+	kernel_netlink.h if_netlink.h zebra_l2.h
 
 zebra_LDADD = $(otherobj) ../lib/libzebra.la $(LIBCAP) $(Q_FPM_PB_CLIENT_LDOPTS)
 

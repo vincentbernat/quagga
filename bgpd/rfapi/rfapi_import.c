@@ -41,6 +41,7 @@
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_mplsvpn.h"        /* prefix_rd2str() */
 #include "bgpd/bgp_vnc_types.h"
+#include "bgpd/bgp_rd.h"
 
 #include "bgpd/rfapi/rfapi.h"
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
@@ -2028,7 +2029,7 @@ rfapiEthRouteTable2NextHopList (
 
 
   it = rfapiMacImportTableGet (bgp, logical_net_id);
-  rt = it->imported_vpn[AFI_ETHER];
+  rt = it->imported_vpn[AFI_L2VPN];
 
   for (rn = route_top (rt); rn; rn = route_next (rn))
     {
@@ -3551,7 +3552,7 @@ rfapiBgpInfoFilteredImportVPN (
   struct peer			*peer,
   void				*rfd,		/* set for looped back routes */
   struct prefix			*p,
-  struct prefix			*aux_prefix,	/* AFI_ETHER: optional IP */
+  struct prefix			*aux_prefix,	/* AFI_L2VPN: optional IP */
   afi_t				afi,
   struct prefix_rd		*prd,
   struct attr			*attr,		/* part of bgp_info */
@@ -3646,7 +3647,7 @@ rfapiBgpInfoFilteredImportVPN (
     {
     case AFI_IP:
     case AFI_IP6:
-    case AFI_ETHER:
+    case AFI_L2VPN:
       rt = import_table->imported_vpn[afi];
       break;
 
@@ -3847,7 +3848,7 @@ rfapiBgpInfoFilteredImportVPN (
    * For ethernet routes, if there is an accompanying IP address,
    * save it in the bi
    */
-  if ((AFI_ETHER == afi) && aux_prefix)
+  if ((AFI_L2VPN == afi) && aux_prefix)
     {
 
       zlog_debug ("%s: setting BI's aux_prefix", __func__);
@@ -4114,7 +4115,7 @@ rfapiProcessUpdate (
 	    rfd,
 	    &pfx_mac_buf,	/* prefix */
 	    p,			/* aux prefix: IP addr */
-	    AFI_ETHER,
+	    AFI_L2VPN,
 	    prd,
 	    attr,
 	    type,
@@ -4227,7 +4228,7 @@ rfapiProcessWithdraw (
 
 #if DEBUG_L2_EXTRA
           zlog_debug
-            ("%s: calling rfapiBgpInfoFilteredImportVPN(it=%p, afi=AFI_ETHER)",
+            ("%s: calling rfapiBgpInfoFilteredImportVPN(it=%p, afi=AFI_L2VPN)",
              __func__, it);
 #endif
 
@@ -4238,7 +4239,7 @@ rfapiProcessWithdraw (
 	    rfd,
 	    &pfx_mac_buf,	/* prefix */
 	    p,			/* aux_prefix: IP */
-	    AFI_ETHER,
+	    AFI_L2VPN,
 	    prd,
 	    attr,
 	    type,
@@ -4741,7 +4742,7 @@ rfapiDeleteRemotePrefixesIt (
             zlog_debug ("%s: rn pfx=%s", __func__, buf_pfx);
           }
 
-          /* TBD is this valid for afi == AFI_ETHER? */
+          /* TBD is this valid for afi == AFI_L2VPN? */
           RFAPI_CHECK_REFCOUNT (rn, SAFI_MPLS_VPN, 1);
 
           for (bi = rn->info; bi; bi = next)
@@ -5088,10 +5089,10 @@ rfapiCountAllItRoutes (int *pALRcount,  /* active local routes */
            rc = skiplist_next (h->import_mac, NULL, (void **) &it, &cursor))
         {
 
-          total_active_local += it->local_count[AFI_ETHER];
-          total_active_remote += it->remote_count[AFI_ETHER];
-          total_holddown += it->holddown_count[AFI_ETHER];
-          total_imported += it->imported_count[AFI_ETHER];
+          total_active_local += it->local_count[AFI_L2VPN];
+          total_active_remote += it->remote_count[AFI_L2VPN];
+          total_holddown += it->holddown_count[AFI_L2VPN];
+          total_imported += it->imported_count[AFI_L2VPN];
 
         }
     }
