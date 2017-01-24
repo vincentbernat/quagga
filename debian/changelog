@@ -1,9 +1,6 @@
 quagga (1.0.0+cl3eau7) RELEASED; urgency=medium
 
   * New Enabled: EVPN EA
-
-quagga (1.0.0+cl3u7) RELEASED; urgency=medium
-
   * Closes: Various Memory Leaks Fixed
   * Closes: CM-13626 - Resolved problem with area range lsid creation
   * Closes: CM-14060 - Fix unnecessary perturbations due to old style config
