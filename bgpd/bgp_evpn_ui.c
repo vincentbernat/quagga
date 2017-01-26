@@ -491,6 +491,169 @@ bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp)
 }
 
 /*
+ * Display EVPN routes for a VNI -- for specific type-3 route (vty handler).
+ */
+void
+bgp_evpn_show_route_vni_multicast (struct vty *vty, struct bgp *bgp,
+                                   vni_t vni, struct in_addr orig_ip)
+{
+  struct bgpevpn *vpn;
+  struct prefix_evpn p;
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+  u_int32_t path_cnt = 0;
+  afi_t afi;
+  safi_t safi;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+
+  /* Locate VNI. */
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  if (!vpn)
+    {
+      vty_out (vty, "VNI not found%s", VTY_NEWLINE);
+      return;
+    }
+
+  /* See if route exists. */
+  build_evpn_type3_prefix (&p, orig_ip);
+  rn = bgp_node_lookup (vpn->route_table, (struct prefix *)&p);
+  if (!rn || !rn->info)
+    {
+      vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
+      return;
+    }
+
+  /* Prefix and num paths displayed once per prefix. */
+  route_vty_out_detail_header (vty, bgp, rn, NULL, afi, safi, NULL);
+
+  /* Display each path for this prefix. */
+  for (ri = rn->info; ri; ri = ri->next)
+    {
+      route_vty_out_detail (vty, bgp, &rn->p, ri, afi, safi, NULL);
+      path_cnt++;
+    }
+
+  vty_out (vty, "%sDisplayed %u paths for requested prefix%s",
+           VTY_NEWLINE, path_cnt, VTY_NEWLINE);
+}
+
+/*
+ * Display EVPN routes for a VNI -- for specific MAC (vty handler).
+ * By definition, only matching type-2 route will be displayed.
+ */
+void
+bgp_evpn_show_route_vni_mac (struct vty *vty, struct bgp *bgp,
+                             vni_t vni, struct ethaddr *mac)
+{
+  struct bgpevpn *vpn;
+  struct prefix_evpn p;
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+  u_int32_t path_cnt = 0;
+  afi_t afi;
+  safi_t safi;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+
+  /* Locate VNI. */
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  if (!vpn)
+    {
+      vty_out (vty, "VNI not found%s", VTY_NEWLINE);
+      return;
+    }
+
+  /* See if route exists. */
+  build_evpn_type2_prefix (&p, mac);
+  rn = bgp_node_lookup (vpn->route_table, (struct prefix *)&p);
+  if (!rn || !rn->info)
+    {
+      vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
+      return;
+    }
+
+  /* Prefix and num paths displayed once per prefix. */
+  route_vty_out_detail_header (vty, bgp, rn, NULL, afi, safi, NULL);
+
+  /* Display each path for this prefix. */
+  for (ri = rn->info; ri; ri = ri->next)
+    {
+      route_vty_out_detail (vty, bgp, &rn->p, ri, afi, safi, NULL);
+      path_cnt++;
+    }
+
+  vty_out (vty, "%sDisplayed %u paths for requested prefix%s",
+           VTY_NEWLINE, path_cnt, VTY_NEWLINE);
+}
+
+/*
+ * Display EVPN routes for a VNI - vty handler.
+ * If 'type' is non-zero, only routes matching that type are shown.
+ */
+void
+bgp_evpn_show_routes_vni (struct vty *vty, struct bgp *bgp,
+                          vni_t vni, int type)
+{
+  struct bgpevpn *vpn;
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+  int header = 1;
+  u_int32_t prefix_cnt, path_cnt;
+
+  prefix_cnt = path_cnt = 0;
+
+  /* Locate VNI. */
+  vpn = bgp_evpn_lookup_vni (bgp, vni);
+  if (!vpn)
+    {
+      vty_out (vty, "VNI not found%s", VTY_NEWLINE);
+      return;
+    }
+
+  /* Walk this VNI's route table and display appropriate routes. */
+  for (rn = bgp_table_top (vpn->route_table); rn; rn = bgp_route_next (rn))
+    {
+      struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+      if (type &&
+          evp->prefix.route_type != type)
+        continue;
+
+      if (rn->info)
+        {
+          /* Overall header/legend displayed once. */
+          if (header)
+            {
+              bgp_evpn_show_route_header (vty, bgp);
+              header = 0;
+            }
+
+          prefix_cnt++;
+        }
+
+      /* For EVPN, the prefix is displayed for each path (to fit in
+       * with code that already exists).
+       */
+      for (ri = rn->info; ri; ri = ri->next)
+        {
+          path_cnt++;
+          route_vty_out (vty, &rn->p, ri, 0, SAFI_EVPN, NULL);
+        }
+    }
+
+  if (prefix_cnt == 0)
+    vty_out (vty, "No EVPN prefixes %sexist for this VNI%s",
+             type ? "(of requested type) " : "", VTY_NEWLINE);
+  else
+    vty_out (vty, "%sDisplayed %u prefixes (%u paths)%s%s",
+             VTY_NEWLINE, prefix_cnt, path_cnt,
+             type ? " (of requested type)" : "", VTY_NEWLINE);
+}
+
+/*
  * Display BGP EVPN routing table -- for specific RD and MAC (vty handler).
  * By definition, only matching type-2 route will be displayed.
  */

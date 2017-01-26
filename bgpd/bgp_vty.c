@@ -11666,6 +11666,120 @@ DEFUN (show_bgp_evpn_route_rd_mac,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_bgp_evpn_route_vni,
+       show_bgp_evpn_route_vni_cmd,
+       "show bgp evpn route vni " CMD_VNI_RANGE,
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "VXLAN Network Identifier\n"
+       "VNI number\n")
+{
+  vni_t vni;
+  struct bgp *bgp;
+  bgp = bgp_get_default ();
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (bgp)
+    bgp_evpn_show_routes_vni (vty, bgp, vni, 0);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_bgp_evpn_route_vni_type,
+       show_bgp_evpn_route_vni_type_cmd,
+       "show bgp evpn route vni " CMD_VNI_RANGE " type (macip|multicast)",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "VXLAN Network Identifier\n"
+       "VNI number\n"
+       "Specify Route type\n"
+       "MAC-IP (Type-2) route\n"
+       "Multicast (Type-3) route\n")
+{
+  vni_t vni;
+  struct bgp *bgp;
+  int type;
+
+  bgp = bgp_get_default ();
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (strncmp (argv[1], "ma", 2) == 0)
+    type = BGP_EVPN_MAC_IP_ROUTE;
+  else if (strncmp (argv[1], "mu", 2) == 0)
+    type = BGP_EVPN_IMET_ROUTE;
+  else
+    return CMD_WARNING;
+
+  if (bgp)
+    bgp_evpn_show_routes_vni (vty, bgp, vni, type);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_bgp_evpn_route_vni_mac,
+       show_bgp_evpn_route_vni_mac_cmd,
+       "show bgp evpn route vni " CMD_VNI_RANGE " mac WORD",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "VXLAN Network Identifier\n"
+       "VNI number\n"
+       "MAC\n"
+       "MAC address (e.g., 00:e0:ec:20:12:62)\n")
+{
+  vni_t vni;
+  struct bgp *bgp;
+  struct ethaddr mac;
+
+  bgp = bgp_get_default ();
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (str2mac (argv[1], &mac) != 0)
+    {
+      vty_out (vty, "%% Malformed MAC address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  bgp = bgp_get_default ();
+  if (bgp)
+    bgp_evpn_show_route_vni_mac (vty, bgp, vni, &mac);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_bgp_evpn_route_vni_multicast,
+       show_bgp_evpn_route_vni_multicast_cmd,
+       "show bgp evpn route vni " CMD_VNI_RANGE " multicast A.B.C.D",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "VXLAN Network Identifier\n"
+       "VNI number\n"
+       "Multicast (Type-3) route\n"
+       "Originating Router IP address\n")
+{
+  vni_t vni;
+  struct bgp *bgp;
+  int ret;
+  struct in_addr orig_ip;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  ret = inet_aton (argv[1], &orig_ip);
+  if (!ret)
+    {
+      vty_out (vty, "%% Malformed Originating Router IP address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  bgp = bgp_get_default ();
+  if (bgp)
+    bgp_evpn_show_route_vni_multicast (vty, bgp, vni, orig_ip);
+  return CMD_SUCCESS;
+}
+
 const char *
 afi_safi_print (afi_t afi, safi_t safi)
 {
@@ -16923,6 +17037,10 @@ bgp_vty_init (void)
   install_element (VIEW_NODE, &show_bgp_evpn_route_rd_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_rd_type_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_rd_mac_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_vni_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_vni_type_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_vni_multicast_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_vni_mac_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_import_rt_cmd);
 
   /* Community-list. */
