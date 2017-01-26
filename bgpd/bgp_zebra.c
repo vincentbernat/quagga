@@ -134,7 +134,7 @@ const struct bgp_route_install_info bgp_zebra_route_install[AFI_MAX][SAFI_MAX] =
     { 0, NULL, NULL },
     { 0, NULL, NULL },
     { 0, NULL, NULL },
-    { 1, bgp_evpn_install_route, bgp_evpn_uninstall_route }
+    { 0, NULL, NULL }
   }
 };
 

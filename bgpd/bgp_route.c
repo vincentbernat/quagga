@@ -247,7 +247,7 @@ bgp_info_add (struct bgp_node *rn, struct bgp_info *ri)
 
 /* Do the actual removal of info from RIB, for use by bgp_process 
    completion callback *only* */
-static void
+void
 bgp_info_reap (struct bgp_node *rn, struct bgp_info *ri)
 {
   if (ri->next)
@@ -1598,13 +1598,7 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
   return 1;
 }
 
-struct bgp_info_pair
-{
-  struct bgp_info *old;
-  struct bgp_info *new;
-};
-
-static void
+void
 bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
 		    struct bgp_maxpaths_cfg *mpath_cfg,
 		    struct bgp_info_pair *result)
@@ -1853,7 +1847,7 @@ subgroup_process_announce_selected (struct update_subgroup *subgrp,
  * Clear IGP changed flag and attribute changed flag for a route (all paths).
  * This is called at the end of route processing.
  */
-static void
+void
 bgp_zebra_clear_route_change_flags (struct bgp_node *rn)
 {
   struct bgp_info *ri;
@@ -1872,7 +1866,7 @@ bgp_zebra_clear_route_change_flags (struct bgp_node *rn)
  * if the route selection returns the same best route as earlier - to
  * determine if we need to update zebra or not.
  */
-static int
+int
 bgp_zebra_has_route_changed (struct bgp_node *rn, struct bgp_info *selected)
 {
   struct bgp_info *mpinfo;
@@ -2286,6 +2280,11 @@ bgp_rib_withdraw (struct bgp_node *rn, struct bgp_info *ri, struct peer *peer,
 	}
     }
 #endif    
+
+  /* If this is an EVPN route, process for un-import. */
+  if (safi == SAFI_EVPN)
+    bgp_evpn_unimport_route (peer->bgp, afi, safi, &rn->p, ri);
+
   bgp_rib_remove (rn, ri, peer, afi, safi);
 }
 
@@ -2617,9 +2616,9 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
     }
 #endif
       /* Special handling for EVPN update of an existing route. If the
-       * extended community attribute has changed, we need to process the
-       * route for uninstall with its existing extended community before
-       * modifying the attribute and doing the usual processing.
+       * extended community attribute has changed, we need to un-import
+       * the route using its existing extended community. It will be
+       * subsequently processed for import with the new extended community.
        */
       if (safi == SAFI_EVPN && !same_attr)
         {
@@ -2636,7 +2635,7 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
                     zlog_debug ("Change in EXT-COMM, existing %s new %s",
                                 ecommunity_str (ri->attr->extra->ecommunity),
                                 ecommunity_str (attr_new->extra->ecommunity));
-                  bgp_evpn_uninstall_route (bgp, afi, safi, p, ri);
+                  bgp_evpn_unimport_route (bgp, afi, safi, p, ri);
                 }
             }
         }
@@ -2729,6 +2728,16 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           bgp_unlock_node(prn);
         }
 #endif
+
+      /* If this is an EVPN route and some attribute has changed, process
+       * route for import. If the extended community has changed, we would
+       * have done the un-import earlier and the import would result in the
+       * route getting injected into appropriate L2 VNIs. If it is just
+       * some other attribute change, the import will result in updating
+       * the attributes for the route in the VNI(s).
+       */
+      if (safi == SAFI_EVPN && !same_attr)
+        bgp_evpn_import_route (bgp, afi, safi, p, ri);
 
       /* Process change. */
       bgp_aggregate_increment (bgp, p, ri, afi, safi);
@@ -2827,6 +2836,10 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   if (bgp_maximum_prefix_overflow (peer, afi, safi, 0))
     return -1;
 
+  /* If this is an EVPN route, process for import. */
+  if (safi == SAFI_EVPN)
+    bgp_evpn_import_route (bgp, afi, safi, p, new);
+
   /* Process change. */
   bgp_process (bgp, rn, afi, safi);
 
@@ -2851,7 +2864,13 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
     }
 
   if (ri)
-    bgp_rib_remove (rn, ri, peer, afi, safi);
+    {
+      /* If this is an EVPN route, un-import it as it is now filtered. */
+      if (safi == SAFI_EVPN)
+        bgp_evpn_unimport_route (bgp, afi, safi, p, ri);
+
+      bgp_rib_remove (rn, ri, peer, afi, safi);
+    }
 
   bgp_unlock_node (rn);
 
@@ -3125,7 +3144,12 @@ bgp_clear_route_node (struct work_queue *wq, void *data)
             && ! CHECK_FLAG (ri->flags, BGP_INFO_UNUSEABLE))
           bgp_info_set_flag (rn, ri, BGP_INFO_STALE);
         else
-          bgp_rib_remove (rn, ri, peer, afi, safi);
+          {
+            /* If this is an EVPN route, process for un-import. */
+            if (safi == SAFI_EVPN)
+              bgp_evpn_unimport_route (peer->bgp, afi, safi, &rn->p, ri);
+            bgp_rib_remove (rn, ri, peer, afi, safi);
+          }
       }
   return WQ_SUCCESS;
 }
@@ -6967,6 +6991,22 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
           vty_out (vty, " VNI %s", tag_buf);
         }
       vty_out (vty, "%s", VTY_NEWLINE);
+      if (binfo->extra->parent)
+        {
+          struct bgp_info *parent_ri;
+          struct bgp_node *rn, *prn;
+
+          parent_ri = (struct bgp_info *)binfo->extra->parent;
+          rn = parent_ri->net;
+          if (rn && rn->prn)
+            {
+              prn = rn->prn;
+              vty_out (vty, "  Imported from %s:%s%s",
+                       prefix_rd2str ((struct prefix_rd *)&prn->p,
+                                      buf1, RD_ADDRSTRLEN),
+                       buf2, VTY_NEWLINE);
+            }
+        }
     }
 
   attr = binfo->attr;
@@ -8040,8 +8080,9 @@ route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
   else
     {
       if (safi == SAFI_EVPN)
-        vty_out (vty, "BGP routing table entry for %s:%s%s",
-                 prefix_rd2str (prd, buf1, RD_ADDRSTRLEN),
+        vty_out (vty, "BGP routing table entry for %s%s%s%s",
+                 prd ? prefix_rd2str (prd, buf1, RD_ADDRSTRLEN) : "",
+                 prd ? ":" : "",
                  bgp_evpn_route2str ((struct prefix_evpn *)p,
                                      buf2, sizeof (buf2)),
                  VTY_NEWLINE);

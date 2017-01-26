@@ -68,6 +68,9 @@ struct bgpevpn
   struct ecommunity         *import_rtl;
   struct ecommunity         *export_rtl;
 
+  /* Route table for EVPN routes for this VNI. */
+  struct bgp_table          *route_table;
+
   QOBJ_FIELDS
 };
 
@@ -229,11 +232,11 @@ bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
 extern int
 bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *packet);
 extern int
-bgp_evpn_install_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                        struct prefix *p, struct bgp_info *ri);
+bgp_evpn_import_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                       struct prefix *p, struct bgp_info *ri);
 extern int
-bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                          struct prefix *p, struct bgp_info *ri);
+bgp_evpn_unimport_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                         struct prefix *p, struct bgp_info *ri);
 extern void
 bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw) ;
 extern int
@@ -288,6 +291,15 @@ bgp_config_write_evpn_info (struct vty *vty, struct bgp *bgp, afi_t afi,
                             safi_t safi, int *write);
 extern void
 bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp);
+extern void
+bgp_evpn_show_route_vni_multicast (struct vty *vty, struct bgp *bgp,
+                                   vni_t vni, struct in_addr orig_ip);
+extern void
+bgp_evpn_show_route_vni_mac (struct vty *vty, struct bgp *bgp,
+                             vni_t vni, struct ethaddr *mac);
+extern void
+bgp_evpn_show_routes_vni (struct vty *vty, struct bgp *bgp,
+                          vni_t vni, int type);
 extern void
 bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
                         struct prefix_rd *prd, int type);
