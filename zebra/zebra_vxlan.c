@@ -1750,10 +1750,12 @@ zebra_vxlan_local_mac_add_update (struct interface *ifp, struct interface *br_if
   macip = zvni_macip_lookup (zvni, mac);
   if (macip)
     {
-      if (macip->fwd_info.local.ifindex == ifp->ifindex &&
+      if (CHECK_FLAG (macip->flags, ZEBRA_MAC_LOCAL) &&
+          macip->fwd_info.local.ifindex == ifp->ifindex &&
           macip->fwd_info.local.vid == vid)
         return 0;
-      add = 0; /* This is an update. */
+      if (CHECK_FLAG (macip->flags, ZEBRA_MAC_LOCAL))
+        add = 0; /* This is an update of local interface. */
     }
 
   /* Locate VRF corresponding to interface. */
@@ -1773,6 +1775,8 @@ zebra_vxlan_local_mac_add_update (struct interface *ifp, struct interface *br_if
     }
 
   /* Set "local" forwarding info. */
+  UNSET_FLAG (macip->flags, ZEBRA_MAC_REMOTE);
+  memset (&macip->fwd_info, 0, sizeof (macip->fwd_info));
   SET_FLAG (macip->flags, ZEBRA_MAC_LOCAL);
   macip->fwd_info.local.ifindex = ifp->ifindex;
   macip->fwd_info.local.vid = vid;
@@ -1820,6 +1824,10 @@ zebra_vxlan_local_mac_del (struct interface *ifp, struct interface *br_if,
   /* If entry doesn't exist, nothing to do. */
   macip = zvni_macip_lookup (zvni, mac);
   if (!macip)
+    return 0;
+
+  /* Is it a local entry? */
+  if (!CHECK_FLAG (macip->flags, ZEBRA_MAC_LOCAL))
     return 0;
 
   /* Locate VRF corresponding to interface. */
@@ -1875,6 +1883,10 @@ zebra_vxlan_check_readd_remote_mac (struct interface *ifp,
   /* If entry doesn't exist, nothing to do. */
   macip = zvni_macip_lookup (zvni, mac);
   if (!macip)
+    return 0;
+
+  /* Is it a remote entry? */
+  if (!CHECK_FLAG (macip->flags, ZEBRA_MAC_REMOTE))
     return 0;
 
   if (IS_ZEBRA_DEBUG_VXLAN)
@@ -1973,7 +1985,8 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
       macip = zvni_macip_lookup (zvni, &mac);
       if (macip)
         {
-          if (IPV4_ADDR_SAME(&macip->fwd_info.r_vtep_ip,
+          if (CHECK_FLAG (macip->flags, ZEBRA_MAC_REMOTE) &&
+              IPV4_ADDR_SAME(&macip->fwd_info.r_vtep_ip,
                              &r_vtep.u.prefix4))
             continue;
           update = 1;
@@ -1992,6 +2005,8 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
         }
 
       /* Set "remote" forwarding info. */
+      UNSET_FLAG (macip->flags, ZEBRA_MAC_LOCAL);
+      memset (&macip->fwd_info, 0, sizeof (macip->fwd_info));
       SET_FLAG (macip->flags, ZEBRA_MAC_REMOTE);
       macip->fwd_info.r_vtep_ip = r_vtep.u.prefix4;
 
@@ -2076,6 +2091,10 @@ int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
       macip = zvni_macip_lookup (zvni, &mac);
       if (!macip)
         continue;
+      /* Is it a remote entry? */
+      if (!CHECK_FLAG (macip->flags, ZEBRA_MAC_REMOTE))
+        continue;
+
       zvni_macip_uninstall (zvni, macip);
       zvni_macip_del (zvni, macip);
     }
