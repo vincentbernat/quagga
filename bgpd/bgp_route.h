@@ -253,7 +253,8 @@ extern void bgp_route_init (void);
 extern void bgp_route_finish (void);
 extern void bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
                                 struct bgp_maxpaths_cfg *mpath_cfg,
-                                struct bgp_info_pair *result);
+                                struct bgp_info_pair *result,
+                                afi_t afi, safi_t safi);
 extern void bgp_zebra_clear_route_change_flags (struct bgp_node *rn);
 extern int
 bgp_zebra_has_route_changed (struct bgp_node *rn, struct bgp_info *selected);

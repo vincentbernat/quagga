@@ -1933,6 +1933,50 @@ bgp_mp_unreach_parse (struct bgp_attr_parser_args *args,
   return BGP_ATTR_PARSE_PROCEED;
 }
 
+/*
+ * Fetch and return the sequence number from MAC Mobility extended
+ * community, if present, else 0.
+ */
+static u_int32_t
+bgp_attr_mac_mobility_seqnum (struct attr *attr)
+{
+  struct ecommunity *ecom;
+  int i;
+
+  ecom = attr->extra->ecommunity;
+  if (!ecom || !ecom->size)
+    return 0;
+
+  /* If there is a MAC Mobility extended community, return its
+   * sequence number.
+   * TODO: RFC is silent on handling of multiple MAC mobility extended
+   * communities for the same route. We will bail out upon the first
+   * one.
+   */
+  for (i = 0; i < ecom->size; i++)
+    {
+      u_char *pnt;
+      u_char type, sub_type;
+      u_int32_t seq_num;
+
+      pnt = (ecom->val + (i * ECOMMUNITY_SIZE));
+      type = *pnt++;
+      sub_type = *pnt++;
+      if (!(type == ECOMMUNITY_ENCODE_EVPN &&
+            sub_type == ECOMMUNITY_EVPN_SUBTYPE_MAC_MOBILITY))
+        continue;
+      pnt += 2;
+      seq_num = (*pnt++ << 24);
+      seq_num |= (*pnt++ << 16);
+      seq_num |= (*pnt++ << 8);
+      seq_num |= (*pnt++);
+
+      return seq_num;
+    }
+
+  return 0;
+}
+
 /* Extended Community attribute. */
 static bgp_attr_parse_ret_t
 bgp_attr_ext_communities (struct bgp_attr_parser_args *args)
@@ -1960,6 +2004,9 @@ bgp_attr_ext_communities (struct bgp_attr_parser_args *args)
                                args->total);
   
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+
+  /* Extract MAC mobility sequence number, if any. */
+  attr->extra->mm_seqnum = bgp_attr_mac_mobility_seqnum (attr);
 
   return BGP_ATTR_PARSE_PROCEED;
 }

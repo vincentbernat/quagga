@@ -377,7 +377,7 @@ bgp_info_path_with_addpath_rx_str (struct bgp_info *ri, char *buf)
 static int
 bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
 	      int *paths_eq, struct bgp_maxpaths_cfg *mpath_cfg, int debug,
-              const char *pfx_buf)
+              const char *pfx_buf, afi_t afi, safi_t safi)
 {
   struct attr *newattr, *existattr;
   struct attr_extra *newattre, *existattre;
@@ -385,6 +385,8 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
   bgp_peer_sort_t exist_sort;
   u_int32_t new_pref;
   u_int32_t exist_pref;
+  u_int32_t new_mm_seq;
+  u_int32_t exist_mm_seq;
   u_int32_t new_med;
   u_int32_t exist_med;
   u_int32_t new_weight;
@@ -431,6 +433,31 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
   existattr = exist->attr;
   newattre = newattr->extra;
   existattre = existattr->extra;
+
+  /* For EVPN routes, we cannot just go by local vs remote, we have to
+   * look at the MAC mobility sequence number, if present.
+   */
+  if (safi == SAFI_EVPN)
+    {
+      new_mm_seq = mac_mobility_seqnum (newattr);
+      exist_mm_seq = mac_mobility_seqnum (existattr);
+
+      if (new_mm_seq > exist_mm_seq)
+        {
+          if (debug)
+            zlog_debug("%s: %s wins over %s due to MM seq %u > %u",
+                       pfx_buf, new_buf, exist_buf, new_mm_seq, exist_mm_seq);
+          return 1;
+        }
+
+      if (new_mm_seq < exist_mm_seq)
+        {
+          if (debug)
+            zlog_debug("%s: %s loses to %s due to MM seq %u < %u",
+                       pfx_buf, new_buf, exist_buf, new_mm_seq, exist_mm_seq);
+          return 0;
+        }
+    }
 
   /* 1. Weight check. */
   new_weight = exist_weight = 0;
@@ -903,7 +930,8 @@ bgp_info_cmp_compatible (struct bgp *bgp, struct bgp_info *new, struct bgp_info 
   int paths_eq;
   struct bgp_maxpaths_cfg mpath_cfg;
   int ret;
-  ret = bgp_info_cmp (bgp, new, exist, &paths_eq, &mpath_cfg, 0, __func__);
+  ret = bgp_info_cmp (bgp, new, exist, &paths_eq, &mpath_cfg, 0,
+                      __func__, afi, safi);
 
   if (paths_eq)
     ret = 0;
@@ -1601,7 +1629,8 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
 void
 bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
 		    struct bgp_maxpaths_cfg *mpath_cfg,
-		    struct bgp_info_pair *result)
+		    struct bgp_info_pair *result,
+                    afi_t afi, safi_t safi)
 {
   struct bgp_info *new_select;
   struct bgp_info *old_select;
@@ -1661,7 +1690,7 @@ bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
                                                  ri2->attr->aspath))
                     {
                       if (bgp_info_cmp (bgp, ri2, new_select, &paths_eq,
-                                        mpath_cfg, debug, pfx_buf))
+                                        mpath_cfg, debug, pfx_buf, afi, safi))
                         {
                           bgp_info_unset_flag (rn, new_select, BGP_INFO_DMED_SELECTED);
                           new_select = ri2;
@@ -1718,7 +1747,8 @@ bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
 
       bgp_info_unset_flag (rn, ri, BGP_INFO_DMED_CHECK);
 
-      if (bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg, debug, pfx_buf))
+      if (bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg,
+                        debug, pfx_buf, afi, safi))
 	{
 	  new_select = ri;
 	}
@@ -1772,7 +1802,8 @@ bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
               continue;
             }
 
-          bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg, debug, pfx_buf);
+          bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg,
+                        debug, pfx_buf, afi, safi);
 
           if (paths_eq)
             {
@@ -1935,7 +1966,8 @@ bgp_process_main (struct work_queue *wq, void *data)
     }
 
   /* Best path selection. */
-  bgp_best_selection (bgp, rn, &bgp->maxpaths[afi][safi], &old_and_new);
+  bgp_best_selection (bgp, rn, &bgp->maxpaths[afi][safi],
+                      &old_and_new, afi, safi);
   old_select = old_and_new.old;
   new_select = old_and_new.new;
 
