@@ -599,6 +599,81 @@ ecommunity_str2com (const char *str, int type, int keyword_included)
   return ecom;
 }
 
+static int
+ecommunity_rt_soo_str (char *buf, u_int8_t *pnt, int type,
+                       int sub_type, int format)
+{
+  int len = 0;
+  const char *prefix;
+
+  /* For parse Extended Community attribute tupple. */
+  struct ecommunity_as
+  {
+    as_t as;
+    u_int32_t val;
+  } eas;
+
+  struct ecommunity_ip
+  {
+    struct in_addr ip;
+    u_int16_t val;
+  } eip;
+
+
+  /* Determine prefix for string, if any. */
+  switch (format)
+    {
+      case ECOMMUNITY_FORMAT_COMMUNITY_LIST:
+        prefix = (sub_type == ECOMMUNITY_ROUTE_TARGET ? "rt " : "soo ");
+        break;
+      case ECOMMUNITY_FORMAT_DISPLAY:
+        prefix = (sub_type == ECOMMUNITY_ROUTE_TARGET ? "RT:" : "SoO:");
+        break;
+      case ECOMMUNITY_FORMAT_ROUTE_MAP:
+        prefix = "";
+        break;
+      default:
+        prefix = "";
+        break;
+    }
+
+  /* Put string into buffer.  */
+  if (type == ECOMMUNITY_ENCODE_AS4)
+    {
+      eas.as = (*pnt++ << 24);
+      eas.as |= (*pnt++ << 16);
+      eas.as |= (*pnt++ << 8);
+      eas.as |= (*pnt++);
+      eas.val = (*pnt++ << 8);
+      eas.val |= (*pnt++);
+
+      len = sprintf (buf, "%s%u:%u", prefix, eas.as, eas.val);
+    }
+  else if (type == ECOMMUNITY_ENCODE_AS)
+    {
+      eas.as = (*pnt++ << 8);
+      eas.as |= (*pnt++);
+
+      eas.val = (*pnt++ << 24);
+      eas.val |= (*pnt++ << 16);
+      eas.val |= (*pnt++ << 8);
+      eas.val |= (*pnt++);
+
+      len = sprintf (buf, "%s%u:%u", prefix, eas.as, eas.val);
+    }
+  else if (type == ECOMMUNITY_ENCODE_IP)
+    {
+      memcpy (&eip.ip, pnt, 4);
+      pnt += 4;
+      eip.val = (*pnt++ << 8);
+      eip.val |= (*pnt++);
+
+      len = sprintf (buf, "%s%s:%u", prefix, inet_ntoa (eip.ip), eip.val);
+    }
+
+  return len;
+}
+
 /* Convert extended community attribute to string.  
 
    Due to historical reason of industry standard implementation, there
@@ -625,28 +700,14 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 {
   int i;
   u_int8_t *pnt;
-  int encode = 0;
   int type = 0;
+  int sub_type = 0;
 #define ECOMMUNITY_STR_DEFAULT_LEN  27
   int str_size;
   int str_pnt;
   char *str_buf;
-  const char *prefix;
   int len = 0;
   int first = 1;
-
-  /* For parse Extended Community attribute tupple. */
-  struct ecommunity_as
-  {
-    as_t as;
-    u_int32_t val;
-  } eas;
-
-  struct ecommunity_ip
-  {
-    struct in_addr ip;
-    u_int16_t val;
-  } eip;
 
   if (ecom->size == 0)
     {
@@ -660,8 +721,11 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
   str_size = ECOMMUNITY_STR_DEFAULT_LEN + 1;
   str_pnt = 0;
 
+  /* Convert each extended community into string. */
   for (i = 0; i < ecom->size; i++)
     {
+      int unk_ecom = 0;
+
       /* Make it sure size is enough.  */
       while (str_pnt + ECOMMUNITY_STR_DEFAULT_LEN >= str_size)
 	{
@@ -676,105 +740,56 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
       pnt = ecom->val + (i * 8);
 
       /* High-order octet of type. */
-      encode = *pnt++;
+      type = *pnt++;
 
-      switch (encode)
+      if (type == ECOMMUNITY_ENCODE_AS ||
+          type == ECOMMUNITY_ENCODE_IP ||
+          type == ECOMMUNITY_ENCODE_AS4)
         {
-        case ECOMMUNITY_ENCODE_AS:
-        case ECOMMUNITY_ENCODE_IP:
-        case ECOMMUNITY_ENCODE_AS4:
-          break;
-
-        case ECOMMUNITY_ENCODE_OPAQUE:
+          /* Low-order octet of type. */
+          sub_type = *pnt++;
+          if (sub_type != ECOMMUNITY_ROUTE_TARGET &&
+              sub_type != ECOMMUNITY_SITE_ORIGIN)
+            unk_ecom = 1;
+          else
+            len = ecommunity_rt_soo_str (str_buf + str_pnt, pnt, type,
+                                         sub_type, format);
+        }
+      else if (type == ECOMMUNITY_ENCODE_OPAQUE)
+        {
           if (*pnt == ECOMMUNITY_OPAQUE_SUBTYPE_ENCAP)
             {
               uint16_t tunneltype;
               memcpy (&tunneltype, pnt + 5, 2);
               tunneltype = ntohs(tunneltype);
               len = sprintf (str_buf + str_pnt, "ET:%d", tunneltype);
-              str_pnt += len;
-              first = 0;
-              continue;
             }
-            /* fall through */
-
-        default:
-          len = sprintf (str_buf + str_pnt, "?");
-          str_pnt += len;
-          first = 0;
-          continue;
+          else
+            unk_ecom = 1;
         }
+      else if (type == ECOMMUNITY_ENCODE_EVPN)
+        {
+          if (*pnt == ECOMMUNITY_EVPN_SUBTYPE_MAC_MOBILITY)
+            {
+              u_int32_t seqnum;
 
-      /* Low-order octet of type. */
-      type = *pnt++;
-      if (type !=  ECOMMUNITY_ROUTE_TARGET && type != ECOMMUNITY_SITE_ORIGIN)
-	{
-	  len = sprintf (str_buf + str_pnt, "?");
-	  str_pnt += len;
-	  first = 0;
-	  continue;
-	}
+              memcpy (&seqnum, pnt + 3, 4);
+              seqnum = ntohl(seqnum);
+              len = sprintf (str_buf + str_pnt, "MM:%u", seqnum);
+            }
+          else
+            unk_ecom = 1;
+        }
+      else
+        unk_ecom = 1;
 
-      switch (format)
-	{
-	case ECOMMUNITY_FORMAT_COMMUNITY_LIST:
-	  prefix = (type == ECOMMUNITY_ROUTE_TARGET ? "rt " : "soo ");
-	  break;
-	case ECOMMUNITY_FORMAT_DISPLAY:
-	  prefix = (type == ECOMMUNITY_ROUTE_TARGET ? "RT:" : "SoO:");
-	  break;
-	case ECOMMUNITY_FORMAT_ROUTE_MAP:
-	  prefix = "";
-	  break;
-	default:
-	  prefix = "";
-	  break;
-	}
+      if (unk_ecom)
+        len = sprintf (str_buf + str_pnt, "?");
 
-      /* Put string into buffer.  */
-      if (encode == ECOMMUNITY_ENCODE_AS4)
-	{
-	  eas.as = (*pnt++ << 24);
-	  eas.as |= (*pnt++ << 16);
-	  eas.as |= (*pnt++ << 8);
-	  eas.as |= (*pnt++);
-
-	  eas.val = (*pnt++ << 8);
-	  eas.val |= (*pnt++);
-
-	  len = sprintf( str_buf + str_pnt, "%s%u:%u", prefix,
-                        eas.as, eas.val );
-	  str_pnt += len;
-	  first = 0;
-	}
-      if (encode == ECOMMUNITY_ENCODE_AS)
-	{
-	  eas.as = (*pnt++ << 8);
-	  eas.as |= (*pnt++);
-
-	  eas.val = (*pnt++ << 24);
-	  eas.val |= (*pnt++ << 16);
-	  eas.val |= (*pnt++ << 8);
-	  eas.val |= (*pnt++);
-
-	  len = sprintf (str_buf + str_pnt, "%s%u:%u", prefix,
-			 eas.as, eas.val);
-	  str_pnt += len;
-	  first = 0;
-	}
-      else if (encode == ECOMMUNITY_ENCODE_IP)
-	{
-	  memcpy (&eip.ip, pnt, 4);
-	  pnt += 4;
-	  eip.val = (*pnt++ << 8);
-	  eip.val |= (*pnt++);
-
-	  len = sprintf (str_buf + str_pnt, "%s%s:%u", prefix,
-			 inet_ntoa (eip.ip), eip.val);
-	  str_pnt += len;
-	  first = 0;
-	}
+      str_pnt += len;
+      first = 0;
     }
+
   return str_buf;
 }
 
