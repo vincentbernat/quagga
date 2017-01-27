@@ -143,7 +143,11 @@ void pim_ifchannel_delete(struct pim_ifchannel *ch)
 
   if (ch->upstream->channel_oil)
     {
-      pim_channel_del_oif (ch->upstream->channel_oil, ch->interface, PIM_OIF_FLAG_PROTO_PIM);
+      uint32_t mask = PIM_OIF_FLAG_PROTO_PIM;
+      if (ch->upstream->flags & PIM_UPSTREAM_FLAG_MASK_SRC_IGMP)
+        mask = PIM_OIF_FLAG_PROTO_IGMP;
+
+      pim_channel_del_oif (ch->upstream->channel_oil, ch->interface, mask);
       /*
        * Do we have any S,G's that are inheriting?
        * Nuke from on high too.
@@ -935,8 +939,9 @@ void pim_ifchannel_prune(struct interface *ifp,
   }
 }
 
-void pim_ifchannel_local_membership_add(struct interface *ifp,
-					struct prefix_sg *sg)
+int
+pim_ifchannel_local_membership_add(struct interface *ifp,
+				   struct prefix_sg *sg)
 {
   struct pim_ifchannel *ch;
   struct pim_interface *pim_ifp;
@@ -944,13 +949,13 @@ void pim_ifchannel_local_membership_add(struct interface *ifp,
   /* PIM enabled on interface? */
   pim_ifp = ifp->info;
   if (!pim_ifp)
-    return;
+    return 0;
   if (!PIM_IF_TEST_PIM(pim_ifp->options))
-    return;
+    return 0;
 
   ch = pim_ifchannel_add(ifp, sg, PIM_UPSTREAM_FLAG_MASK_SRC_IGMP);
   if (!ch) {
-    return;
+    return 0;
   }
 
   ifmembership_set(ch, PIM_IFMEMBERSHIP_INCLUDE);
@@ -975,6 +980,8 @@ void pim_ifchannel_local_membership_add(struct interface *ifp,
 	    }
         }
     }
+
+  return 1;
 }
 
 void pim_ifchannel_local_membership_del(struct interface *ifp,
