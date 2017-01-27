@@ -187,7 +187,7 @@ vrf_lookup_by_table (u_int32_t table_id)
 /* Looking up routing table by netlink interface. */
 static int
 netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                       ns_id_t ns_id)
+                       ns_id_t ns_id, int startup)
 {
   int len;
   struct rtmsg *rtm;
@@ -376,7 +376,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
 /* Routing information change from the kernel. */
 static int
 netlink_route_change_read_unicast (struct sockaddr_nl *snl, struct nlmsghdr *h,
-				   ns_id_t ns_id)
+				   ns_id_t ns_id, int startup)
 {
   int len;
   struct rtmsg *rtm;
@@ -591,7 +591,7 @@ static struct mcast_route_data *mroute = NULL;
 
 static int
 netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h,
-				     ns_id_t ns_id)
+                                     ns_id_t ns_id, int startup)
 {
   int len;
   struct rtmsg *rtm;
@@ -675,7 +675,7 @@ netlink_route_change_read_multicast (struct sockaddr_nl *snl, struct nlmsghdr *h
 
 int
 netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
-		      ns_id_t ns_id)
+		      ns_id_t ns_id, int startup)
 {
   int len;
   vrf_id_t vrf_id = ns_id;
@@ -708,10 +708,10 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   switch (rtm->rtm_type)
     {
     case RTN_UNICAST:
-      netlink_route_change_read_unicast (snl, h, ns_id);
+      netlink_route_change_read_unicast (snl, h, ns_id, startup);
       break;
     case RTN_MULTICAST:
-      netlink_route_change_read_multicast (snl, h, ns_id);
+      netlink_route_change_read_multicast (snl, h, ns_id, startup);
       break;
     default:
       return 0;
@@ -732,7 +732,7 @@ netlink_route_read (struct zebra_ns *zns)
   ret = netlink_request (AF_INET, RTM_GETROUTE, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0, 1);
   if (ret < 0)
     return ret;
 
@@ -740,7 +740,7 @@ netlink_route_read (struct zebra_ns *zns)
   ret = netlink_request (AF_INET6, RTM_GETROUTE, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_routing_table, &zns->netlink_cmd, zns, 0, 1);
   if (ret < 0)
     return ret;
 
@@ -754,7 +754,7 @@ netlink_route_read (struct zebra_ns *zns)
 
 static int
 netlink_neigh_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                     ns_id_t ns_id)
+                     ns_id_t ns_id, int startup)
 {
   if (h->nlmsg_type != RTM_NEWNEIGH)
     return 0;
@@ -883,7 +883,7 @@ netlink_neigh_read (struct zebra_ns *zns)
   ret = netlink_request (AF_BRIDGE, RTM_GETNEIGH, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_neigh_table, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_neigh_table, &zns->netlink_cmd, zns, 0, 1);
 
   return ret;
 }
@@ -1499,7 +1499,7 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
   addattr_l(&req.n, sizeof(req), NDA_DST, &addr, 4);
   addattr_l(&req.n, sizeof(req), NDA_LLADDR, lla, llalen);
 
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns, 0);
 }
 
 static int
@@ -1559,7 +1559,7 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
                 mac2str (mac, buf, sizeof (buf)),
                 inet_ntoa (vtep_ip));
 
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns, 0);
 }
 
 /* Routing table change via netlink interface. */
@@ -1857,7 +1857,7 @@ skip:
   snl.nl_family = AF_NETLINK;
 
   /* Talk to netlink socket. */
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns, 0);
 }
 
 int
@@ -1887,7 +1887,7 @@ netlink_get_ipmr_sg_stats (void *in)
   addattr_l (&req.n, sizeof (req), RTA_SRC, &mroute->sg.src.s_addr, 4);
   addattr_l (&req.n, sizeof (req), RTA_DST, &mroute->sg.grp.s_addr, 4);
 
-  suc = netlink_talk (netlink_route_change_read_multicast, &req.n, &zns->netlink_cmd, zns);
+  suc = netlink_talk (netlink_route_change_read_multicast, &req.n, &zns->netlink_cmd, zns, 0);
 
   mroute = NULL;
   return suc;
@@ -2096,7 +2096,7 @@ netlink_mpls_multipath (int cmd, zebra_lsp_t *lsp)
     }
 
   /* Talk to netlink socket. */
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns, 0);
 }
 
 /*
