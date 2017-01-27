@@ -190,7 +190,7 @@ zvni_macip_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni,
 static zebra_vni_t *
 zvni_map_vlan (struct interface *ifp, struct interface *br_if, vlanid_t vid);
 static int
-zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip, int update);
+zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip);
 static int
 zvni_macip_uninstall (zebra_vni_t *zvni, zebra_macip_t *macip);
 static unsigned int
@@ -559,7 +559,7 @@ zvni_map_vlan (struct interface *ifp, struct interface *br_if, vlanid_t vid)
  * Install remote MAC-IP into the kernel.
  */
 static int
-zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip, int update)
+zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip)
 {
   struct zebra_if *zif;
   struct zebra_l2if_vxlan *zl2if;
@@ -573,7 +573,7 @@ zvni_macip_install (zebra_vni_t *zvni, zebra_macip_t *macip, int update)
     return -1;
 
   return kernel_add_mac (zvni->vxlan_if, zl2if->access_vlan,
-                         &macip->emac, macip->fwd_info.r_vtep_ip, update);
+                         &macip->emac, macip->fwd_info.r_vtep_ip);
 }
 
 /*
@@ -1894,7 +1894,7 @@ zebra_vxlan_check_readd_remote_mac (struct interface *ifp,
                 ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
                 ifp->name, ifp->ifindex, vni);
 
-  zvni_macip_install (zvni, macip, 1);
+  zvni_macip_install (zvni, macip);
   return 0;
 }
 
@@ -1914,7 +1914,6 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
   zebra_macip_t *macip;
   u_short l = 0;
   char buf[MACADDR_STRLEN];
-  int update = 0;
 
   assert (EVPN_ENABLED (zvrf));
 
@@ -1989,7 +1988,6 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
               IPV4_ADDR_SAME(&macip->fwd_info.r_vtep_ip,
                              &r_vtep.u.prefix4))
             continue;
-          update = 1;
         }
 
       if (!macip)
@@ -2011,7 +2009,7 @@ zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
       macip->fwd_info.r_vtep_ip = r_vtep.u.prefix4;
 
       /* Install the entry. */
-      zvni_macip_install (zvni, macip, update);
+      zvni_macip_install (zvni, macip);
     }
 
   return 0;

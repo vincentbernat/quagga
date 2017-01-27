@@ -1511,7 +1511,7 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
 static int
 netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
                                 struct ethaddr *mac, struct in_addr vtep_ip,
-                                int cmd, int update)
+                                int cmd)
 {
   struct zebra_ns *zns = zebra_ns_lookup (NS_DEFAULT);
   struct
@@ -1542,11 +1542,7 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
   req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
   req.n.nlmsg_flags = NLM_F_REQUEST;
   if (cmd == RTM_NEWNEIGH)
-    {
-      req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
-      if (update)
-        req.n.nlmsg_flags |= NLM_F_REPLACE;
-    }
+    req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_REPLACE);
   req.n.nlmsg_type = cmd;
   req.ndm.ndm_family = AF_BRIDGE;
   req.ndm.ndm_state = NUD_REACHABLE;
@@ -1923,10 +1919,10 @@ kernel_neigh_update (int add, int ifindex, uint32_t addr, char *lla, int llalen)
 
 int
 kernel_add_mac (struct interface *ifp, vlanid_t vid,
-                struct ethaddr *mac, struct in_addr vtep_ip, int update)
+                struct ethaddr *mac, struct in_addr vtep_ip)
 {
  return netlink_neigh_update_af_bridge (ifp, vid, mac, vtep_ip,
-                                        RTM_NEWNEIGH, update);
+                                        RTM_NEWNEIGH);
 }
 
 int
@@ -1934,7 +1930,7 @@ kernel_del_mac (struct interface *ifp, vlanid_t vid,
                 struct ethaddr *mac, struct in_addr vtep_ip)
 {
  return netlink_neigh_update_af_bridge (ifp, vid, mac, vtep_ip,
-                                        RTM_DELNEIGH, 0);
+                                        RTM_DELNEIGH);
 }
 
 /*
