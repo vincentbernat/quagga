@@ -705,6 +705,7 @@ update_evpn_route_entry (struct bgp *bgp, struct bgpevpn *vpn, afi_t afi,
     }
   else
     {
+      tmp_ri = local_ri;
       if (attrhash_cmp (tmp_ri->attr, attr) &&
           !CHECK_FLAG(tmp_ri->flags, BGP_INFO_REMOVED))
         route_change = 0;
