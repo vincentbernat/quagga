@@ -307,6 +307,10 @@ vtysh_execute_func (const char *line, int pager)
 	{
 	  vtysh_execute("exit-address-family");
 	}
+      else if ((saved_node == BGP_EVPN_VNI_NODE) && (tried == 1))
+        {
+	  vtysh_execute("exit-vni");
+        }
       else if ((saved_node == BGP_VNC_DEFAULTS_NODE
            || saved_node == BGP_VNC_NVE_GROUP_NODE
            || saved_node == BGP_VNC_L2_GROUP_NODE) && (tried == 1))
@@ -550,10 +554,13 @@ vtysh_mark_file (const char *filename)
        * to move into node in the vtysh where it succeeded. */
       if (ret == CMD_SUCCESS || ret == CMD_SUCCESS_DAEMON || ret == CMD_WARNING)
 	{
-	  if ((prev_node == BGP_VPNV4_NODE || prev_node == BGP_IPV4_NODE
-	       || prev_node == BGP_IPV6_NODE || prev_node == BGP_IPV4M_NODE
-	       || prev_node == BGP_IPV6M_NODE || prev_node == BGP_VPNV6_NODE
-           || prev_node == BGP_EVPN_NODE || prev_node == BGP_EVPN_VNI_NODE)
+	  if ((prev_node == BGP_VPNV4_NODE
+               || prev_node == BGP_IPV4_NODE
+               || prev_node == BGP_IPV6_NODE
+               || prev_node == BGP_IPV4M_NODE
+               || prev_node == BGP_IPV6M_NODE
+               || prev_node == BGP_VPNV6_NODE
+               || prev_node == BGP_EVPN_NODE)
 	      && (tried == 1))
 	    {
 	      fprintf(stdout, "exit-address-family\n");
@@ -562,6 +569,10 @@ vtysh_mark_file (const char *filename)
 	    {
 	      fprintf(stdout, "exit\n");
 	    }
+          else if ((prev_node == BGP_EVPN_VNI_NODE) && (tried == 1))
+            {
+              fprintf(stdout, "exit-vni\n");
+            }
 	  else if (tried)
 	    {
 	      fprintf(stdout, "end\n");
