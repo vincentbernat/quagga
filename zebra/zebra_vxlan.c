@@ -1899,6 +1899,67 @@ zebra_vxlan_check_readd_remote_mac (struct interface *ifp,
 }
 
 /*
+ * Handle notification of MAC add/update over VxLAN. If the kernel is notifying
+ * us, this must involve a multihoming scenario. Treat this as implicit delete
+ * of any prior local MAC.
+ */
+int
+zebra_vxlan_check_del_local_mac (struct interface *ifp,
+                                 struct interface *br_if,
+                                 struct ethaddr *mac, vlanid_t vid)
+{
+  struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
+  struct zebra_l2if_vxlan *_zl2if;
+  vni_t vni;
+  zebra_vni_t *zvni;
+  zebra_macip_t *macip;
+  char buf[MACADDR_STRLEN];
+
+  zif = ifp->info;
+  assert(zif);
+  _zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  assert(_zl2if);
+  vni = _zl2if->vni;
+
+  /* Locate VRF corresponding to interface. */
+  zvrf = vrf_info_lookup(ifp->vrf_id);
+  assert(zvrf);
+
+  /* If EVPN is not enabled, nothing to do. */
+  if (!EVPN_ENABLED(zvrf))
+    return 0;
+
+  /* Locate hash entry; it is expected to exist. */
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    return 0;
+
+  /* If entry doesn't exist, nothing to do. */
+  macip = zvni_macip_lookup (zvni, mac);
+  if (!macip)
+    return 0;
+
+  /* Is it a local entry? */
+  if (!CHECK_FLAG (macip->flags, ZEBRA_MAC_LOCAL))
+    return 0;
+
+  if (IS_ZEBRA_DEBUG_VXLAN)
+    zlog_debug ("%u:Add/update remote MAC %s intf %s(%u) VNI %u - del local",
+                ifp->vrf_id, mac2str (mac, buf, sizeof (buf)),
+                ifp->name, ifp->ifindex, vni);
+
+  /* Remove MAC from BGP. */
+  zvni_macip_send_del_to_client (zvrf, zvni->vni, mac);
+
+  /* Delete this MAC-IP entry. */
+  zvni_macip_del (zvni, macip);
+
+  return 0;
+}
+
+
+/*
  * Handle message from client to add a remote MAC/IP for a VNI.
  */
 int 

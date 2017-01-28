@@ -85,6 +85,14 @@ zebra_vxlan_check_readd_remote_mac (struct interface *ifp,
   return 0;
 }
 
+int
+zebra_vxlan_check_del_local_mac (struct interface *ifp,
+                                 struct interface *br_if,
+                                 struct ethaddr *mac, vlanid_t vid)
+{
+  return 0;
+}
+
 int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
                                    u_short length, struct zebra_vrf *zvrf)
 {

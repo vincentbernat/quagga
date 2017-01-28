@@ -806,12 +806,6 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
     return 0;
 
   /* The interface should be something we're interested in. */
-  /* Drop NEW notifications on VxLAN; if it is a DEL notification, see
-   * if we should re-add.
-   */
-  if (IS_ZEBRA_IF_VXLAN(ifp) &&
-      h->nlmsg_type != RTM_DELNEIGH)
-    return 0;
   if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp))
     return 0;
 
@@ -866,9 +860,22 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                 ifp->name, ndm->ndm_ifindex, vid,
                 mac2str (&mac, buf, sizeof (buf)));
 
+  /* If add or update, do accordingly if learnt on a "local" interface; if
+   * the notification is over VxLAN, this has to be related to multi-homing,
+   * so perform an implicit delete of any local entry (if it exists).
+   */
   if (h->nlmsg_type == RTM_NEWNEIGH)
-    return zebra_vxlan_local_mac_add_update (ifp, br_if, &mac, vid);
+    {
+      if (IS_ZEBRA_IF_VXLAN(ifp))
+        return zebra_vxlan_check_del_local_mac (ifp, br_if, &mac, vid);
 
+      return zebra_vxlan_local_mac_add_update (ifp, br_if, &mac, vid);
+    }
+
+  /* This is a delete notification. If notification is for a MAC over VxLAN,
+   * check if it needs to be readded (refreshed); otherwise, handle delete of
+   * MAC over "local" interface.
+   */
   if (IS_ZEBRA_IF_VXLAN(ifp))
     return zebra_vxlan_check_readd_remote_mac (ifp, br_if, &mac, vid);
 
