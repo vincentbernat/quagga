@@ -7023,7 +7023,7 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
           vty_out (vty, " VNI %s", tag_buf);
         }
       vty_out (vty, "%s", VTY_NEWLINE);
-      if (binfo->extra->parent)
+      if (binfo->extra && binfo->extra->parent)
         {
           struct bgp_info *parent_ri;
           struct bgp_node *rn, *prn;
