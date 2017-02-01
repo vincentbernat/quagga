@@ -793,7 +793,7 @@ ALIAS (no_ip_route,
        "Emit an ICMP unreachable when matched\n"
        "Silently discard pkts when matched\n")
 
-ALIAS (no_ip_route_tag,
+DEFUN (no_ip_route_flags_tag,
        no_ip_route_flags_tag_cmd,
        "no ip route A.B.C.D/M (A.B.C.D|INTERFACE) (reject|blackhole) tag <1-4294967295>",
        NO_STR
@@ -806,6 +806,10 @@ ALIAS (no_ip_route_tag,
        "Silently discard pkts when matched\n"
        "Tag of this route\n"
        "Tag value\n")
+{
+  return zebra_static_ipv4 (vty, SAFI_UNICAST, 0, argv[0], NULL, argv[1], argv[2], argv[3],
+                            NULL, NULL, NULL);
+}
 
 DEFUN (no_ip_route_flags2,
        no_ip_route_flags2_cmd,
@@ -833,7 +837,7 @@ DEFUN (no_ip_route_flags2_tag,
        "Tag of this route\n"
        "Tag value\n")
 {
-  return zebra_static_ipv4 (vty, SAFI_UNICAST, 0, argv[0], NULL, NULL, NULL, argv[1],
+  return zebra_static_ipv4 (vty, SAFI_UNICAST, 0, argv[0], NULL, NULL, NULL, argv[2],
                             NULL, NULL, NULL);
 }
 
@@ -884,7 +888,7 @@ ALIAS (no_ip_route_mask,
        "Emit an ICMP unreachable when matched\n"
        "Silently discard pkts when matched\n")
 
-ALIAS (no_ip_route_mask_tag,
+DEFUN (no_ip_route_mask_flags_tag,
        no_ip_route_mask_flags_tag_cmd,
        "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) (reject|blackhole) tag <1-4294967295>",
        NO_STR
@@ -898,6 +902,10 @@ ALIAS (no_ip_route_mask_tag,
        "Silently discard pkts when matched\n"
        "Tag of this route\n"
        "Tag value\n")
+{
+  return zebra_static_ipv4 (vty, SAFI_UNICAST, 0, argv[0], argv[1], argv[2], NULL, argv[4],
+                            NULL, NULL, NULL);
+}
 
 DEFUN (no_ip_route_mask_flags2,
        no_ip_route_mask_flags2_cmd,
@@ -927,7 +935,7 @@ DEFUN (no_ip_route_mask_flags2_tag,
        "Tag of this route\n"
        "Tag value\n")
 {
-  return zebra_static_ipv4 (vty, SAFI_UNICAST, 0, argv[0], argv[1], NULL, NULL, argv[2],
+  return zebra_static_ipv4 (vty, SAFI_UNICAST, 0, argv[0], argv[1], NULL, NULL, argv[3],
                             NULL, NULL, NULL);
 }
 
