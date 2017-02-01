@@ -1343,8 +1343,8 @@ install_uninstall_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn,
 
           for (ri = rn->info; ri; ri = ri->next)
             {
-              /* Consider "selected" remote routes applicable for this VNI. */
-              if (!(CHECK_FLAG (ri->flags, BGP_INFO_SELECTED)
+              /* Consider "valid" remote routes applicable for this VNI. */
+              if (!(CHECK_FLAG (ri->flags, BGP_INFO_VALID)
                     && ri->type == ZEBRA_ROUTE_BGP
                     && ri->sub_type == BGP_ROUTE_NORMAL))
                 continue;
