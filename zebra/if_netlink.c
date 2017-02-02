@@ -316,8 +316,8 @@ netlink_extract_vxlan_info (struct rtattr *link_data,
 }
 
 static void
-netlink_bridge_interface_add (struct interface *ifp,
-                              struct rtattr *link_data)
+netlink_bridge_interface_add_update (struct interface *ifp,
+                                     struct rtattr *link_data)
 {
   struct zebra_l2if_bridge zl2if;
 
@@ -326,7 +326,7 @@ netlink_bridge_interface_add (struct interface *ifp,
   netlink_extract_bridge_info (link_data, &zl2if);
 
   /* Create/update Bridge interface */
-  zebra_l2_bridge_add (ifp, &zl2if);
+  zebra_l2_bridge_add_update (ifp, &zl2if);
 }
 
 static void
@@ -662,7 +662,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
   /* Special handling for L2 interfaces */
   if (zif_type == ZEBRA_IF_BRIDGE)
-    netlink_bridge_interface_add (ifp, linkinfo[IFLA_INFO_DATA]);
+    netlink_bridge_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
   else if (zif_type == ZEBRA_IF_VLAN)
     netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
                                        zif_slave_type, bridge_ifindex);
@@ -1071,7 +1071,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
           /* Special handling for L2 interfaces */
           if (zif_type == ZEBRA_IF_BRIDGE)
-            netlink_bridge_interface_add (ifp, linkinfo[IFLA_INFO_DATA]);
+            netlink_bridge_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
           else if (zif_type == ZEBRA_IF_VLAN)
             netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
                                                zif_slave_type, bridge_ifindex);
@@ -1096,7 +1096,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
         }
       else
         {
-          /* Interface status change. */
+          /* Interface update. */
           if (IS_ZEBRA_DEBUG_KERNEL)
              zlog_debug ("RTM_NEWLINK update for %s(%u) "
                          "sl_type %d master %u flags 0x%x",
@@ -1140,7 +1140,9 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
             }
 
           /* Special handling for L2 interfaces */
-          if (zif_type == ZEBRA_IF_VLAN)
+          if (zif_type == ZEBRA_IF_BRIDGE)
+            netlink_bridge_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA]);
+          else if (zif_type == ZEBRA_IF_VLAN)
             netlink_vlan_interface_add_update (ifp, linkinfo[IFLA_INFO_DATA],
                                                zif_slave_type, bridge_ifindex);
           else if (zif_type == ZEBRA_IF_VXLAN)

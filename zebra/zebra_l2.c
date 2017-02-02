@@ -131,12 +131,12 @@ zebra_l2_unmap_slave_from_bridge (struct zebra_l2info_brslave *br_slave)
 }
 
 /*
- * Handle Bridge interface add. Create/update Bridge L2 interface info
- * and map slaves (if any) to the bridge.
+ * Handle Bridge interface add or update. Create/update Bridge L2 interface
+ * info and map slaves (if any) to the bridge.
  */
 int
-zebra_l2_bridge_add (struct interface *ifp,
-                     struct zebra_l2if_bridge *zl2if)
+zebra_l2_bridge_add_update (struct interface *ifp,
+                            struct zebra_l2if_bridge *zl2if)
 {
   struct zebra_if *zif;
   struct zebra_l2if_bridge *_zl2if;
