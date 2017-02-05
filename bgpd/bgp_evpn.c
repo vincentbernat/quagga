@@ -839,7 +839,7 @@ delete_evpn_route (struct bgp *bgp, struct bgpevpn *vpn,
   afi_t afi = AFI_L2VPN;
   safi_t safi = SAFI_EVPN;
 
-  /* First, locate the oute node within the VNI. If it doesn't exist, there
+  /* First, locate the route node within the VNI. If it doesn't exist, there
    * is nothing further to do.
    */
   /* NOTE: There is no RD here. */
@@ -949,11 +949,11 @@ update_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 }
 
 /*
- * Delete all type-2 (MACIP) local routes for this VNI - these should also
- * be scheduled for withdraw from peers.
+ * Delete all type-2 (MACIP) local routes for this VNI - only from the
+ * global routing table. These are also scheduled for withdraw from peers.
  */
 static int
-delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
+delete_global_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 {
   afi_t afi;
   safi_t safi;
@@ -964,9 +964,6 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
   afi = AFI_L2VPN;
   safi = SAFI_EVPN;
 
-  /* First, walk the global route table for this VNI's type-2 local routes.
-   * EVPN routes are a 2-level table, first get the RD table.
-   */
   rdrn = bgp_node_lookup (bgp->rib[afi][safi], (struct prefix *) &vpn->prd);
   if (rdrn && rdrn->info)
     {
@@ -988,6 +985,29 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
   if (rdrn)
     bgp_unlock_node (rdrn);
 
+  return 0;
+}
+
+/*
+ * Delete all type-2 (MACIP) local routes for this VNI - from the global
+ * table as the per-VNI route table.
+ */
+static int
+delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  afi_t afi;
+  safi_t safi;
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+
+  afi = AFI_L2VPN;
+  safi = SAFI_EVPN;
+
+  /* First, walk the global route table for this VNI's type-2 local routes.
+   * EVPN routes are a 2-level table, first get the RD table.
+   */
+  delete_global_type2_routes (bgp, vpn);
+
   /* Next, walk this VNI's route table and delete local type-2 routes. */
   for (rn = bgp_table_top (vpn->route_table); rn; rn = bgp_route_next (rn))
     {
@@ -1008,7 +1028,9 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 
 /*
  * Update (and advertise) local routes for a VNI. Invoked upon the VNI
- * export RT getting modified.
+ * export RT getting modified or change to tunnel IP. Note that these
+ * situations need the route in the per-VNI table as well as the global
+ * table to be updated (as attributes change).
  */
 static int
 update_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
@@ -1049,6 +1071,125 @@ delete_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
 }
 
 /*
+ * Update and advertise local routes for a VNI. Invoked upon router-id
+ * change. Note that the processing is done only on the global route table
+ * using routes that already exist in the per-VNI table.
+ */
+static int
+update_advertise_vni_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  struct prefix_evpn p;
+  struct bgp_node *rn, *global_rn;
+  struct bgp_info *ri, *global_ri;
+  struct attr *attr;
+  afi_t afi = AFI_L2VPN;
+  safi_t safi = SAFI_EVPN;
+
+  /* Locate type-3 route for VNI in the per-VNI table and use its
+   * attributes to create and advertise the type-3 route for this VNI
+   * in the global table.
+   */
+  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  rn = bgp_node_lookup (vpn->route_table, (struct prefix *)&p);
+  if (!rn) /* unexpected */
+    return 0;
+  for (ri = rn->info; ri; ri = ri->next)
+    if (ri->peer == bgp->peer_self
+        && ri->type == ZEBRA_ROUTE_BGP
+        && ri->sub_type == BGP_ROUTE_STATIC)
+      break;
+  if (!ri) /* unexpected */
+    return 0;
+  attr = ri->attr;
+
+  global_rn = bgp_afi_node_get (bgp->rib[afi][safi], afi, safi,
+                                (struct prefix *)&p, &vpn->prd);
+  update_evpn_route_entry (bgp, vpn, afi, safi, global_rn,
+                           attr, 1, 0, &ri);
+
+  /* Schedule for processing and unlock node. */
+  bgp_process (bgp, global_rn, afi, safi);
+  bgp_unlock_node (global_rn);
+
+  /* Now, walk this VNI's route table and use the route and its attribute
+   * to create and schedule route in global table.
+   */
+  for (rn = bgp_table_top (vpn->route_table); rn; rn = bgp_route_next (rn))
+    {
+      struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+      /* Identify MAC-IP local routes. */
+      if (evp->prefix.route_type != BGP_EVPN_MAC_IP_ROUTE)
+        continue;
+
+      for (ri = rn->info; ri; ri = ri->next)
+        if (ri->peer == bgp->peer_self
+            && ri->type == ZEBRA_ROUTE_BGP
+            && ri->sub_type == BGP_ROUTE_STATIC)
+          break;
+      if (!ri)
+        continue;
+
+      /* Create route in global routing table using this route entry's
+       * attribute.
+       */
+      attr = ri->attr;
+      global_rn = bgp_afi_node_get (bgp->rib[afi][safi], afi, safi,
+                                    (struct prefix *)evp, &vpn->prd);
+      assert (global_rn);
+      update_evpn_route_entry (bgp, vpn, afi, safi, global_rn,
+                               attr, 1, 0, &global_ri);
+
+      /* Schedule for processing and unlock node. */
+      bgp_process (bgp, global_rn, afi, safi);
+      bgp_unlock_node (global_rn);
+    }
+
+  return 0;
+}
+
+/*
+ * Delete (and withdraw) local routes for a VNI - only from the global
+ * table. Invoked upon router-id change.
+ */
+static int
+delete_withdraw_vni_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  int ret;
+  struct prefix_evpn p;
+  struct bgp_node *global_rn;
+  struct bgp_info *ri;
+  afi_t afi = AFI_L2VPN;
+  safi_t safi = SAFI_EVPN;
+
+  /* Delete and withdraw locally learnt type-2 routes (MACIP)
+   * for this VNI - from the global table.
+   */
+  ret = delete_global_type2_routes (bgp, vpn);
+  if (ret)
+    return ret;
+
+  /* Remove type-3 route for this VNI from global table. */
+  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  global_rn = bgp_afi_node_lookup (bgp->rib[afi][safi], afi, safi,
+                                   (struct prefix *)&p, &vpn->prd);
+  if (global_rn)
+    {
+      /* Delete route entry in the global EVPN table. */
+      delete_evpn_route_entry (bgp, vpn, afi, safi, global_rn, &ri);
+
+      /* Schedule for processing - withdraws to peers happen from
+       * this table.
+       */
+      if (ri)
+        bgp_process (bgp, global_rn, afi, safi);
+      bgp_unlock_node (global_rn);
+    }
+
+  return 0;
+}
+
+/*
  * Iterator for cleaning up a VNI.
  */
 static void
@@ -1065,11 +1206,16 @@ cleanup_vni_on_disable (struct hash_backet *backet, struct bgp *bgp)
     bgp_evpn_free (bgp, vpn);
 }
 
+/*
+ * Handle router-id change. Update and advertise local routes corresponding
+ * to this VNI from peers. Note that this is invoked after updating the
+ * router-id. The routes in the per-VNI table are used to create routes in
+ * the global table and schedule them.
+ */
 static void
 update_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
 {
   struct bgpevpn *vpn;
-  struct prefix_evpn p;
 
   vpn = (struct bgpevpn *) backet->data;
 
@@ -1080,21 +1226,24 @@ update_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
       return;
     }
 
-  bgp_evpn_derive_auto_rd (bgp, vpn);
+  /* Skip VNIs with configured RD. */
+  if (is_rd_configured (vpn))
+    return;
 
-  /* Create EVPN type-3 route and schedule for processing. */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
-  update_evpn_route (bgp, vpn, &p);
+  bgp_evpn_derive_auto_rd (bgp, vpn);
+  update_advertise_vni_routes (bgp, vpn);
 }
 
 /*
- * Withdraw the route from peer before updating the router id in evpn cache.
+ * Handle router-id change. Delete and withdraw local routes corresponding
+ * to this VNI from peers. Note that this is invoked prior to updating
+ * the router-id and is done only on the global route table, the routes
+ * are needed in the per-VNI table to re-advertise with new router id.
  */
 static void
 withdraw_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
 {
   struct bgpevpn *vpn;
-  struct prefix_evpn p;
 
   vpn = (struct bgpevpn *) backet->data;
 
@@ -1105,9 +1254,11 @@ withdraw_router_id_vni (struct hash_backet *backet, struct bgp *bgp)
       return;
     }
 
-  /* Remove EVPN type-3 route and schedule for processing. */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
-  delete_evpn_route (bgp, vpn, &p);
+  /* Skip VNIs with configured RD. */
+  if (is_rd_configured (vpn))
+    return;
+
+  delete_withdraw_vni_routes (bgp, vpn);
 }
 
 /*
@@ -2051,10 +2202,11 @@ bgp_evpn_unimport_route (struct bgp *bgp, afi_t afi, safi_t safi,
 }
 
 /*
- * Handle change to router id.
- * - Update local VNI cache with new router id in RD
- * - Update evpn type 3 route by removing old RD and adding the new RD.
- * This should send withdraw with old RD and update with new RD to peers.
+ * Handle change to BGP router id. This is invoked twice by the change
+ * handler, first before the router id has been changed and then after
+ * the router id has been changed. The first invocation will result in
+ * local routes for all VNIs being deleted and withdrawn and the next
+ * will result in the routes being re-advertised.
  */
 void
 bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw)
@@ -2067,7 +2219,6 @@ bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw)
     hash_iterate (bgp->vnihash,
                   (void (*) (struct hash_backet *, void *))
                   update_router_id_vni, bgp);
-  return;
 }
 
 /*
