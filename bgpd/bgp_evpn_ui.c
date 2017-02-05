@@ -396,9 +396,19 @@ void
 bgp_evpn_configure_rd (struct bgp *bgp, struct bgpevpn *vpn,
                        struct prefix_rd *rd)
 {
+  /* If the VNI is "live", we need to delete and withdraw this VNI's
+   * local routes with the prior RD first. Then, after updating RD,
+   * need to re-advertise.
+   */
+  if (is_vni_live (vpn))
+    bgp_evpn_handle_rd_change (bgp, vpn, 1);
+
   /* update RD */
   memcpy(&vpn->prd, rd, sizeof (struct prefix_rd));
   SET_FLAG (vpn->flags, VNI_FLAG_RD_CFGD);
+
+  if (is_vni_live (vpn))
+    bgp_evpn_handle_rd_change (bgp, vpn, 0);
 }
 
 /*
@@ -407,8 +417,18 @@ bgp_evpn_configure_rd (struct bgp *bgp, struct bgpevpn *vpn,
 void
 bgp_evpn_unconfigure_rd (struct bgp *bgp, struct bgpevpn *vpn)
 {
+  /* If the VNI is "live", we need to delete and withdraw this VNI's
+   * local routes with the prior RD first. Then, after resetting RD
+   * to automatic value, need to re-advertise.
+   */
+  if (is_vni_live (vpn))
+    bgp_evpn_handle_rd_change (bgp, vpn, 1);
+
   /* reset RD to default */
   bgp_evpn_derive_auto_rd (bgp, vpn);
+
+  if (is_vni_live (vpn))
+    bgp_evpn_handle_rd_change (bgp, vpn, 0);
 }
 
 /*

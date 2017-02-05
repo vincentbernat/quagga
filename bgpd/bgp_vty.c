@@ -6303,14 +6303,6 @@ DEFUN (bgp_evpn_vni_rd,
   if (bgp_evpn_rd_matches_existing (vpn, &prd))
     return CMD_SUCCESS;
 
-  /* RD value can be changed only if the VNI is not "live" */
-  if (is_vni_live (vpn))
-    {
-      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before configuring%s",
-               VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
   /* Configure or update the RD. */
   bgp_evpn_configure_rd (bgp, vpn, &prd);
   return CMD_SUCCESS;
@@ -6353,13 +6345,6 @@ DEFUN (no_bgp_evpn_vni_rd,
       return CMD_WARNING;
     }
 
-  if (is_vni_live (vpn))
-    {
-      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before unconfiguring%s",
-               VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
   bgp_evpn_unconfigure_rd (bgp, vpn);
   return CMD_SUCCESS;
 }
@@ -6382,13 +6367,6 @@ DEFUN (no_bgp_evpn_vni_rd_without_val,
   if (!is_rd_configured (vpn))
     {
       vty_out (vty, "%% RD is not configured for this VNI%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  if (is_vni_live (vpn))
-    {
-      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before unconfiguring%s",
-               VTY_NEWLINE);
       return CMD_WARNING;
     }
 

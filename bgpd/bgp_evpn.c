@@ -2222,6 +2222,23 @@ bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw)
 }
 
 /*
+ * Handle change to RD. This is invoked twice by the change handler,
+ * first before the RD has been changed and then after the RD has
+ * been changed. The first invocation will result in local routes
+ * of this VNI being deleted and withdrawn and the next will result
+ * in the routes being re-advertised.
+ */
+void
+bgp_evpn_handle_rd_change (struct bgp *bgp, struct bgpevpn *vpn,
+                           int withdraw)
+{
+  if (withdraw)
+    delete_withdraw_vni_routes (bgp, vpn);
+  else
+    update_advertise_vni_routes (bgp, vpn);
+}
+
+/*
  * Install routes for this VNI. Invoked upon change to Import RT.
  */
 int

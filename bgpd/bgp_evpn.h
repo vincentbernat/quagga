@@ -239,6 +239,8 @@ bgp_evpn_unimport_route (struct bgp *bgp, afi_t afi, safi_t safi,
                          struct prefix *p, struct bgp_info *ri);
 extern void
 bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw) ;
+extern void
+bgp_evpn_handle_rd_change (struct bgp *bgp, struct bgpevpn *vpn, int withdraw);
 extern int
 bgp_evpn_install_routes (struct bgp *bgp, struct bgpevpn *vpn);
 extern int
