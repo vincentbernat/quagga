@@ -6265,12 +6265,6 @@ DEFUN (no_bgp_evpn_vni,
       vty_out (vty, "%% Specified VNI is not configured%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if (is_vni_live (vpn) && is_vni_param_configured (vpn))
-    {
-      vty_out (vty, "%% VNI (i.e., VTEP interface) must be disabled before unconfiguring%s",
-               VTY_NEWLINE);
-      return CMD_WARNING;
-    }
 
   bgp_evpn_delete_vni (bgp, vpn);
   return CMD_SUCCESS;

@@ -460,16 +460,39 @@ bgp_evpn_create_update_vni (struct bgp *bgp, vni_t vni)
 }
 
 /*
- * Delete VNI; either free it or mark as unconfigured.
+ * Delete VNI. If VNI does not exist in the system (i.e., just
+ * configuration), all that is needed is to free it. Otherwise,
+ * any parameters configured for the VNI need to be reset (with
+ * appropriate action) and the VNI marked as unconfigured; the
+ * VNI will continue to exist, purely as a "learnt" entity.
  */
 int
 bgp_evpn_delete_vni (struct bgp *bgp, struct bgpevpn *vpn)
 {
   assert (bgp->vnihash);
 
-  UNSET_FLAG (vpn->flags, VNI_FLAG_CFGD);
   if (!is_vni_live (vpn))
-    bgp_evpn_free (bgp, vpn);
+    {
+      bgp_evpn_free (bgp, vpn);
+      return 0;
+    }
+
+  /* We need to take the unconfigure action for each parameter of this VNI
+   * that is configured. Some optimization is possible, but not worth the
+   * additional code for an operation that should be pretty rare.
+   */
+  UNSET_FLAG (vpn->flags, VNI_FLAG_CFGD);
+
+  /* First, deal with the export side - RD and export RT changes. */
+  if (is_rd_configured (vpn))
+    bgp_evpn_unconfigure_rd (bgp, vpn);
+  if (is_export_rt_configured (vpn))
+    bgp_evpn_unconfigure_export_rt (bgp, vpn, NULL);
+
+  /* Next, deal with the import side. */
+  if (is_import_rt_configured (vpn))
+    bgp_evpn_unconfigure_import_rt (bgp, vpn, NULL);
+
   return 0;
 }
 
