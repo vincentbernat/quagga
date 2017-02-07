@@ -55,6 +55,15 @@ struct evpn_config_write
   struct vty *vty;
 };
 
+/*
+ * Context for VNI hash walk - used by callbacks.
+ */
+struct vni_walk_ctx
+{
+  struct bgp *bgp;
+  struct vty *vty;
+};
+
 extern struct zclient *zclient;
 
 
@@ -268,6 +277,67 @@ display_vni (struct vty *vty, struct bgpevpn *vpn)
                                   ECOMMUNITY_FORMAT_ROUTE_MAP);
   vty_out (vty, "    %s%s", ecom_str, VTY_NEWLINE);
   XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+}
+
+static void
+show_vni_routes (struct bgp *bgp, struct bgpevpn *vpn, int type,
+                 struct vty *vty)
+{
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+  int header = 1;
+  u_int32_t prefix_cnt, path_cnt;
+
+  prefix_cnt = path_cnt = 0;
+
+  for (rn = bgp_table_top (vpn->route_table); rn; rn = bgp_route_next (rn))
+    {
+      struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
+
+      if (type &&
+          evp->prefix.route_type != type)
+        continue;
+
+      if (rn->info)
+        {
+          /* Overall header/legend displayed once. */
+          if (header)
+            {
+              bgp_evpn_show_route_header (vty, bgp);
+              header = 0;
+            }
+
+          prefix_cnt++;
+        }
+
+      /* For EVPN, the prefix is displayed for each path (to fit in
+       * with code that already exists).
+       */
+      for (ri = rn->info; ri; ri = ri->next)
+        {
+          path_cnt++;
+          route_vty_out (vty, &rn->p, ri, 0, SAFI_EVPN, NULL);
+        }
+    }
+
+  if (prefix_cnt == 0)
+    vty_out (vty, "No EVPN prefixes %sexist for this VNI%s",
+             type ? "(of requested type) " : "", VTY_NEWLINE);
+  else
+    vty_out (vty, "%sDisplayed %u prefixes (%u paths)%s%s",
+             VTY_NEWLINE, prefix_cnt, path_cnt,
+             type ? " (of requested type)" : "", VTY_NEWLINE);
+}
+
+static void
+show_vni_routes_hash (struct hash_backet *backet, void *arg)
+{
+  struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
+  struct vni_walk_ctx *wctx = arg;
+  struct vty *vty = wctx->vty;
+
+  vty_out (vty, "%sVNI: %d%s%s", VTY_NEWLINE, vpn->vni, VTY_NEWLINE, VTY_NEWLINE);
+  show_vni_routes (wctx->bgp, vpn, 0, wctx->vty);
 }
 
 static void
@@ -534,6 +604,26 @@ bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp)
 }
 
 /*
+ * Display EVPN routes for all VNIs - vty handler.
+ */
+void
+bgp_evpn_show_routes_vni_all (struct vty *vty, struct bgp *bgp)
+{
+  u_int32_t num_vnis;
+  struct vni_walk_ctx wctx;
+
+  num_vnis = hashcount(bgp->vnihash);
+  if (!num_vnis)
+    return;
+  memset (&wctx, 0, sizeof (struct vni_walk_ctx));
+  wctx.bgp = bgp;
+  wctx.vty = vty;
+  hash_iterate (bgp->vnihash,
+                (void (*) (struct hash_backet *, void *))
+                show_vni_routes_hash, &wctx);
+}
+
+/*
  * Display EVPN routes for a VNI -- for specific type-3 route (vty handler).
  */
 void
@@ -641,12 +731,6 @@ bgp_evpn_show_routes_vni (struct vty *vty, struct bgp *bgp,
                           vni_t vni, int type)
 {
   struct bgpevpn *vpn;
-  struct bgp_node *rn;
-  struct bgp_info *ri;
-  int header = 1;
-  u_int32_t prefix_cnt, path_cnt;
-
-  prefix_cnt = path_cnt = 0;
 
   /* Locate VNI. */
   vpn = bgp_evpn_lookup_vni (bgp, vni);
@@ -657,43 +741,7 @@ bgp_evpn_show_routes_vni (struct vty *vty, struct bgp *bgp,
     }
 
   /* Walk this VNI's route table and display appropriate routes. */
-  for (rn = bgp_table_top (vpn->route_table); rn; rn = bgp_route_next (rn))
-    {
-      struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
-
-      if (type &&
-          evp->prefix.route_type != type)
-        continue;
-
-      if (rn->info)
-        {
-          /* Overall header/legend displayed once. */
-          if (header)
-            {
-              bgp_evpn_show_route_header (vty, bgp);
-              header = 0;
-            }
-
-          prefix_cnt++;
-        }
-
-      /* For EVPN, the prefix is displayed for each path (to fit in
-       * with code that already exists).
-       */
-      for (ri = rn->info; ri; ri = ri->next)
-        {
-          path_cnt++;
-          route_vty_out (vty, &rn->p, ri, 0, SAFI_EVPN, NULL);
-        }
-    }
-
-  if (prefix_cnt == 0)
-    vty_out (vty, "No EVPN prefixes %sexist for this VNI%s",
-             type ? "(of requested type) " : "", VTY_NEWLINE);
-  else
-    vty_out (vty, "%sDisplayed %u prefixes (%u paths)%s%s",
-             VTY_NEWLINE, prefix_cnt, path_cnt,
-             type ? " (of requested type)" : "", VTY_NEWLINE);
+  show_vni_routes (bgp, vpn, type, vty);
 }
 
 /*

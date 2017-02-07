@@ -309,6 +309,8 @@ extern void
 bgp_evpn_show_route_rd_mac (struct vty *vty, struct bgp *bgp,
                             struct prefix_rd *prd, struct ethaddr *mac);
 extern void
+bgp_evpn_show_routes_vni_all (struct vty *vty, struct bgp *bgp);
+extern void
 bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp,
                           int type);
 extern void

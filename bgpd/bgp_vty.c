@@ -11752,6 +11752,24 @@ DEFUN (show_bgp_evpn_route_vni_multicast,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_bgp_evpn_route_vni_all,
+       show_bgp_evpn_route_vni_all_cmd,
+       "show bgp evpn route vni all",
+       SHOW_STR
+       BGP_STR
+       "Address Family Modifier\n"
+       "Display EVPN route information\n"
+       "VXLAN Network Identifier\n"
+       "All VNIs\n")
+{
+  struct bgp *bgp;
+  bgp = bgp_get_default ();
+
+  if (bgp)
+    bgp_evpn_show_routes_vni_all (vty, bgp);
+  return CMD_SUCCESS;
+}
+
 const char *
 afi_safi_print (afi_t afi, safi_t safi)
 {
@@ -17013,6 +17031,7 @@ bgp_vty_init (void)
   install_element (VIEW_NODE, &show_bgp_evpn_route_vni_type_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_vni_multicast_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_route_vni_mac_cmd);
+  install_element (VIEW_NODE, &show_bgp_evpn_route_vni_all_cmd);
   install_element (VIEW_NODE, &show_bgp_evpn_import_rt_cmd);
 
   /* Community-list. */
