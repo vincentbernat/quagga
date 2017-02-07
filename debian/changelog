@@ -1,3 +1,9 @@
+quagga (1.0.0+cl3eau8) RELEASED; urgency=medium
+
+  * Closes: EVPN bug fixes
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Tue, 7 Feb 2017 05:02:23 -0500
+
 quagga (1.0.0+cl3eau7) RELEASED; urgency=medium
 
   * New Enabled: EVPN EA
