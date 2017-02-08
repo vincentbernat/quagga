@@ -1,3 +1,10 @@
+quagga (1.0.0+cl3u8) RELEASED; urgency=medium
+
+  * Closes: CM-14772 - PIM Register packets are 20 bytes too long
+  * Closes: CM-14561 - Fix handling of *,G on RP to allow prune of S,G to go out
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Wed, 8 Feb 2017 15:56:01 -0400
+
 quagga (1.0.0+cl3u7) RELEASED; urgency=medium
 
   * Closes: Various Memory Leaks Fixed
