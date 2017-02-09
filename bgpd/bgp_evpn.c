@@ -57,6 +57,8 @@ static void
 delete_evpn_route_entry (struct bgp *bgp, struct bgpevpn *vpn,
                          afi_t afi, safi_t safi, struct bgp_node *rn,
                          struct bgp_info **ri);
+static int
+delete_all_vni_routes (struct bgp *bgp, struct bgpevpn *vpn);
 
 /*
  * Private functions.
@@ -312,6 +314,7 @@ free_vni_entry (struct hash_backet *backet, struct bgp *bgp)
   struct bgpevpn *vpn;
 
   vpn = (struct bgpevpn *) backet->data;
+  delete_all_vni_routes (bgp, vpn);
   bgp_evpn_free(bgp, vpn);
 }
 
@@ -990,7 +993,7 @@ delete_global_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 
 /*
  * Delete all type-2 (MACIP) local routes for this VNI - from the global
- * table as the per-VNI route table.
+ * table as well as the per-VNI route table.
  */
 static int
 delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
@@ -1027,6 +1030,28 @@ delete_all_type2_routes (struct bgp *bgp, struct bgpevpn *vpn)
 }
 
 /*
+ * Delete all routes in the per-VNI route table.
+ */
+static int
+delete_all_vni_routes (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  struct bgp_node *rn;
+  struct bgp_info *ri, *nextri;
+
+  /* Walk this VNI's route table and delete all routes. */
+  for (rn = bgp_table_top (vpn->route_table); rn; rn = bgp_route_next (rn))
+    {
+      for (ri = rn->info; (ri != NULL) && (nextri = ri->next, 1); ri = nextri)
+        {
+          bgp_info_delete (rn, ri);
+          bgp_info_reap (rn, ri);
+        }
+    }
+
+  return 0;
+}
+
+/*
  * Update (and advertise) local routes for a VNI. Invoked upon the VNI
  * export RT getting modified or change to tunnel IP. Note that these
  * situations need the route in the per-VNI table as well as the global
@@ -1050,8 +1075,10 @@ update_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
 }
 
 /*
- * Delete (and withdraw) local routes for a VNI. Invoked upon the VNI
- * being deleted or EVPN (advertise-all-vni) being disabled.
+ * Delete (and withdraw) local routes for specified VNI from the global
+ * table and per-VNI table. After this, remove all other routes from
+ * the per-VNI table. Invoked upon the VNI being deleted or EVPN
+ * (advertise-all-vni) being disabled.
  */
 static int
 delete_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
@@ -1067,7 +1094,12 @@ delete_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
     return ret;
 
   build_evpn_type3_prefix (&p, vpn->originator_ip);
-  return delete_evpn_route (bgp, vpn, &p);
+  ret = delete_evpn_route (bgp, vpn, &p);
+  if (ret)
+    return ret;
+
+  /* Delete all routes from the per-VNI table. */
+  return delete_all_vni_routes (bgp, vpn);
 }
 
 /*
