@@ -244,7 +244,7 @@ bgp_evpn_show_route_header (struct vty *vty, struct bgp *bgp)
            VTY_NEWLINE);
   vty_out (vty, "EVPN type-2 prefix: [2]:[ESI]:[EthTag]:[MAClen]:[MAC]%s",
            VTY_NEWLINE);
-  vty_out (vty, "EVPN type-3 prefix: [3]:[ESI]:[EthTag]:[IPlen]:[OrigIP]%s%s",
+  vty_out (vty, "EVPN type-3 prefix: [3]:[EthTag]:[IPlen]:[OrigIP]%s%s",
            VTY_NEWLINE, VTY_NEWLINE);
   vty_out (vty, ri_header, VTY_NEWLINE);
 }
@@ -830,7 +830,7 @@ bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
             {
               vty_out (vty, "EVPN type-2 prefix: [2]:[ESI]:[EthTag]:[MAClen]:"
                        "[MAC]%s", VTY_NEWLINE);
-              vty_out (vty, "EVPN type-3 prefix: [3]:[ESI]:[EthTag]:[IPlen]:"
+              vty_out (vty, "EVPN type-3 prefix: [3]:[EthTag]:[IPlen]:"
                        "[OrigIP]%s%s", VTY_NEWLINE, VTY_NEWLINE);
               rd_header = 0;
             }
