@@ -204,7 +204,8 @@ is_vni_present_in_irt_vnis (struct list *vnis, struct bgpevpn *vpn)
 }
 
 /*
- * Mask off global-admin field of specified extended community (RT)
+ * Mask off global-admin field of specified extended community (RT),
+ * just retain the local-admin field.
  */
 static inline void
 mask_ecom_global_admin (struct ecommunity_val *dst,
@@ -213,9 +214,13 @@ mask_ecom_global_admin (struct ecommunity_val *dst,
   u_char type;
 
   type = src->val[0];
+  dst->val[0] = 0;
   if (type == ECOMMUNITY_ENCODE_AS)
-    dst->val[2] = dst->val[3] = 0;
-  else if (type == ECOMMUNITY_ENCODE_AS4)
+    {
+      dst->val[2] = dst->val[3] = 0;
+    }
+  else if (type == ECOMMUNITY_ENCODE_AS4 ||
+           type == ECOMMUNITY_ENCODE_IP)
     {
       dst->val[2] = dst->val[3] = 0;
       dst->val[4] = dst->val[5] = 0;
@@ -1474,7 +1479,8 @@ is_route_matching_for_vni (struct bgp *bgp, struct bgpevpn *vpn,
        */
       irt = NULL;
       if (type == ECOMMUNITY_ENCODE_AS ||
-          type == ECOMMUNITY_ENCODE_AS4)
+          type == ECOMMUNITY_ENCODE_AS4 ||
+          type == ECOMMUNITY_ENCODE_IP)
         {
           memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
           mask_ecom_global_admin (&eval_tmp, eval);
@@ -1689,7 +1695,8 @@ install_uninstall_evpn_route (struct bgp *bgp, afi_t afi, safi_t safi,
        */
       irt = NULL;
       if (type == ECOMMUNITY_ENCODE_AS ||
-          type == ECOMMUNITY_ENCODE_AS4)
+          type == ECOMMUNITY_ENCODE_AS4 ||
+          type == ECOMMUNITY_ENCODE_IP)
         {
           memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
           mask_ecom_global_admin (&eval_tmp, eval);
