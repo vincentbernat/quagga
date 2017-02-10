@@ -1733,7 +1733,7 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
    */
   if (psize != 33 && psize != 37 && psize != 49)
     {
-      zlog_err ("%u:%s - Rx EVPN NLRI with invalid length %d",
+      zlog_err ("%u:%s - Rx EVPN Type-2 NLRI with invalid length %d",
                 peer->bgp->vrf_id, peer->host, psize);
       return -1;
     }
@@ -1760,8 +1760,18 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   macaddr_len = *pfx++;
 
   /* Get the MAC Addr */
-  memcpy (&p.prefix.mac.octet, pfx, macaddr_len);
-  pfx += macaddr_len;
+  if (macaddr_len == (ETHER_ADDR_LEN * 8))
+    {
+      memcpy (&p.prefix.mac.octet, pfx, ETHER_ADDR_LEN);
+      pfx += ETHER_ADDR_LEN;
+    }
+  else
+    {
+      zlog_err ("%u:%s - Rx EVPN Type-2 NLRI with unsupported MAC address length %d",
+                peer->bgp->vrf_id, peer->host, macaddr_len);
+      return -1;
+    }
+
 
   /* Get the IP. */
   ipaddr_len = *pfx++;
@@ -1769,11 +1779,9 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
     p.prefix.ipa_type = IP_ADDR_NONE;
   else
     {
-      if (ipaddr_len == 4)
-        p.prefix.ipa_type = IP_ADDR_V4;
-      else
-        p.prefix.ipa_type = IP_ADDR_V6;
-      memcpy (&p.prefix.ip, pfx, ipaddr_len);
+      zlog_err ("%u:%s - Rx EVPN Type-2 NLRI with unsupported IP address length %d",
+                peer->bgp->vrf_id, peer->host, ipaddr_len);
+      return -1;
     }
 
   pfx += ipaddr_len;
@@ -1809,7 +1817,7 @@ process_type3_route (struct peer *peer, afi_t afi, safi_t safi,
    */
   if (psize != 17 && psize != 29)
     {
-      zlog_err ("%u:%s - Rx EVPN NLRI with invalid length %d",
+      zlog_err ("%u:%s - Rx EVPN Type-3 NLRI with invalid length %d",
                 peer->bgp->vrf_id, peer->host, psize);
       return -1;
     }
@@ -1831,11 +1839,17 @@ process_type3_route (struct peer *peer, afi_t afi, safi_t safi,
 
   /* Get the IP. */
   ipaddr_len = *pfx++;
-  if (ipaddr_len == 4)
-    p.prefix.ipa_type = IP_ADDR_V4;
+  if (ipaddr_len == IPV4_MAX_BITLEN)
+    {
+      p.prefix.ipa_type = IP_ADDR_V4;
+      memcpy (&p.prefix.ip, pfx, IPV4_MAX_BYTELEN);
+    }
   else
-    p.prefix.ipa_type = IP_ADDR_V6;
-  memcpy (&p.prefix.ip, pfx, ipaddr_len);
+    {
+      zlog_err ("%u:%s - Rx EVPN Type-3 NLRI with unsupported IP address length %d",
+                peer->bgp->vrf_id, peer->host, ipaddr_len);
+      return -1;
+    }
 
   /* Process the route. */
   if (attr)
@@ -1878,14 +1892,14 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len)
     {
       snprintf (buf, len, "[%d]:[0]:[%d]:[%s]",
                 p->prefix.route_type, IS_EVPN_PREFIX_IPADDR_V4(p) ? \
-                IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
+                IPV4_MAX_BITLEN : IPV6_MAX_BITLEN,
                 inet_ntoa(p->prefix.ip.v4_addr));
     }
   if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
     {
       if (IS_EVPN_PREFIX_IPADDR_NONE(p))
         snprintf (buf, len, "[%d]:[0]:[0]:[%d]:[%s]",
-                  p->prefix.route_type, ETHER_ADDR_LEN,
+                  p->prefix.route_type, 8*ETHER_ADDR_LEN,
                   mac2str (&p->prefix.mac, buf1, sizeof(buf1)));
       else
         {
@@ -1894,9 +1908,9 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len)
           family = IS_EVPN_PREFIX_IPADDR_V4(p) ? \
                    AF_INET : AF_INET6;
           snprintf (buf, len, "[%d]:[0]:[0]:[%d]:[%s]:[%d]:[%s]",
-                    p->prefix.route_type, ETHER_ADDR_LEN,
+                    p->prefix.route_type, 8*ETHER_ADDR_LEN,
                     mac2str (&p->prefix.mac, buf1, sizeof(buf1)),
-                    family == AF_INET ? IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN,
+                    family == AF_INET ? IPV4_MAX_BITLEN : IPV6_MAX_BITLEN,
                     inet_ntop (family, &p->prefix.ip.addr,
                                buf2, PREFIX2STR_BUFFER));
         }
@@ -2086,20 +2100,20 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
   switch (evp->prefix.route_type)
     {
       case BGP_EVPN_IMET_ROUTE:
-        stream_putc (s, 17); // TODO: Hardcoded for now
+        stream_putc (s, 17); // TODO: length - assumes IPv4 address
         stream_put (s, prd->val, 8); /* RD */
         stream_putl (s, 0); /* Ethernet Tag ID */
-        stream_putc (s, 4); /* IP address Length */
+        stream_putc (s, IPV4_MAX_BITLEN); /* IP address Length - bits */
         /* Originating Router's IP Addr */
         stream_put_in_addr (s, &evp->prefix.ip.v4_addr);
         break;
 
       case BGP_EVPN_MAC_IP_ROUTE:
-        stream_putc (s, 33); // TODO: Hardcoded for now
+        stream_putc (s, 33); // TODO: length - assume no IP, 1 VNI
         stream_put (s, prd->val, 8); /* RD */
         stream_put (s, 0, 10); /* ESI */
         stream_putl (s, 0); /* Ethernet Tag ID */
-        stream_putc (s, ETHER_ADDR_LEN); /* Mac Addr Len */
+        stream_putc (s, 8*ETHER_ADDR_LEN); /* Mac Addr Len - bits */
         stream_put (s, evp->prefix.mac.octet, 6); /* Mac Addr */
         stream_putc (s, 0); /* IP address Length */
         stream_put (s, tag, 3); /* VNI is contained in 'tag' */
