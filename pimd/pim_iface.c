@@ -28,6 +28,7 @@
 #include "vrf.h"
 #include "linklist.h"
 #include "plist.h"
+#include "hash.h"
 
 #include "pimd.h"
 #include "pim_iface.h"
@@ -87,6 +88,9 @@ static void *if_list_clean(struct pim_interface *pim_ifp)
     list_delete(pim_ifp->pim_ifchannel_list);
   }
 
+  if (pim_ifp->pim_ifchannel_hash)
+    hash_free (pim_ifp->pim_ifchannel_hash);
+
   XFREE(MTYPE_PIM_INTERFACE, pim_ifp);
 
   return 0;
@@ -132,6 +136,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
   pim_ifp->igmp_socket_list = NULL;
   pim_ifp->pim_neighbor_list = NULL;
   pim_ifp->pim_ifchannel_list = NULL;
+  pim_ifp->pim_ifchannel_hash = NULL;
   pim_ifp->pim_generation_id = 0;
 
   /* list of struct igmp_sock */
@@ -161,6 +166,9 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
   }
   pim_ifp->pim_ifchannel_list->del = (void (*)(void *)) pim_ifchannel_free;
   pim_ifp->pim_ifchannel_list->cmp = (int (*)(void *, void *)) pim_ifchannel_compare;
+
+  pim_ifp->pim_ifchannel_hash = hash_create (pim_ifchannel_hash_key,
+                                             pim_ifchannel_equal);
 
   ifp->info = pim_ifp;
 
@@ -197,6 +205,8 @@ void pim_if_delete(struct interface *ifp)
   list_delete(pim_ifp->igmp_socket_list);
   list_delete(pim_ifp->pim_neighbor_list);
   list_delete(pim_ifp->pim_ifchannel_list);
+
+  hash_free (pim_ifp->pim_ifchannel_hash);
 
   XFREE(MTYPE_PIM_INTERFACE, pim_ifp);
 
