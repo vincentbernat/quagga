@@ -84,12 +84,15 @@ static void *if_list_clean(struct pim_interface *pim_ifp)
     list_delete(pim_ifp->pim_neighbor_list);
   }
 
+  if (pim_ifp->upstream_switch_list)
+    list_delete(pim_ifp->upstream_switch_list);
+
   if (pim_ifp->pim_ifchannel_list) {
     list_delete(pim_ifp->pim_ifchannel_list);
   }
 
   if (pim_ifp->pim_ifchannel_hash)
-    hash_free (pim_ifp->pim_ifchannel_hash);
+    hash_free(pim_ifp->pim_ifchannel_hash);
 
   XFREE(MTYPE_PIM_INTERFACE, pim_ifp);
 
@@ -135,6 +138,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
   pim_ifp->igmp_join_list = NULL;
   pim_ifp->igmp_socket_list = NULL;
   pim_ifp->pim_neighbor_list = NULL;
+  pim_ifp->upstream_switch_list = NULL;
   pim_ifp->pim_ifchannel_list = NULL;
   pim_ifp->pim_ifchannel_hash = NULL;
   pim_ifp->pim_generation_id = 0;
@@ -156,6 +160,13 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
     return if_list_clean(pim_ifp);
   }
   pim_ifp->pim_neighbor_list->del = (void (*)(void *)) pim_neighbor_free;
+
+  pim_ifp->upstream_switch_list = list_new();
+  if (!pim_ifp->upstream_switch_list) {
+    zlog_err("%s %s: failure: upstream_switch_list=list_new()",
+             __FILE__, __PRETTY_FUNCTION__);
+    return if_list_clean(pim_ifp);
+  }
 
   /* list of struct pim_ifchannel */
   pim_ifp->pim_ifchannel_list = list_new();
@@ -204,6 +215,7 @@ void pim_if_delete(struct interface *ifp)
 
   list_delete(pim_ifp->igmp_socket_list);
   list_delete(pim_ifp->pim_neighbor_list);
+  list_delete(pim_ifp->upstream_switch_list);
   list_delete(pim_ifp->pim_ifchannel_list);
 
   hash_free (pim_ifp->pim_ifchannel_hash);
