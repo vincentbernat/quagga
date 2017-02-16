@@ -1937,7 +1937,7 @@ bgp_mp_unreach_parse (struct bgp_attr_parser_args *args,
  * Fetch and return the sequence number from MAC Mobility extended
  * community, if present, else 0.
  */
-static u_int32_t
+u_int32_t
 bgp_attr_mac_mobility_seqnum (struct attr *attr)
 {
   struct ecommunity *ecom;

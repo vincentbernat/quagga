@@ -699,6 +699,9 @@ update_evpn_route_entry (struct bgp *bgp, struct bgpevpn *vpn, afi_t afi,
       /* Add (or update) attribute to hash. */
       attr_new = bgp_attr_intern (attr);
 
+      /* Extract MAC mobility sequence number, if any. */
+      attr_new->extra->mm_seqnum = bgp_attr_mac_mobility_seqnum (attr_new);
+
       /* Create new route with its attribute. */
       tmp_ri = info_make (ZEBRA_ROUTE_BGP, BGP_ROUTE_STATIC, 0,
                           bgp->peer_self, attr_new, rn);

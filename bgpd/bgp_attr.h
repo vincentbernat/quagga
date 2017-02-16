@@ -268,6 +268,9 @@ encap_tlv_dup(struct bgp_attr_encap_subtlv *orig);
 extern void
 bgp_attr_flush_encap(struct attr *attr);
 
+extern u_int32_t
+bgp_attr_mac_mobility_seqnum (struct attr *attr);
+
 /**
  * Set of functions to encode MP_REACH_NLRI and MP_UNREACH_NLRI attributes.
  * Typical call sequence is to call _start(), followed by multiple _prefix(),
