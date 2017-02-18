@@ -148,9 +148,9 @@ is_vni_param_configured (struct bgpevpn *vpn)
 static inline void
 vni2tag (vni_t vni, u_char *tag)
 {
-  tag[0] = (u_char)(vni >> 12);
-  tag[1] = (u_char)(vni >> 4);
-  tag[2] = (u_char)(vni << 4);
+  tag[0] = (vni >> 16) & 0xFF;
+  tag[1] = (vni >> 8) & 0xFF;
+  tag[2] = vni & 0xFF;
 }
 
 static inline vni_t
@@ -158,9 +158,9 @@ tag2vni (u_char *tag)
 {
   vni_t vni;
 
-  vni = ((u_int32_t) *tag++ << 12);
-  vni |= (u_int32_t) *tag++ << 4;
-  vni |= (u_int32_t) ((*tag & 0xf0) >> 4);
+  vni = ((u_int32_t) *tag++ << 16);
+  vni |= (u_int32_t) *tag++ << 8;
+  vni |= (u_int32_t) (*tag & 0xFF);
 
   return vni;
 }
