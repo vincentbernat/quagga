@@ -1,3 +1,10 @@
+quagga (1.0.0+cl3u9) RELEASED; urgency=medium
+
+  * Closes: CM-14605 - Pass correct data to remove static routes with tags
+  * Closes: CM-14873 - Stop deregistering static nexthops unless removing
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Tue, 21 Feb 2017 13:02:27 -0400
+
 quagga (1.0.0+cl3u8) RELEASED; urgency=medium
 
   * Closes: CM-14772 - PIM Register packets are 20 bytes too long
