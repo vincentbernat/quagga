@@ -113,7 +113,6 @@ Report bugs to %s\n", progname, PACKAGE_BUGREPORT);
   exit (status);
 }
 
-
 int main(int argc, char** argv, char** envp) {
   char *p;
   char *vty_addr = NULL;
@@ -190,7 +189,7 @@ int main(int argc, char** argv, char** envp) {
   cmd_init(1);
   vty_init(master);
   memory_init();
-  vrf_init ();
+  pim_vrf_init ();
   access_list_init();
   prefix_list_init ();
   prefix_list_add_hook (pim_rp_prefix_list_update);
