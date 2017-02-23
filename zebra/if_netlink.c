@@ -554,7 +554,7 @@ netlink_interface_af_bridge (struct nlmsghdr *h, int len,
    during bootstrap. */
 static int
 netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                   ns_id_t ns_id)
+                   ns_id_t ns_id, int startup)
 {
   int len;
   struct ifinfomsg *ifi;
@@ -684,7 +684,7 @@ interface_lookup_netlink_af_bridge (struct zebra_ns *zns)
                          RTEXT_FILTER_BRVLAN);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_interface, &zns->netlink_cmd, zns, 0, 0);
 
   return ret;
 }
@@ -699,7 +699,7 @@ interface_lookup_netlink (struct zebra_ns *zns)
   ret = netlink_request (AF_PACKET, RTM_GETLINK, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_interface, &zns->netlink_cmd, zns, 0, 1);
   if (ret < 0)
     return ret;
 
@@ -712,7 +712,7 @@ interface_lookup_netlink (struct zebra_ns *zns)
   ret = netlink_request (AF_INET, RTM_GETADDR, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0, 1);
   if (ret < 0)
     return ret;
 
@@ -721,7 +721,7 @@ interface_lookup_netlink (struct zebra_ns *zns)
   ret = netlink_request (AF_INET6, RTM_GETADDR, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0);
+  ret = netlink_parse_info (netlink_interface_addr, &zns->netlink_cmd, zns, 0, 1);
   if (ret < 0)
     return ret;
 #endif /* HAVE_IPV6 */
@@ -778,7 +778,7 @@ netlink_address (int cmd, int family, struct interface *ifp,
     addattr_l (&req.n, sizeof req, IFA_LABEL, ifc->label,
                strlen (ifc->label) + 1);
 
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns, 0);
 }
 
 int
@@ -795,7 +795,7 @@ kernel_address_delete_ipv4 (struct interface *ifp, struct connected *ifc)
 
 int
 netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                        ns_id_t ns_id)
+                        ns_id_t ns_id, int startup)
 {
   int len;
   struct ifaddrmsg *ifa;
@@ -933,7 +933,7 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
 int
 netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                     ns_id_t ns_id)
+                     ns_id_t ns_id, int startup)
 {
   int len;
   struct ifinfomsg *ifi;
@@ -1220,7 +1220,7 @@ netlink_vxlan_flood_list_update (struct interface *ifp, struct prefix *vtep, int
   dst_alen = (vtep->family == AF_INET ? 4 : 16);
   addattr_l (&req.n, sizeof (req), NDA_DST, &vtep->u.prefix, dst_alen);
 
-  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns);
+  return netlink_talk (netlink_talk_filter, &req.n, &zns->netlink_cmd, zns, 0);
 }
 
 /* Interface information read by netlink. */

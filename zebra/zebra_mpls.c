@@ -1854,7 +1854,7 @@ zebra_mpls_print_lsp_table (struct vty *vty, struct zebra_vrf *zvrf,
       vty_out (vty, "%s", VTY_NEWLINE);
     }
 
-  list_delete_all_node(lsp_list);
+  list_delete(lsp_list);
 }
 
 /*
@@ -1894,7 +1894,7 @@ zebra_mpls_write_lsp_config (struct vty *vty, struct zebra_vrf *zvrf)
           }
       }
 
-  list_delete_all_node(slsp_list);
+  list_delete(slsp_list);
   return (zvrf->slsp_table->count ? 1 : 0);
 }
 

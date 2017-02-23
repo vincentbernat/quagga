@@ -1,0 +1,122 @@
+#! /bin/bash
+# Copyright 2017, Cumulus Networks, Inc.  All rights reserved.
+#
+# Record routing state; used by cl-support
+#
+#TIMEOUT=90
+#DEFAULT
+#ONCORE=bgpd,isisd,ospf6d,ospfclient,ospfd,pimd,ripd,ripngd,ssd,watchquagga,zebra,pimd
+
+module=${0##*/}
+funcs=(quagga)
+json=
+jexec=
+
+func_quagga()
+{
+    exec_cmd $jexec ospf vtysh -c "show ip ospf $json"
+    exec_cmd $jexec ospf.neighbor vtysh -c "show ip ospf neighbor $json"
+    exec_cmd $jexec ospf.interface vtysh -c "show ip ospf interface $json"
+    exec_cmd ospf.database vtysh -c "show ip ospf database"
+    exec_cmd ospf.borderrouters vtysh -c "show ip ospf border-routers"
+    exec_cmd ospf.database.router vtysh -c "show ip ospf database router"
+    exec_cmd ospf.show_running vtysh -c "show running ospfd"
+
+    exec_cmd ospf6 vtysh -c "show ipv6 ospf6"
+    exec_cmd ospf6.neighbor vtysh -c "show ipv6 ospf6 neighbor"
+    exec_cmd ospf6.interface vtysh -c "show ipv6 ospf6 interface"
+    exec_cmd ospf6.database vtysh -c "show ipv6 ospf6 database"
+    exec_cmd ospf6.redistribute vtysh -c "show ipv6 ospf6 redistribute"
+    exec_cmd ospf6.spf.tree vtysh -c "show ipv6 ospf6 spf tree"
+    exec_cmd ospf6.database.router vtysh -c "show ipv6 ospf6 database router"
+    exec_cmd ospf6.show_running vtysh -c "show running ospf6d"
+
+    exec_cmd $jexec bgp.summary vtysh -c "show ip bgp vrf all summary $json"
+    exec_cmd $jexec bgp.neighbors vtysh -c "show ip bgp vrf all neighbors $json"
+    exec_cmd bgp.nexthop vtysh -c "show ip bgp vrf all nexthop"
+    exec_cmd bgp.update_group vtysh -c "show ip bgp vrf all update-group"
+    exec_cmd $jexec bgp.route vtysh -c "show ip bgp vrf all $json"
+    exec_cmd bgp.show_running vtysh -c "show running bgpd"
+
+    exec_cmd $jexec bgp.ipv6_summary vtysh -c "show bgp vrf all summary $json"
+    exec_cmd bgp.ipv6_update_group vtysh -c "show bgp vrf all update-group"
+    exec_cmd $jexec bgp.ipv6_route vtysh -c "show bgp vrf all $json"
+
+    exec_cmd quagga.show_running vtysh -c "show running-config"
+
+    exec_cmd zebra.vrf vtysh -c "show vrf"
+    exec_cmd zebra.intf vtysh -c "show interface vrf all"
+    exec_cmd zebra.nht vtysh -c "show ip nht vrf all"
+    exec_cmd zebra.ipv6_nht vtysh -c "show ipv6 nht vrf all"
+    exec_cmd zebra.route vtysh -c "show ip route vrf all"
+    exec_cmd zebra.ipv6_route vtysh -c "show ipv6 route vrf all"
+    exec_cmd zebra.client vtysh -c "show zebra client summary"
+
+    exec_cmd $jexec pim.upstream vtysh -c "show ip pim upstream $json"
+    exec_cmd $jexec pim.join vtysh -c "show ip pim join $json"
+    exec_cmd $jexec pim.mroutes vtysh -c "show ip mroute $json"
+    exec_cmd $jexec pim.interfaces vtysh -c "show ip pim interface detail $json"
+    exec_cmd $jexec pim.state vtysh -c "show ip pim state $json"
+    exec_cmd $jexec pim.neighbors vtysh -c "show ip pim neighbor $json"
+    exec_cmd $jexec pim.igmp.group vtysh -c "show ip igmp group $json"
+    exec_cmd pim.igmp.join vtysh -c "show ip igmp join"
+    exec_cmd $jexec pim.igmp.int vtysh -c "show ip igmp int detail $json"
+    exec_cmd $jexec pim.rp.info vtysh -c "show ip pim rp-info $json"
+    exec_cmd $jexec pim.rpf vtysh -c "show ip pim rpf $json"
+    exec_cmd pim.multicast vtysh -c "show ip multicast"
+    exec_cmd $jexec pim.msdp.peer vtysh -c "show ip msdp peer $json"
+    exec_cmd $jexec pim.msdp.sa vtysh -c "show ip msdp sa $json"
+    exec_cmd $jexec pim.msdp.mesh vtysh -c "show ip msdp mesh-group $json"
+
+	exec_cmd $jexec evpn.vni vtysh -c "show evpn vni"
+	exec_cmd $jexec evpn.mac.vni vtysh -c "show evpn mac vni all"
+	exec_cmd $jexec bgp.evpn.summary vtysh -c "show bgp evpn summary"
+	exec_cmd $jexec bgp.evpn.vni vtysh -c "show bgp evpn vni"
+	exec_cmd $jexec bgp.evpn.route vtysh -c "show bgp evpn route"
+	exec_cmd $jexec bgp.evpn.route.vni.all vtysh -c "show bgp evpn route vni all"
+
+    [ $SUP_SECURE -eq 0 ] && {
+        [ $SUP_VERBOSE -eq 1 ] &&
+            date +"%F_%T: ${FUNCNAME[0]}: copy.vtysh.history files to archive" 1>&2
+        for f in /home/* /root; do
+            [ -e ${f}/.history_quagga ] &&
+                cp -a ${f}/.history_quagga ${f##*/}.vtysh.history
+        done
+     }
+}
+
+# main
+while getopts "c:jl" Option; do
+    case $Option in
+    c) [ $SUP_VERBOSE -eq 1 ] && # default submods
+        echo ${module}: Invoked for "$OPTARG" core dumps 1>&2 ;;
+    j) jexec=-j json=json ;;
+    l) echo ${funcs[@]}
+       exit 0 ;;
+    *) ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+main()
+{
+    local -r TIMEFORMAT='%2R seconds' tfile=/run/${module}_funcstime$$
+    local secs
+
+    for func in ${funcs[@]}; do
+        [ $SUP_VERBOSE -eq 1 ] && echo "$module.$func" 1>&2
+        date +"### $module.$func Started at %F-%T"
+        { time func_$func 2>&$stderr  ; } 2>$tfile
+        read secs < $tfile
+        echo "### $module.$func Completed in $secs"
+    done
+    rm $tfile
+}
+
+TIMEFORMAT="Module $module Completed in %2R seconds"
+exec 42>&2
+stderr=42
+
+{ time main $@ 2>&$stderr ; } 2>&1
+
+exit 0

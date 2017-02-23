@@ -322,7 +322,7 @@ pim_register_recv (struct interface *ifp,
 	  zlog_debug("%s: Sending register-Stop to %s and dropping mr. packet",
 	    __func__, "Sender");
 	/* Drop Packet Silently */
-	return 1;
+	return 0;
       }
     }
 
@@ -353,7 +353,7 @@ pim_register_recv (struct interface *ifp,
               }
             PIM_UPSTREAM_FLAG_UNSET_SRC_STREAM(upstream->flags);
             pim_upstream_del (upstream, __PRETTY_FUNCTION__);
-            return 1;
+            return 0;
           }
 	upstream->sg.src = sg.src;
 	upstream->rpf.rpf_addr = upstream->rpf.source_nexthop.mrib_nexthop_addr;
@@ -402,5 +402,5 @@ pim_register_recv (struct interface *ifp,
     pim_register_stop_send (ifp, &sg, dest_addr, src_addr);
   }
 
-  return 1;
+  return 0;
 }
