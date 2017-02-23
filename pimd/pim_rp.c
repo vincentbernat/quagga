@@ -124,7 +124,8 @@ void
 pim_rp_free (void)
 {
   if (qpim_rp_list)
-    list_free (qpim_rp_list);
+    list_delete (qpim_rp_list);
+  qpim_rp_list = NULL;
 }
 
 /*
