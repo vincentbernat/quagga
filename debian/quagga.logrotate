@@ -1,3 +1,4 @@
+# Copyright 2017, Cumulus Networks, Inc.  All rights reserved.
 /var/log/quagga/*.log {
         size 500k
         sharedscripts
@@ -5,6 +6,7 @@
         compress
         rotate 14
         create 640 quagga quaggavty
+        include /etc/logrotate.d/cumulus.savefast
 
         postrotate
 		for i in zebra bgpd ripd ospfd ripngd ospf6d isisd pimd ldpd; do
