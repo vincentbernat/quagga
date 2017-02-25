@@ -317,7 +317,7 @@ end
 end
  address-family evpn
   neighbor LEAF activate
-  advertise-vni
+  advertise-all-vni
   vni 10100
    rd 65000:10100
    route-target import 10.1.1.1:10100
@@ -834,6 +834,14 @@ def compare_context_objects(newconf, running):
             # entire 'router bgp' context then ignore this sub-context
             elif "router bgp" in running_ctx_keys[0] and len(running_ctx_keys) > 1 and delete_bgpd:
                 continue
+
+            elif ("router bgp" in running_ctx_keys[0] and
+                  len(running_ctx_keys) > 1 and
+                  running_ctx_keys[1].startswith('address-family')):
+                # There's no 'no address-family' support and so we have to
+                # delete each line individually again
+                for line in running_ctx.lines:
+                    lines_to_del.append((running_ctx_keys, line))
 
             # Non-global context
             elif running_ctx_keys and not any("address-family" in key for key in running_ctx_keys):

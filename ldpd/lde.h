@@ -23,6 +23,7 @@
 
 #include "openbsd-queue.h"
 #include "openbsd-tree.h"
+#include "if.h"
 
 enum fec_type {
 	FEC_TYPE_IPV4,
@@ -61,10 +62,13 @@ struct lde_req {
 /* mapping entries */
 struct lde_map {
 	struct fec		 fec;
-	LIST_ENTRY(lde_map)	 entry;
+	struct lde_map_head	*head;	/* fec_node's upstream/downstream */
+	RB_ENTRY(lde_map)	 entry;
 	struct lde_nbr		*nexthop;
 	struct map		 map;
 };
+RB_HEAD(lde_map_head, lde_map);
+RB_PROTOTYPE(lde_map_head, lde_map, entry, lde_map_cmp);
 
 /* withdraw entries */
 struct lde_wdraw {
@@ -100,6 +104,7 @@ struct fec_nh {
 	LIST_ENTRY(fec_nh)	 entry;
 	int			 af;
 	union ldpd_addr		 nexthop;
+	ifindex_t		 ifindex;
 	uint32_t		 remote_label;
 	uint8_t			 priority;
 	uint8_t			 flags;
@@ -110,8 +115,8 @@ struct fec_node {
 	struct fec		 fec;
 
 	LIST_HEAD(, fec_nh)	 nexthops;	/* fib nexthops */
-	LIST_HEAD(, lde_map)	 downstream;	/* recv mappings */
-	LIST_HEAD(, lde_map)	 upstream;	/* sent mappings */
+	struct lde_map_head	 downstream;	/* recv mappings */
+	struct lde_map_head	 upstream;	/* sent mappings */
 
 	uint32_t		 local_label;
 	void			*data;		/* fec specific data */
@@ -163,12 +168,12 @@ void		 rt_dump(pid_t);
 void		 fec_snap(struct lde_nbr *);
 void		 fec_tree_clear(void);
 struct fec_nh	*fec_nh_find(struct fec_node *, int, union ldpd_addr *,
-		    uint8_t);
+		    ifindex_t, uint8_t);
 uint32_t	 egress_label(enum fec_type);
 void		 lde_kernel_insert(struct fec *, int, union ldpd_addr *,
-		    uint8_t, int, void *);
+		    ifindex_t, uint8_t, int, void *);
 void		 lde_kernel_remove(struct fec *, int, union ldpd_addr *,
-		    uint8_t);
+		    ifindex_t, uint8_t);
 void		 lde_kernel_reevaluate(struct fec *);
 void		 lde_check_mapping(struct map *, struct lde_nbr *);
 void		 lde_check_request(struct map *, struct lde_nbr *);

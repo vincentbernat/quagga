@@ -1,3 +1,9 @@
+quagga (1.0.0+cl3u10) UNRELEASED; urgency=medium
+
+  * New Enabled: EVPN functionality
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 24 Feb 2017 17:24:05 -0800
+
 quagga (1.0.0+cl3u9) RELEASED; urgency=medium
 
   * Closes: CM-14605 - Pass correct data to remove static routes with tags

@@ -55,8 +55,7 @@ DECLARE_MGROUP(MVTYSH)
        || saved_node == BGP_ENCAP_NODE || saved_node == BGP_ENCAPV6_NODE \
        || saved_node == BGP_IPV4_NODE \
        || saved_node == BGP_IPV6_NODE || saved_node == BGP_IPV4M_NODE \
-       || saved_node == BGP_IPV6M_NODE || saved_node == BGP_EVPN_NODE \
-       || saved_node == BGP_EVPN_VNI_NODE)
+       || saved_node == BGP_IPV6M_NODE || saved_node == BGP_EVPN_NODE)
 
 enum vtysh_write_integrated {
 	WRITE_INTEGRATED_UNSPECIFIED,

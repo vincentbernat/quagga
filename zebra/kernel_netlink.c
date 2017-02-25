@@ -355,7 +355,7 @@ addattr_l (struct nlmsghdr *n, unsigned int maxlen, int type,
   if (data)
     memcpy (RTA_DATA (rta), data, alen);
   else
-    assert (len == 0);
+    assert (alen == 0);
 
   n->nlmsg_len = NLMSG_ALIGN (n->nlmsg_len) + RTA_ALIGN (len);
 
@@ -381,7 +381,7 @@ rta_addattr_l (struct rtattr *rta, unsigned int maxlen, int type,
   if (data)
     memcpy (RTA_DATA (subrta), data, alen);
   else
-    assert (len == 0);
+    assert (alen == 0);
 
   rta->rta_len = NLMSG_ALIGN (rta->rta_len) + RTA_ALIGN (len);
 
@@ -757,7 +757,7 @@ netlink_request (int family, int type, struct nlsock *nl,
   struct
   {
     struct nlmsghdr nlh;
-    struct rtgenmsg g;
+    struct ifinfomsg ifm;
   } req;
 
   /* Check netlink socket. */
@@ -780,7 +780,7 @@ netlink_request (int family, int type, struct nlsock *nl,
       req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
       req.nlh.nlmsg_pid = nl->snl.nl_pid;
       req.nlh.nlmsg_seq = ++nl->seq;
-      req.g.rtgen_family = family;
+      req.ifm.ifi_family = family;
       size = sizeof req;
       ptr = &req;
     }

@@ -126,6 +126,9 @@ struct attr_extra
 #if ENABLE_BGP_VNC
   struct bgp_attr_encap_subtlv *vnc_subtlvs;		/* VNC-specific */
 #endif
+
+  /* EVPN MAC Mobility sequence number, if any. */
+  u_int32_t mm_seqnum;
 };
 
 /* BGP core attribute structure. */
@@ -265,6 +268,9 @@ encap_tlv_dup(struct bgp_attr_encap_subtlv *orig);
 extern void
 bgp_attr_flush_encap(struct attr *attr);
 
+extern u_int32_t
+bgp_attr_mac_mobility_seqnum (struct attr *attr);
+
 /**
  * Set of functions to encode MP_REACH_NLRI and MP_UNREACH_NLRI attributes.
  * Typical call sequence is to call _start(), followed by multiple _prefix(),
@@ -300,6 +306,12 @@ bgp_rmap_nhop_changed(u_int32_t out_rmap_flags, u_int32_t in_rmap_flags)
            CHECK_FLAG(out_rmap_flags, BATTR_RMAP_IPV6_PREFER_GLOBAL_CHANGED) ||
            CHECK_FLAG(out_rmap_flags, BATTR_RMAP_IPV6_LL_NHOP_CHANGED) ||
            CHECK_FLAG(in_rmap_flags, BATTR_RMAP_NEXTHOP_UNCHANGED)) ? 1 : 0);
+}
+
+static inline u_int32_t
+mac_mobility_seqnum (struct attr *attr)
+{
+  return (attr && attr->extra) ? attr->extra->mm_seqnum : 0;
 }
 
 #endif /* _QUAGGA_BGP_ATTR_H */

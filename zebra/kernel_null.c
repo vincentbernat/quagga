@@ -74,3 +74,7 @@ void kernel_init (struct zebra_ns *zns) { return; }
 void kernel_terminate (struct zebra_ns *zns) { return; }
 void route_read (struct zebra_ns *zns) { return; }
 void neigh_read (struct zebra_ns *zns) { return; }
+void neigh_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
+                            struct interface *br_if)
+{
+}

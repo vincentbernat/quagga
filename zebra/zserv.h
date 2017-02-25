@@ -150,6 +150,8 @@ extern void rib_init (void);
 extern void interface_list (struct zebra_ns *);
 extern void route_read (struct zebra_ns *);
 extern void neigh_read (struct zebra_ns *);
+extern void neigh_read_for_bridge (struct zebra_ns *, struct interface *,
+                                   struct interface *);
 extern void kernel_init (struct zebra_ns *);
 extern void kernel_terminate (struct zebra_ns *);
 extern void zebra_route_map_init (void);

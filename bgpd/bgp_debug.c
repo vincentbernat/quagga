@@ -41,6 +41,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_rd.h"
+#include "bgpd/bgp_mplsvpn.h"
+#include "bgpd/bgp_evpn.h"
 
 unsigned long conf_bgp_debug_as4;
 unsigned long conf_bgp_debug_neighbor_events;
@@ -2087,13 +2089,15 @@ bgp_debug_zebra (struct prefix *p)
 }
 
 const char *
-bgp_debug_rdpfxpath2str (struct prefix_rd *prd, union prefixconstptr pu,
-                         int addpath_valid, u_int32_t addpath_id,
-                         char *str, int size)
+bgp_debug_rdpfxpath2str (afi_t afi, safi_t safi,
+                         struct prefix_rd *prd, union prefixconstptr pu,
+                         u_char *tag, int addpath_valid,
+                         u_int32_t addpath_id, char *str, int size)
 {
   char rd_buf[RD_ADDRSTRLEN];
   char pfx_buf[PREFIX_STRLEN];
   char pathid_buf[20];
+  char tag_buf[30];
 
   if (size < BGP_PRD_PATH_STRLEN)
     return NULL;
@@ -2102,14 +2106,33 @@ bgp_debug_rdpfxpath2str (struct prefix_rd *prd, union prefixconstptr pu,
   pathid_buf[0] = '\0';
   if (addpath_valid)
     sprintf(pathid_buf, " with addpath ID %d", addpath_id);
+  tag_buf[0] = '\0';
+  if (tag)
+    {
+      if (safi == SAFI_MPLS_VPN)
+        {
+          u_int32_t label;
+
+          label = decode_label (tag);
+          sprintf (tag_buf, " label %u", label);
+        }
+      else if (afi == AFI_L2VPN && safi == SAFI_EVPN)
+        {
+          char tag_buf2[20];
+          sprintf (tag_buf, " VNI %s",
+                   bgp_evpn_tag2str (tag, tag_buf2, sizeof (tag_buf2)));
+        }
+    }
 
   if (prd)
-    snprintf (str, size, "RD %s %s%s",
+    snprintf (str, size, "RD %s %s%s%s",
               prefix_rd2str(prd, rd_buf, sizeof (rd_buf)),
-              prefix2str (pu, pfx_buf, sizeof (pfx_buf)), pathid_buf);
+              prefix2str (pu, pfx_buf, sizeof (pfx_buf)),
+              tag_buf, pathid_buf);
   else
-    snprintf (str, size, "%s%s",
-              prefix2str (pu, pfx_buf, sizeof (pfx_buf)), pathid_buf);
+    snprintf (str, size, "%s%s%s",
+              prefix2str (pu, pfx_buf, sizeof (pfx_buf)),
+              tag_buf, pathid_buf);
 
   return str;
 }

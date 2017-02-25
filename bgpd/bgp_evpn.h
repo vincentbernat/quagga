@@ -30,6 +30,10 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_ecommunity.h"
 
+/* EVPN prefix lengths. */
+#define EVPN_TYPE_2_ROUTE_PREFIXLEN      192
+#define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
+
 /* EVPN route types. */
 typedef enum
 {
@@ -63,6 +67,9 @@ struct bgpevpn
   /* Import and Export RTs. */
   struct ecommunity         *import_rtl;
   struct ecommunity         *export_rtl;
+
+  /* Route table for EVPN routes for this VNI. */
+  struct bgp_table          *route_table;
 
   QOBJ_FIELDS
 };
@@ -138,6 +145,65 @@ is_vni_param_configured (struct bgpevpn *vpn)
           is_export_rt_configured (vpn));
 }
 
+static inline void
+vni2tag (vni_t vni, u_char *tag)
+{
+  tag[0] = (vni >> 16) & 0xFF;
+  tag[1] = (vni >> 8) & 0xFF;
+  tag[2] = vni & 0xFF;
+}
+
+static inline vni_t
+tag2vni (u_char *tag)
+{
+  vni_t vni;
+
+  vni = ((u_int32_t) *tag++ << 16);
+  vni |= (u_int32_t) *tag++ << 8;
+  vni |= (u_int32_t) (*tag & 0xFF);
+
+  return vni;
+}
+
+static inline void
+encode_mac_mobility_extcomm (int static_mac, u_int32_t seq,
+                             struct ecommunity_val *eval)
+{
+  memset (eval, 0, sizeof (*eval));
+  eval->val[0] = ECOMMUNITY_ENCODE_EVPN;
+  eval->val[1] = ECOMMUNITY_EVPN_SUBTYPE_MAC_MOBILITY;
+  if (static_mac)
+    eval->val[2] = 0x01;
+  eval->val[4] = (seq >> 24) & 0xff;
+  eval->val[5] = (seq >> 16) & 0xff;
+  eval->val[6] = (seq >> 8) & 0xff;
+  eval->val[7] = seq & 0xff;
+}
+
+static inline void
+build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac)
+{
+  memset (p, 0, sizeof (struct prefix_evpn));
+  p->family = AF_ETHERNET;
+  p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
+  p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
+  memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
+  p->prefix.ipa_type = IP_ADDR_NONE;
+}
+
+static inline void
+build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
+{
+  memset (p, 0, sizeof (struct prefix_evpn));
+  p->family = AF_ETHERNET;
+  p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
+  p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
+  p->prefix.ipa_type = IP_ADDR_V4;
+  p->prefix.ip.v4_addr = originator_ip;
+}
+
+extern char *
+bgp_evpn_tag2str (u_char *tag, char *buf, int len);
 extern char *
 bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len);
 extern void
@@ -158,21 +224,23 @@ extern void
 bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn);
 extern void
 bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
-                        struct prefix_rd *prd, int addpath_encode,
-                        u_int32_t addpath_tx_id);
+                        struct prefix_rd *prd, u_char *tag,
+                        int addpath_encode, u_int32_t addpath_tx_id);
 extern int
 bgp_evpn_nlri_sanity_check (struct peer *peer, int afi, safi_t safi,
                             u_char *pnt, bgp_size_t length, int *numpfx);
 extern int
 bgp_evpn_nlri_parse (struct peer *peer, struct attr *attr, struct bgp_nlri *packet);
 extern int
-bgp_evpn_install_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                        struct prefix *p, struct bgp_info *ri);
+bgp_evpn_import_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                       struct prefix *p, struct bgp_info *ri);
 extern int
-bgp_evpn_uninstall_route (struct bgp *bgp, afi_t afi, safi_t safi,
-                          struct prefix *p, struct bgp_info *ri);
+bgp_evpn_unimport_route (struct bgp *bgp, afi_t afi, safi_t safi,
+                         struct prefix *p, struct bgp_info *ri);
 extern void
 bgp_evpn_handle_router_id_update (struct bgp *bgp, int withdraw) ;
+extern void
+bgp_evpn_handle_rd_change (struct bgp *bgp, struct bgpevpn *vpn, int withdraw);
 extern int
 bgp_evpn_install_routes (struct bgp *bgp, struct bgpevpn *vpn);
 extern int
@@ -226,12 +294,32 @@ bgp_config_write_evpn_info (struct vty *vty, struct bgp *bgp, afi_t afi,
 extern void
 bgp_evpn_show_import_rts (struct vty *vty, struct bgp *bgp);
 extern void
+bgp_evpn_show_route_vni_multicast (struct vty *vty, struct bgp *bgp,
+                                   vni_t vni, struct in_addr orig_ip);
+extern void
+bgp_evpn_show_route_vni_mac (struct vty *vty, struct bgp *bgp,
+                             vni_t vni, struct ethaddr *mac);
+extern void
+bgp_evpn_show_routes_vni (struct vty *vty, struct bgp *bgp,
+                          vni_t vni, int type);
+extern void
+bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
+                        struct prefix_rd *prd, int type);
+extern void
+bgp_evpn_show_route_rd_mac (struct vty *vty, struct bgp *bgp,
+                            struct prefix_rd *prd, struct ethaddr *mac);
+extern void
+bgp_evpn_show_routes_vni_all (struct vty *vty, struct bgp *bgp);
+extern void
+bgp_evpn_show_all_routes (struct vty *vty, struct bgp *bgp,
+                          int type);
+extern void
 bgp_evpn_show_vni (struct vty *vty, struct bgp *bgp, vni_t vni);
 extern void
 bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp);
 extern void
-bgp_evpn_set_advertise_vni (struct bgp *bgp);
+bgp_evpn_set_advertise_all_vni (struct bgp *bgp);
 extern void
-bgp_evpn_unset_advertise_vni (struct bgp *bgp);
+bgp_evpn_unset_advertise_all_vni (struct bgp *bgp);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

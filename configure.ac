@@ -7,7 +7,7 @@
 ##
 AC_PREREQ(2.60)
 
-AC_INIT(Quagga, 1.0.0+cl3u9, [https://bugzilla.quagga.net])
+AC_INIT(Quagga, 1.0.0+cl3u10, [https://bugzilla.quagga.net])
 CONFIG_ARGS="$*"
 AC_SUBST(CONFIG_ARGS)
 AC_CONFIG_SRCDIR(lib/zebra.h)
@@ -1312,11 +1312,11 @@ else
 fi
 AM_CONDITIONAL(OSPFD, test "x$OSPFD" = "xospfd")
 
-if test "${enable_ldpd}" = "yes";then
+if test "${enable_ldpd}" = "no";then
+  LDPD=""
+else
   LDPD="ldpd"
   AC_DEFINE(HAVE_LDPD, 1, ldpd)
-else
-  LDPD=""
 fi
 AM_CONDITIONAL(LDPD, test "x$LDPD" = "xldpd")
 

@@ -73,6 +73,9 @@ struct bgp_info_extra
 
   } vnc;
 #endif
+
+  /* For imported routes into a VNI (or VRF), this points to the parent. */
+  void *parent;
 };
 
 struct bgp_info
@@ -145,6 +148,13 @@ struct bgp_info
   u_int32_t addpath_rx_id;
   u_int32_t addpath_tx_id;
 
+};
+
+/* bgp_info pair - used in path selection. */
+struct bgp_info_pair
+{
+  struct bgp_info *old;
+  struct bgp_info *new;
 };
 
 /* BGP static route configuration. */
@@ -241,6 +251,13 @@ bgp_bump_version (struct bgp_node *node)
 extern void bgp_process_queue_init (void);
 extern void bgp_route_init (void);
 extern void bgp_route_finish (void);
+extern void bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
+                                struct bgp_maxpaths_cfg *mpath_cfg,
+                                struct bgp_info_pair *result,
+                                afi_t afi, safi_t safi);
+extern void bgp_zebra_clear_route_change_flags (struct bgp_node *rn);
+extern int
+bgp_zebra_has_route_changed (struct bgp_node *rn, struct bgp_info *selected);
 extern void bgp_install_routes_for_afi_safi (struct bgp *, afi_t, safi_t);
 extern void bgp_cleanup_routes (void);
 extern void bgp_announce_route (struct peer *, afi_t, safi_t);
@@ -262,6 +279,7 @@ extern struct bgp_node *bgp_afi_node_lookup (struct bgp_table *table, afi_t afi,
 extern struct bgp_info *bgp_info_lock (struct bgp_info *);
 extern struct bgp_info *bgp_info_unlock (struct bgp_info *);
 extern void bgp_info_add (struct bgp_node *rn, struct bgp_info *ri);
+extern void bgp_info_reap (struct bgp_node *rn, struct bgp_info *ri);
 extern void bgp_info_delete (struct bgp_node *rn, struct bgp_info *ri);
 extern struct bgp_info_extra *bgp_info_extra_get (struct bgp_info *);
 extern void bgp_info_set_flag (struct bgp_node *, struct bgp_info *, u_int32_t);

@@ -26,6 +26,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ECOMMUNITY_ENCODE_IP                0x01
 #define ECOMMUNITY_ENCODE_AS4               0x02
 #define ECOMMUNITY_ENCODE_OPAQUE            0x03
+#define ECOMMUNITY_ENCODE_EVPN              0x06
 
 /* Low-order octet of the Extended Communities type field.  */
 #define ECOMMUNITY_ROUTE_TARGET             0x02
@@ -33,6 +34,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 /* Low-order octet of the Extended Communities type field for OPAQUE types */
 #define ECOMMUNITY_OPAQUE_SUBTYPE_ENCAP     0x0c
+
+/* Low-order octet of the Extended Communities type field for EVPN types */
+#define ECOMMUNITY_EVPN_SUBTYPE_MAC_MOBILITY   0x00
 
 /* Extended communities attribute string format.  */
 #define ECOMMUNITY_FORMAT_ROUTE_MAP            0
@@ -69,6 +73,54 @@ struct ecommunity_val
 
 #define ecom_length(X)    ((X)->size * ECOMMUNITY_SIZE)
 
+/*
+ * Encode BGP Route Target AS:nn.
+ */
+static inline void
+encode_route_target_as (as_t as, u_int32_t val,
+                        struct ecommunity_val *eval)
+{
+  eval->val[0] = ECOMMUNITY_ENCODE_AS;
+  eval->val[1] = ECOMMUNITY_ROUTE_TARGET;
+  eval->val[2] = (as >> 8) & 0xff;
+  eval->val[3] = as & 0xff;
+  eval->val[4] = (val >> 24) & 0xff;
+  eval->val[5] = (val >> 16) & 0xff;
+  eval->val[6] = (val >> 8) & 0xff;
+  eval->val[7] = val & 0xff;
+}
+
+/*
+ * Encode BGP Route Target IP:nn.
+ */
+static inline void
+encode_route_target_ip (struct in_addr ip, u_int16_t val,
+                        struct ecommunity_val *eval)
+{
+  eval->val[0] = ECOMMUNITY_ENCODE_IP;
+  eval->val[1] = ECOMMUNITY_ROUTE_TARGET;
+  memcpy (&eval->val[2], &ip, sizeof (struct in_addr));
+  eval->val[6] = (val >> 8) & 0xff;
+  eval->val[7] = val & 0xff;
+}
+
+/*
+ * Encode BGP Route Target AS4:nn.
+ */
+static inline void
+encode_route_target_as4 (as_t as, u_int16_t val,
+                         struct ecommunity_val *eval)
+{
+  eval->val[0] = ECOMMUNITY_ENCODE_AS4;
+  eval->val[1] = ECOMMUNITY_ROUTE_TARGET;
+  eval->val[2] = (as >> 24) & 0xff;
+  eval->val[3] = (as >> 16) & 0xff;
+  eval->val[4] = (as >> 8) & 0xff;
+  eval->val[5] =  as & 0xff;
+  eval->val[6] = (val >> 8) & 0xff;
+  eval->val[7] = val & 0xff;
+}
+
 extern void ecommunity_init (void);
 extern void ecommunity_finish (void);
 extern void ecommunity_free (struct ecommunity **);
@@ -84,8 +136,6 @@ extern struct ecommunity *ecommunity_str2com (const char *, int, int);
 extern char *ecommunity_ecom2str (struct ecommunity *, int);
 extern int ecommunity_match (const struct ecommunity *, const struct ecommunity *);
 extern char *ecommunity_str (struct ecommunity *);
-extern int ecommunity_encode (u_char type, u_char sub_type, int trans, as_t as,
-                struct in_addr ip, u_int32_t val, struct ecommunity_val *eval);
 
 /* for vpn */
 extern struct ecommunity *ecommunity_new (void);

@@ -69,7 +69,6 @@ struct evpn_addr
   u_char route_type;
   enum evpn_ipaddr_type_t ipa_type;
   struct ethaddr mac;
-  vni_t vni;
   union
   {
     u_char addr;
@@ -339,6 +338,7 @@ extern void str2in6_addr (const char *, struct in6_addr *);
 extern const char *inet6_ntoa (struct in6_addr);
 
 extern const char *mac2str (const struct ethaddr *, char *, int);
+extern int str2mac (const char *buf, struct ethaddr *mac);
 
 static inline int ipv6_martian (struct in6_addr *addr)
 {

@@ -114,6 +114,8 @@
         ((struct rtattr *) (((u_char *) (rta)) + RTA_ALIGN((rta)->rta_len)))
 #endif
 
+static vlanid_t filter_vlan = 0;
+
 struct gw_family_t
 {
   u_int16_t     filler;
@@ -649,14 +651,11 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   zvrf = vrf_info_lookup(ifp->vrf_id);
   if (!zvrf || !EVPN_ENABLED(zvrf))
     return 0;
+  if (!ifp->info)
+    return 0;
 
   /* The interface should be something we're interested in. */
-  /* Drop on VxLAN */
-  if (IS_ZEBRA_IF_VXLAN(ifp))
-    return 0;
   if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp))
-    return 0;
-  if (!ifp->info)
     return 0;
 
   /* Drop "permanent" entries. */
@@ -710,8 +709,27 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
                 ifp->name, ndm->ndm_ifindex, vid,
                 mac2str (&mac, buf, sizeof (buf)));
 
+  if (filter_vlan && vid != filter_vlan)
+    return 0;
+
+  /* If add or update, do accordingly if learnt on a "local" interface; if
+   * the notification is over VxLAN, this has to be related to multi-homing,
+   * so perform an implicit delete of any local entry (if it exists).
+   */
   if (h->nlmsg_type == RTM_NEWNEIGH)
-    return zebra_vxlan_local_mac_add_update (ifp, br_if, &mac, vid);
+    {
+      if (IS_ZEBRA_IF_VXLAN(ifp))
+        return zebra_vxlan_check_del_local_mac (ifp, br_if, &mac, vid);
+
+      return zebra_vxlan_local_mac_add_update (ifp, br_if, &mac, vid);
+    }
+
+  /* This is a delete notification. If notification is for a MAC over VxLAN,
+   * check if it needs to be readded (refreshed); otherwise, handle delete of
+   * MAC over "local" interface.
+   */
+  if (IS_ZEBRA_IF_VXLAN(ifp))
+    return zebra_vxlan_check_readd_remote_mac (ifp, br_if, &mac, vid);
 
   return zebra_vxlan_local_mac_del (ifp, br_if, &mac, vid);
 }
@@ -730,8 +748,52 @@ netlink_neigh_read (struct zebra_ns *zns)
   ret = netlink_request (AF_BRIDGE, RTM_GETNEIGH, &zns->netlink_cmd, 0);
   if (ret < 0)
     return ret;
+  /* We are reading entire table. */
+  filter_vlan = 0;
   ret = netlink_parse_info (netlink_neigh_table, &zns->netlink_cmd, zns, 0, 1);
 
+  return ret;
+}
+
+/*
+ * Neighbor table read using netlink interface. This is for a specific
+ * bridge and matching specific access VLAN (if VLAN-aware bridge).
+ */
+int
+netlink_neigh_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
+                               struct interface *br_if)
+{
+  struct
+    {
+      struct nlmsghdr   n;
+      struct ifinfomsg  ifm;
+      char              buf[256];
+    } req;
+  struct zebra_if *br_zif;
+  struct zebra_if *zif;
+  struct zebra_l2if_vxlan *zl2if;
+  int ret = 0;
+
+  memset (&req, 0, sizeof(req));
+  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+  req.n.nlmsg_type = RTM_GETNEIGH;
+  req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+  req.ifm.ifi_family = AF_BRIDGE;
+  addattr32 (&req.n, sizeof(req), IFLA_MASTER, br_if->ifindex);
+
+  /* Save VLAN we're filtering on, if needed. */
+  br_zif = (struct zebra_if *) br_if->info;
+  zif = (struct zebra_if *) ifp->info;
+  zl2if = (struct zebra_l2if_vxlan *)zif->l2if;
+  if (!zl2if)
+    return -1;
+  if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
+    filter_vlan = zl2if->access_vlan;
+  ret = netlink_talk (netlink_neigh_table, &req.n,
+                      &zns->netlink_cmd, zns, 0);
+
+  /* Reset VLAN filter. */
+  filter_vlan = 0;
   return ret;
 }
 
@@ -1372,7 +1434,8 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
   br_slave = (struct zebra_l2info_brslave *)zif->l2if;
   if ((br_if = br_slave->br_if) == NULL)
     {
-      zlog_warn ("MAC add on IF %s(%u) - no mapping to bridge",
+      zlog_warn ("MAC %s on IF %s(%u) - no mapping to bridge",
+                 (cmd == RTM_NEWNEIGH) ? "add" : "del",
                  ifp->name, ifp->ifindex);
       return -1;
     }
@@ -1383,11 +1446,11 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
   req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
   req.n.nlmsg_flags = NLM_F_REQUEST;
   if (cmd == RTM_NEWNEIGH)
-    req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_APPEND);
+    req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_REPLACE);
   req.n.nlmsg_type = cmd;
   req.ndm.ndm_family = AF_BRIDGE;
-  req.ndm.ndm_state = NUD_NOARP; // Mark as "static"
-  req.ndm.ndm_flags |= NTF_SELF; // Handle by "self", not "master"
+  req.ndm.ndm_state = NUD_REACHABLE;
+  req.ndm.ndm_flags |= NTF_SELF | NTF_MASTER;
 
   addattr_l (&req.n, sizeof (req), NDA_LLADDR, mac, 6);
   req.ndm.ndm_ifindex = ifp->ifindex;
@@ -1399,10 +1462,10 @@ netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
   addattr32 (&req.n, sizeof (req), NDA_MASTER, br_if->ifindex);
 
   if (IS_ZEBRA_DEBUG_KERNEL)
-    zlog_debug ("Tx %s family %s IF %s(%u) MAC %s Remote VTEP %s",
+    zlog_debug ("Tx %s family %s IF %s(%u) vlan %d MAC %s Remote VTEP %s",
                 nl_msg_type_to_str (cmd),
                 nl_family_to_str (req.ndm.ndm_family),
-                ifp->name, ifp->ifindex,
+                ifp->name, ifp->ifindex, vid,
                 mac2str (mac, buf, sizeof (buf)),
                 inet_ntoa (vtep_ip));
 

@@ -62,7 +62,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_vty.h"
-#include "bgpd/bgp_evpn.c"
+#include "bgpd/bgp_evpn.h"
 
 #if ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
@@ -247,7 +247,7 @@ bgp_info_add (struct bgp_node *rn, struct bgp_info *ri)
 
 /* Do the actual removal of info from RIB, for use by bgp_process 
    completion callback *only* */
-static void
+void
 bgp_info_reap (struct bgp_node *rn, struct bgp_info *ri)
 {
   if (ri->next)
@@ -377,7 +377,7 @@ bgp_info_path_with_addpath_rx_str (struct bgp_info *ri, char *buf)
 static int
 bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
 	      int *paths_eq, struct bgp_maxpaths_cfg *mpath_cfg, int debug,
-              const char *pfx_buf)
+              const char *pfx_buf, afi_t afi, safi_t safi)
 {
   struct attr *newattr, *existattr;
   struct attr_extra *newattre, *existattre;
@@ -385,6 +385,8 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
   bgp_peer_sort_t exist_sort;
   u_int32_t new_pref;
   u_int32_t exist_pref;
+  u_int32_t new_mm_seq;
+  u_int32_t exist_mm_seq;
   u_int32_t new_med;
   u_int32_t exist_med;
   u_int32_t new_weight;
@@ -431,6 +433,31 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist,
   existattr = exist->attr;
   newattre = newattr->extra;
   existattre = existattr->extra;
+
+  /* For EVPN routes, we cannot just go by local vs remote, we have to
+   * look at the MAC mobility sequence number, if present.
+   */
+  if (safi == SAFI_EVPN)
+    {
+      new_mm_seq = mac_mobility_seqnum (newattr);
+      exist_mm_seq = mac_mobility_seqnum (existattr);
+
+      if (new_mm_seq > exist_mm_seq)
+        {
+          if (debug)
+            zlog_debug("%s: %s wins over %s due to MM seq %u > %u",
+                       pfx_buf, new_buf, exist_buf, new_mm_seq, exist_mm_seq);
+          return 1;
+        }
+
+      if (new_mm_seq < exist_mm_seq)
+        {
+          if (debug)
+            zlog_debug("%s: %s loses to %s due to MM seq %u < %u",
+                       pfx_buf, new_buf, exist_buf, new_mm_seq, exist_mm_seq);
+          return 0;
+        }
+    }
 
   /* 1. Weight check. */
   new_weight = exist_weight = 0;
@@ -903,7 +930,8 @@ bgp_info_cmp_compatible (struct bgp *bgp, struct bgp_info *new, struct bgp_info 
   int paths_eq;
   struct bgp_maxpaths_cfg mpath_cfg;
   int ret;
-  ret = bgp_info_cmp (bgp, new, exist, &paths_eq, &mpath_cfg, 0, __func__);
+  ret = bgp_info_cmp (bgp, new, exist, &paths_eq, &mpath_cfg, 0,
+                      __func__, afi, safi);
 
   if (paths_eq)
     ret = 0;
@@ -1598,16 +1626,11 @@ subgroup_announce_check (struct bgp_info *ri, struct update_subgroup *subgrp,
   return 1;
 }
 
-struct bgp_info_pair
-{
-  struct bgp_info *old;
-  struct bgp_info *new;
-};
-
-static void
+void
 bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
 		    struct bgp_maxpaths_cfg *mpath_cfg,
-		    struct bgp_info_pair *result)
+		    struct bgp_info_pair *result,
+                    afi_t afi, safi_t safi)
 {
   struct bgp_info *new_select;
   struct bgp_info *old_select;
@@ -1667,7 +1690,7 @@ bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
                                                  ri2->attr->aspath))
                     {
                       if (bgp_info_cmp (bgp, ri2, new_select, &paths_eq,
-                                        mpath_cfg, debug, pfx_buf))
+                                        mpath_cfg, debug, pfx_buf, afi, safi))
                         {
                           bgp_info_unset_flag (rn, new_select, BGP_INFO_DMED_SELECTED);
                           new_select = ri2;
@@ -1724,7 +1747,8 @@ bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
 
       bgp_info_unset_flag (rn, ri, BGP_INFO_DMED_CHECK);
 
-      if (bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg, debug, pfx_buf))
+      if (bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg,
+                        debug, pfx_buf, afi, safi))
 	{
 	  new_select = ri;
 	}
@@ -1778,7 +1802,8 @@ bgp_best_selection (struct bgp *bgp, struct bgp_node *rn,
               continue;
             }
 
-          bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg, debug, pfx_buf);
+          bgp_info_cmp (bgp, ri, new_select, &paths_eq, mpath_cfg,
+                        debug, pfx_buf, afi, safi);
 
           if (paths_eq)
             {
@@ -1853,7 +1878,7 @@ subgroup_process_announce_selected (struct update_subgroup *subgrp,
  * Clear IGP changed flag and attribute changed flag for a route (all paths).
  * This is called at the end of route processing.
  */
-static void
+void
 bgp_zebra_clear_route_change_flags (struct bgp_node *rn)
 {
   struct bgp_info *ri;
@@ -1872,7 +1897,7 @@ bgp_zebra_clear_route_change_flags (struct bgp_node *rn)
  * if the route selection returns the same best route as earlier - to
  * determine if we need to update zebra or not.
  */
-static int
+int
 bgp_zebra_has_route_changed (struct bgp_node *rn, struct bgp_info *selected)
 {
   struct bgp_info *mpinfo;
@@ -1941,7 +1966,8 @@ bgp_process_main (struct work_queue *wq, void *data)
     }
 
   /* Best path selection. */
-  bgp_best_selection (bgp, rn, &bgp->maxpaths[afi][safi], &old_and_new);
+  bgp_best_selection (bgp, rn, &bgp->maxpaths[afi][safi],
+                      &old_and_new, afi, safi);
   old_select = old_and_new.old;
   new_select = old_and_new.new;
 
@@ -2286,6 +2312,11 @@ bgp_rib_withdraw (struct bgp_node *rn, struct bgp_info *ri, struct peer *peer,
 	}
     }
 #endif    
+
+  /* If this is an EVPN route, process for un-import. */
+  if (safi == SAFI_EVPN)
+    bgp_evpn_unimport_route (peer->bgp, afi, safi, &rn->p, ri);
+
   bgp_rib_remove (rn, ri, peer, afi, safi);
 }
 
@@ -2325,8 +2356,8 @@ bgp_update_martian_nexthop (struct bgp *bgp, afi_t afi, safi_t safi, struct attr
     {
       if (attr->nexthop.s_addr == 0 ||
           IPV4_CLASS_DE (ntohl (attr->nexthop.s_addr)) ||
-          bgp_nexthop_self (bgp, attr))
-        ret = 1;
+          bgp_nexthop_self (bgp, attr->nexthop))
+        return 1;
     }
 
   /* If MP_NEXTHOP is present, validate it. */
@@ -2341,7 +2372,8 @@ bgp_update_martian_nexthop (struct bgp *bgp, afi_t afi, safi_t safi, struct attr
         case BGP_ATTR_NHLEN_IPV4:
         case BGP_ATTR_NHLEN_VPNV4:
           ret = (attre->mp_nexthop_global_in.s_addr == 0 ||
-                 IPV4_CLASS_DE (ntohl (attre->mp_nexthop_global_in.s_addr)));
+                 IPV4_CLASS_DE (ntohl (attre->mp_nexthop_global_in.s_addr)) ||
+                 bgp_nexthop_self (bgp, attre->mp_nexthop_global_in));
           break;
 
 #ifdef HAVE_IPV6
@@ -2497,9 +2529,12 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	      && CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
 	    {
 	      if (bgp_debug_update(peer, p, NULL, 1))
-                zlog_debug ("%s rcvd %s", peer->host,
-                            bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                      addpath_id, pfx_buf, sizeof (pfx_buf)));
+                {
+                  bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                           addpath_id ? 1 : 0, addpath_id,
+                                           pfx_buf, sizeof (pfx_buf));
+                  zlog_debug ("%s rcvd %s", peer->host, pfx_buf);
+                }
 
 	      if (bgp_damp_update (ri, rn, afi, safi) != BGP_DAMP_SUPPRESSED)
 	        {
@@ -2511,16 +2546,18 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 	    {
 	      if (bgp_debug_update(peer, p, NULL, 1))
                 {
-                if (!peer->rcvd_attr_printed)
-                  {
-                    zlog_debug ("%s rcvd UPDATE w/ attr: %s", peer->host, peer->rcvd_attr_str);
-                    peer->rcvd_attr_printed = 1;
-                  }
+                  if (!peer->rcvd_attr_printed)
+                    {
+                      zlog_debug ("%s rcvd UPDATE w/ attr: %s",
+                                  peer->host, peer->rcvd_attr_str);
+                      peer->rcvd_attr_printed = 1;
+                    }
 
+                  bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                           addpath_id ?  1 : 0, addpath_id,
+                                           pfx_buf, sizeof (pfx_buf));
 		  zlog_debug ("%s rcvd %s...duplicate ignored",
-		              peer->host,
-                              bgp_debug_rdpfxpath2str (prd, p, addpath_id ?
-                                1 : 0, addpath_id, pfx_buf, sizeof (pfx_buf)));
+		              peer->host, pfx_buf);
                 }
 
 	      /* graceful restart STALE flag unset. */
@@ -2541,18 +2578,24 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       if (CHECK_FLAG(ri->flags, BGP_INFO_REMOVED))
         {
           if (bgp_debug_update(peer, p, NULL, 1))
-            zlog_debug ("%s rcvd %s, flapped quicker than processing",
-                        peer->host,
-                        bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                  addpath_id, pfx_buf, sizeof (pfx_buf)));
+            {
+              bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                       addpath_id ? 1 : 0, addpath_id,
+                                       pfx_buf, sizeof (pfx_buf));
+              zlog_debug ("%s rcvd %s, flapped quicker than processing",
+                          peer->host, pfx_buf);
+            }
           bgp_info_restore (rn, ri);
         }
 
       /* Received Logging. */
       if (bgp_debug_update(peer, p, NULL, 1))
-	  zlog_debug ("%s rcvd %s", peer->host,
-                      bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                        addpath_id, pfx_buf, sizeof (pfx_buf)));
+        {
+          bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                   addpath_id ? 1 : 0, addpath_id,
+                                   pfx_buf, sizeof (pfx_buf));
+	  zlog_debug ("%s rcvd %s", peer->host, pfx_buf);
+        }
 
       /* graceful restart STALE flag unset. */
       if (CHECK_FLAG (ri->flags, BGP_INFO_STALE))
@@ -2605,9 +2648,9 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
     }
 #endif
       /* Special handling for EVPN update of an existing route. If the
-       * extended community attribute has changed, we need to process the
-       * route for uninstall with its existing extended community before
-       * modifying the attribute and doing the usual processing.
+       * extended community attribute has changed, we need to un-import
+       * the route using its existing extended community. It will be
+       * subsequently processed for import with the new extended community.
        */
       if (safi == SAFI_EVPN && !same_attr)
         {
@@ -2624,7 +2667,7 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
                     zlog_debug ("Change in EXT-COMM, existing %s new %s",
                                 ecommunity_str (ri->attr->extra->ecommunity),
                                 ecommunity_str (attr_new->extra->ecommunity));
-                  bgp_evpn_uninstall_route (bgp, afi, safi, p, ri);
+                  bgp_evpn_unimport_route (bgp, afi, safi, p, ri);
                 }
             }
         }
@@ -2633,8 +2676,9 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
       bgp_attr_unintern (&ri->attr);
       ri->attr = attr_new;
 
-      /* Update MPLS tag.  */
-      if (safi == SAFI_MPLS_VPN)
+      /* Update MPLS tag or VNI.  */
+      if (tag &&
+          (safi == SAFI_MPLS_VPN || safi == SAFI_EVPN))
         memcpy ((bgp_info_extra_get (ri))->tag, tag, 3);
 
 #if ENABLE_BGP_VNC
@@ -2717,6 +2761,16 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
         }
 #endif
 
+      /* If this is an EVPN route and some attribute has changed, process
+       * route for import. If the extended community has changed, we would
+       * have done the un-import earlier and the import would result in the
+       * route getting injected into appropriate L2 VNIs. If it is just
+       * some other attribute change, the import will result in updating
+       * the attributes for the route in the VNI(s).
+       */
+      if (safi == SAFI_EVPN && !same_attr)
+        bgp_evpn_import_route (bgp, afi, safi, p, ri);
+
       /* Process change. */
       bgp_aggregate_increment (bgp, p, ri, afi, safi);
 
@@ -2735,16 +2789,18 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           peer->rcvd_attr_printed = 1;
         }
 
-      zlog_debug ("%s rcvd %s", peer->host,
-                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                 addpath_id, pfx_buf, sizeof (pfx_buf)));
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
+      zlog_debug ("%s rcvd %s", peer->host, pfx_buf);
     }
 
   /* Make new BGP info. */
   new = info_make(type, sub_type, 0, peer, attr_new, rn);
 
-  /* Update MPLS tag. */
-  if (safi == SAFI_MPLS_VPN)
+  /* Update MPLS tag or VNI.  */
+  if (tag &&
+      (safi == SAFI_MPLS_VPN || safi == SAFI_EVPN))
     memcpy ((bgp_info_extra_get (new))->tag, tag, 3);
 
   /* Nexthop reachability check. */
@@ -2812,6 +2868,10 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   if (bgp_maximum_prefix_overflow (peer, afi, safi, 0))
     return -1;
 
+  /* If this is an EVPN route, process for import. */
+  if (safi == SAFI_EVPN)
+    bgp_evpn_import_route (bgp, afi, safi, p, new);
+
   /* Process change. */
   bgp_process (bgp, rn, afi, safi);
 
@@ -2828,14 +2888,21 @@ bgp_update (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
           peer->rcvd_attr_printed = 1;
         }
 
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
       zlog_debug ("%s rcvd UPDATE about %s -- DENIED due to: %s",
-                  peer->host,
-                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                             addpath_id, pfx_buf, sizeof (pfx_buf)), reason);
+                  peer->host, pfx_buf, reason);
     }
 
   if (ri)
-    bgp_rib_remove (rn, ri, peer, afi, safi);
+    {
+      /* If this is an EVPN route, un-import it as it is now filtered. */
+      if (safi == SAFI_EVPN)
+        bgp_evpn_unimport_route (bgp, afi, safi, p, ri);
+
+      bgp_rib_remove (rn, ri, peer, afi, safi);
+    }
 
   bgp_unlock_node (rn);
 
@@ -2871,10 +2938,13 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
     if (!bgp_adj_in_unset (rn, peer, addpath_id))
       {
         if (bgp_debug_update (peer, p, NULL, 1))
-          zlog_debug ("%s withdrawing route %s not in adj-in",
-                      peer->host,
-                      bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                       addpath_id, pfx_buf, sizeof (pfx_buf)));
+          {
+            bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                                     addpath_id ? 1 : 0, addpath_id,
+                                     pfx_buf, sizeof (pfx_buf));
+            zlog_debug ("%s withdrawing route %s not in adj-in",
+                        peer->host, pfx_buf);
+          }
         bgp_unlock_node (rn);
         return 0;
       }
@@ -2888,20 +2958,24 @@ bgp_withdraw (struct peer *peer, struct prefix *p, u_int32_t addpath_id,
   /* Logging. */
   if (bgp_debug_update(peer, p, NULL, 1))
     {
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
       zlog_debug ("%s rcvd UPDATE about %s -- withdrawn",
-                  peer->host,
-                  bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                   addpath_id, pfx_buf, sizeof (pfx_buf)));
+                  peer->host, pfx_buf);
     }
 
   /* Withdraw specified route from routing table. */
   if (ri && ! CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
     bgp_rib_withdraw (rn, ri, peer, afi, safi, prd);
   else if (bgp_debug_update(peer, p, NULL, 1))
-    zlog_debug ("%s Can't find the route %s",
-                peer->host,
-                bgp_debug_rdpfxpath2str (prd, p, addpath_id ? 1 : 0,
-                                    addpath_id, pfx_buf, sizeof (pfx_buf)));
+    {
+      bgp_debug_rdpfxpath2str (afi, safi, prd, p, tag,
+                               addpath_id ? 1 : 0, addpath_id,
+                               pfx_buf, sizeof (pfx_buf));
+      zlog_debug ("%s Can't find the route %s",
+                  peer->host, pfx_buf);
+    }
 
   /* Unlock bgp_node_get() lock. */
   bgp_unlock_node (rn);
@@ -3102,7 +3176,12 @@ bgp_clear_route_node (struct work_queue *wq, void *data)
             && ! CHECK_FLAG (ri->flags, BGP_INFO_UNUSEABLE))
           bgp_info_set_flag (rn, ri, BGP_INFO_STALE);
         else
-          bgp_rib_remove (rn, ri, peer, afi, safi);
+          {
+            /* If this is an EVPN route, process for un-import. */
+            if (safi == SAFI_EVPN)
+              bgp_evpn_unimport_route (peer->bgp, afi, safi, &rn->p, ri);
+            bgp_rib_remove (rn, ri, peer, afi, safi);
+          }
       }
   return WQ_SUCCESS;
 }
@@ -6931,11 +7010,38 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       json_nexthop_global = json_object_new_object();
     }
 
+  if (!json_paths && safi == SAFI_EVPN)
+    {
+      char tag_buf[20];
+
+      bgp_evpn_route2str ((struct prefix_evpn *)p, buf2, sizeof (buf2));
+      vty_out (vty, "  Route %s", buf2);
+      tag_buf[0] = '\0';
+      if (binfo->extra && binfo->extra->tag)
+        {
+          bgp_evpn_tag2str (binfo->extra->tag, tag_buf, sizeof (tag_buf));
+          vty_out (vty, " VNI %s", tag_buf);
+        }
+      vty_out (vty, "%s", VTY_NEWLINE);
+      if (binfo->extra && binfo->extra->parent)
+        {
+          struct bgp_info *parent_ri;
+          struct bgp_node *rn, *prn;
+
+          parent_ri = (struct bgp_info *)binfo->extra->parent;
+          rn = parent_ri->net;
+          if (rn && rn->prn)
+            {
+              prn = rn->prn;
+              vty_out (vty, "  Imported from %s:%s%s",
+                       prefix_rd2str ((struct prefix_rd *)&prn->p,
+                                      buf1, RD_ADDRSTRLEN),
+                       buf2, VTY_NEWLINE);
+            }
+        }
+    }
+
   attr = binfo->attr;
-  if (safi == SAFI_EVPN)
-    vty_out (vty, "Route %s%s",
-	          bgp_evpn_route2str((struct prefix_evpn *)p, buf2, sizeof (buf2)),
-	          VTY_NEWLINE);
   if (attr)
     {
       /* Line1 display AS-path, Aggregator */
@@ -7100,7 +7206,8 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       if (binfo->peer == bgp->peer_self)
 	{
 
-          if (p->family == AF_INET && !BGP_ATTR_NEXTHOP_AFI_IP6(attr))
+          if (safi == SAFI_EVPN ||
+              (p->family == AF_INET && !BGP_ATTR_NEXTHOP_AFI_IP6(attr)))
             {
               if (json_paths)
                 json_object_string_add(json_peer, "peerId", "0.0.0.0");
@@ -8005,9 +8112,12 @@ route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
   else
     {
       if (safi == SAFI_EVPN)
-        vty_out (vty, "BGP routing table entry for %s%s",
-	       prefix_rd2str (prd, buf1, RD_ADDRSTRLEN),
-	       VTY_NEWLINE);
+        vty_out (vty, "BGP routing table entry for %s%s%s%s",
+                 prd ? prefix_rd2str (prd, buf1, RD_ADDRSTRLEN) : "",
+                 prd ? ":" : "",
+                 bgp_evpn_route2str ((struct prefix_evpn *)p,
+                                     buf2, sizeof (buf2)),
+                 VTY_NEWLINE);
       else
         vty_out (vty, "BGP routing table entry for %s%s%s/%d%s",
 	       ((safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP) ?
