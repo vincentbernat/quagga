@@ -248,11 +248,11 @@ bgp_evpn_uninstall_routes (struct bgp *bgp, struct bgpevpn *vpn);
 extern int
 bgp_evpn_handle_export_rt_change (struct bgp *bgp, struct bgpevpn *vpn);
 extern int
-bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac);
+bgp_evpn_local_mac_add (struct bgp *bgp, vni_t vni,
+                        struct ethaddr *mac);
 extern int
-bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac);
+bgp_evpn_local_mac_del (struct bgp *bgp, vni_t vni,
+                        struct ethaddr *mac);
 extern int
 bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip);
 extern int

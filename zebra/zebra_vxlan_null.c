@@ -51,14 +51,14 @@ int zebra_vxlan_remote_vtep_del (struct zserv *client, int sock,
   return 0;
 }
 
-int zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
-                                 u_short length, struct zebra_vrf *zvrf)
+int zebra_vxlan_remote_mac_add (struct zserv *client, int sock,
+                               u_short length, struct zebra_vrf *zvrf)
 {
   return 0;
 }
 
-int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
-                                 u_short length, struct zebra_vrf *zvrf)
+int zebra_vxlan_remote_mac_del (struct zserv *client, int sock,
+                                u_short length, struct zebra_vrf *zvrf)
 {
   return 0;
 }

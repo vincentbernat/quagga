@@ -346,7 +346,7 @@ bgp_zebra_send_remote_mac (struct bgp *bgp, struct bgpevpn *vpn,
   s = zclient->obuf;
   stream_reset (s);
 
-  zclient_create_header (s, add ? ZEBRA_REMOTE_MACIP_ADD : ZEBRA_REMOTE_MACIP_DEL,
+  zclient_create_header (s, add ? ZEBRA_REMOTE_MAC_ADD : ZEBRA_REMOTE_MAC_DEL,
                          bgp->vrf_id);
   stream_putl(s, vpn->vni);
   stream_put (s, &p->prefix.mac.octet, ETHER_ADDR_LEN); /* Mac Addr */
@@ -2326,8 +2326,8 @@ bgp_evpn_handle_export_rt_change (struct bgp *bgp, struct bgpevpn *vpn)
  * Handle add of a local MAC.
  */
 int
-bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac)
+bgp_evpn_local_mac_add (struct bgp *bgp, vni_t vni,
+                        struct ethaddr *mac)
 {
   struct bgpevpn *vpn;
   struct prefix_evpn p;
@@ -2372,8 +2372,8 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
  * Handle del of a local MAC.
  */
 int
-bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac)
+bgp_evpn_local_mac_del (struct bgp *bgp, vni_t vni,
+                        struct ethaddr *mac)
 {
   struct bgpevpn *vpn;
   struct prefix_evpn p;
