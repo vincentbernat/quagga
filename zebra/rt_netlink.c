@@ -116,6 +116,10 @@
 
 static vlanid_t filter_vlan = 0;
 
+static int
+netlink_macfdb_change (struct sockaddr_nl *snl, struct nlmsghdr *h, int len);
+
+
 struct gw_family_t
 {
   u_int16_t     filler;
@@ -602,32 +606,13 @@ netlink_route_read (struct zebra_ns *zns)
 #endif
 
 static int
-netlink_neigh_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                     ns_id_t ns_id, int startup)
-{
-  if (h->nlmsg_type != RTM_NEWNEIGH)
-    return 0;
-
-  return netlink_neigh_change (snl, h, ns_id);
-}
-
-int
-netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
-                      ns_id_t ns_id)
+netlink_macfdb_table (struct sockaddr_nl *snl, struct nlmsghdr *h,
+                      ns_id_t ns_id, int startup)
 {
   int len;
   struct ndmsg *ndm;
-  struct interface *ifp;
-  struct zebra_if *zif;
-  struct zebra_vrf *zvrf;
-  struct rtattr *tb[NDA_MAX + 1];
-  struct zebra_l2info_brslave *br_slave;
-  struct interface *br_if;
-  struct ethaddr mac;
-  vlanid_t vid = 0;
-  char buf[MACADDR_STRLEN];
 
-  if (!(h->nlmsg_type == RTM_NEWNEIGH || h->nlmsg_type == RTM_DELNEIGH))
+  if (h->nlmsg_type != RTM_NEWNEIGH)
     return 0;
 
   /* Length validity. */
@@ -639,6 +624,25 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   ndm = NLMSG_DATA (h);
   if (ndm->ndm_family != AF_BRIDGE)
     return 0;
+
+  return netlink_macfdb_change (snl, h, len);
+}
+
+static int
+netlink_macfdb_change (struct sockaddr_nl *snl, struct nlmsghdr *h, int len)
+{
+  struct ndmsg *ndm;
+  struct interface *ifp;
+  struct zebra_if *zif;
+  struct zebra_vrf *zvrf;
+  struct rtattr *tb[NDA_MAX + 1];
+  struct zebra_l2info_brslave *br_slave;
+  struct interface *br_if;
+  struct ethaddr mac;
+  vlanid_t vid = 0;
+  char buf[MACADDR_STRLEN];
+
+  ndm = NLMSG_DATA (h);
 
   /* The interface should exist. */
   ifp = if_lookup_by_index_per_ns (zebra_ns_lookup (NS_DEFAULT), ndm->ndm_ifindex);
@@ -735,12 +739,11 @@ netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 }
 
 /*
- * Neighbor table read using netlink interface. This is invoked
- * at startup and we are currently concerned only about the
- * bridge FDB.
+ * MAC forwarding database read using netlink interface. This is invoked
+ * at startup.
  */
 int
-netlink_neigh_read (struct zebra_ns *zns)
+netlink_macfdb_read (struct zebra_ns *zns)
 {
   int ret;
 
@@ -750,18 +753,18 @@ netlink_neigh_read (struct zebra_ns *zns)
     return ret;
   /* We are reading entire table. */
   filter_vlan = 0;
-  ret = netlink_parse_info (netlink_neigh_table, &zns->netlink_cmd, zns, 0, 1);
+  ret = netlink_parse_info (netlink_macfdb_table, &zns->netlink_cmd, zns, 0, 1);
 
   return ret;
 }
 
 /*
- * Neighbor table read using netlink interface. This is for a specific
- * bridge and matching specific access VLAN (if VLAN-aware bridge).
+ * MAC forwarding database read using netlink interface. This is for a
+ * specific bridge and matching specific access VLAN (if VLAN-aware bridge).
  */
 int
-netlink_neigh_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
-                               struct interface *br_if)
+netlink_macfdb_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
+                                struct interface *br_if)
 {
   struct
     {
@@ -789,12 +792,35 @@ netlink_neigh_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
     return -1;
   if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
     filter_vlan = zl2if->access_vlan;
-  ret = netlink_talk (netlink_neigh_table, &req.n,
+  ret = netlink_talk (netlink_macfdb_table, &req.n,
                       &zns->netlink_cmd, zns, 0);
 
   /* Reset VLAN filter. */
   filter_vlan = 0;
   return ret;
+}
+
+int
+netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
+                      ns_id_t ns_id)
+{
+  int len;
+  struct ndmsg *ndm;
+
+  if (!(h->nlmsg_type == RTM_NEWNEIGH || h->nlmsg_type == RTM_DELNEIGH))
+    return 0;
+
+  /* Length validity. */
+  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct ndmsg));
+  if (len < 0)
+    return -1;
+
+  /* We are interested only in AF_BRIDGE notifications. */
+  ndm = NLMSG_DATA (h);
+  if (ndm->ndm_family != AF_BRIDGE)
+    return 0;
+
+  return netlink_macfdb_change (snl, h, len);
 }
 
 static void
@@ -1412,9 +1438,9 @@ netlink_neigh_update (int cmd, int ifindex, uint32_t addr, char *lla, int llalen
 }
 
 static int
-netlink_neigh_update_af_bridge (struct interface *ifp, vlanid_t vid,
-                                struct ethaddr *mac, struct in_addr vtep_ip,
-                                int cmd)
+netlink_macfdb_update (struct interface *ifp, vlanid_t vid,
+                       struct ethaddr *mac, struct in_addr vtep_ip,
+                       int cmd)
 {
   struct zebra_ns *zns = zebra_ns_lookup (NS_DEFAULT);
   struct
@@ -1825,16 +1851,14 @@ int
 kernel_add_mac (struct interface *ifp, vlanid_t vid,
                 struct ethaddr *mac, struct in_addr vtep_ip)
 {
- return netlink_neigh_update_af_bridge (ifp, vid, mac, vtep_ip,
-                                        RTM_NEWNEIGH);
+ return netlink_macfdb_update (ifp, vid, mac, vtep_ip, RTM_NEWNEIGH);
 }
 
 int
 kernel_del_mac (struct interface *ifp, vlanid_t vid,
                 struct ethaddr *mac, struct in_addr vtep_ip)
 {
- return netlink_neigh_update_af_bridge (ifp, vid, mac, vtep_ip,
-                                        RTM_DELNEIGH);
+ return netlink_macfdb_update (ifp, vid, mac, vtep_ip, RTM_DELNEIGH);
 }
 
 /*

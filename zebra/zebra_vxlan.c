@@ -1053,7 +1053,7 @@ zebra_vxlan_if_add (struct zebra_vrf *zvrf, struct interface *ifp,
                 ifp->vrf_id, ifp->name, ifp->ifindex, vni,
                 _zl2if->br_slave.bridge_ifindex);
 
-  neigh_read_for_bridge (zvrf->zns, ifp, _zl2if->br_slave.br_if);
+  macfdb_read_for_bridge (zvrf->zns, ifp, _zl2if->br_slave.br_if);
 
   return 0;
 }
@@ -1170,7 +1170,7 @@ zebra_vxlan_if_update (struct zebra_vrf *zvrf, struct interface *ifp,
                     ifp->vrf_id, ifp->name, ifp->ifindex, vni,
                     _zl2if->br_slave.bridge_ifindex);
 
-      neigh_read_for_bridge (zvrf->zns, ifp, _zl2if->br_slave.br_if);
+      macfdb_read_for_bridge (zvrf->zns, ifp, _zl2if->br_slave.br_if);
     }
 
   return 0;
@@ -1474,7 +1474,7 @@ zebra_vxlan_if_up (struct interface *ifp)
                     ifp->vrf_id, ifp->name, ifp->ifindex, vni,
                     zl2if->br_slave.bridge_ifindex);
 
-      neigh_read_for_bridge (zvrf->zns, ifp, zl2if->br_slave.br_if);
+      macfdb_read_for_bridge (zvrf->zns, ifp, zl2if->br_slave.br_if);
     }
 
   return 0;
@@ -1690,7 +1690,7 @@ int zebra_vxlan_update_access_vlan (struct interface *ifp,
 
   /* Update the VLAN and read MAC FDB corresponding to this VNI. */
   zl2if->access_vlan = access_vlan;
-  neigh_read_for_bridge (zvrf->zns, ifp, zl2if->br_slave.br_if);
+  macfdb_read_for_bridge (zvrf->zns, ifp, zl2if->br_slave.br_if);
 
   /* Reinstall any remote MACs for this VNI - with new VLAN info. */
   memset (&wctx, 0, sizeof (struct mac_walk_ctx));
@@ -1889,7 +1889,7 @@ int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
       zvni_build_hash_table (zvrf);
 
       /* Read the MAC FDB */
-      neigh_read (zvrf->zns);
+      macfdb_read (zvrf->zns);
     }
   else
     {
