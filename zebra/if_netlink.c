@@ -569,6 +569,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   zebra_iftype_t zif_type = ZEBRA_IF_OTHER;
   zebra_slave_iftype_t zif_slave_type = ZEBRA_IF_SLAVE_NONE;
   ifindex_t bridge_ifindex = IFINDEX_INTERNAL;
+  ifindex_t link_ifindex = IFINDEX_INTERNAL;
 
   zns = zebra_ns_lookup (ns_id);
   ifi = NLMSG_DATA (h);
@@ -641,6 +642,10 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
         zif_slave_type = ZEBRA_IF_SLAVE_OTHER;
     }
 
+  /* If linking to another interface, note it. */
+  if (tb[IFLA_LINK])
+    link_ifindex = *(ifindex_t *)RTA_DATA(tb[IFLA_LINK]);
+
   /* Add interface. */
   ifp = if_get_by_name_vrf (name, vrf_id);
   set_ifindex(ifp, ifi->ifi_index, zns);
@@ -659,6 +664,9 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h,
   netlink_interface_update_hw_addr (tb, ifp);
 
   if_add_update (ifp);
+
+  /* Update link. */
+  zebra_if_update_link (ifp, link_ifindex);
 
   /* Special handling for L2 interfaces */
   if (zif_type == ZEBRA_IF_BRIDGE)
@@ -948,6 +956,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
   zebra_iftype_t zif_type = ZEBRA_IF_OTHER;
   zebra_slave_iftype_t zif_slave_type = ZEBRA_IF_SLAVE_NONE;
   ifindex_t bridge_ifindex = IFINDEX_INTERNAL;
+  ifindex_t link_ifindex = IFINDEX_INTERNAL;
 
   zns = zebra_ns_lookup (ns_id);
   ifi = NLMSG_DATA (h);
@@ -1001,6 +1010,10 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
       netlink_determine_zebra_iftype (kind, &zif_type);
     }
+
+  /* If linking to another interface, note it. */
+  if (tb[IFLA_LINK])
+    link_ifindex = *(ifindex_t *)RTA_DATA(tb[IFLA_LINK]);
 
   /* If VRF, create or update the VRF structure itself. */
   if (zif_type == ZEBRA_IF_VRF)
@@ -1063,6 +1076,9 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 
           /* Set interface type */
           zebra_if_set_ziftype (ifp, zif_type, zif_slave_type);
+
+          /* Update link. */
+          zebra_if_update_link (ifp, link_ifindex);
 
           netlink_interface_update_hw_addr (tb, ifp);
 
