@@ -361,6 +361,7 @@ end
                                 "ip ",
                                 "ipv6 ",
                                 "log ",
+                                "no ",
                                 "password ",
                                 "ptm-enable",
                                 "router-id ",
