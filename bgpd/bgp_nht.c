@@ -362,7 +362,6 @@ bgp_parse_nexthop_update (int command, vrf_id_t vrf_id)
   struct nexthop *nhlist_head = NULL;
   struct nexthop *nhlist_tail = NULL;
   uint32_t metric;
-  uint32_t distance;
   u_char nexthop_num;
   struct prefix p;
   int i;
@@ -414,7 +413,7 @@ bgp_parse_nexthop_update (int command, vrf_id_t vrf_id)
   bgp_unlock_node (rn);
   bnc->last_update = bgp_clock();
   bnc->change_flags = 0;
-  distance = stream_getc (s);
+  (void)stream_getc (s);
   metric = stream_getl (s);
   nexthop_num = stream_getc (s);
 
