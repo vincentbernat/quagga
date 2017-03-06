@@ -917,6 +917,7 @@ send_client (struct rnh *rnh, struct zserv *client, rnh_type_t type, vrf_id_t vr
     }
   else
     {
+      stream_putc (s, 0);
       stream_putl (s, 0);
       stream_putc (s, 0);
     }
