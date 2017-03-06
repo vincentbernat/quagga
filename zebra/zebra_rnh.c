@@ -874,6 +874,7 @@ send_client (struct rnh *rnh, struct zserv *client, rnh_type_t type, vrf_id_t vr
     }
   if (rib)
     {
+      stream_putc (s, rib->distance);
       stream_putl (s, rib->metric);
       num = 0;
       nump = stream_get_endp(s);
@@ -888,6 +889,7 @@ send_client (struct rnh *rnh, struct zserv *client, rnh_type_t type, vrf_id_t vr
 	      {
 	      case NEXTHOP_TYPE_IPV4:
 		stream_put_in_addr (s, &nexthop->gate.ipv4);
+                stream_putl (s, nexthop->ifindex);
 		break;
 	      case NEXTHOP_TYPE_IFINDEX:
 		stream_putl (s, nexthop->ifindex);
