@@ -62,7 +62,6 @@
 enum pim_upstream_state {
   PIM_UPSTREAM_NOTJOINED,
   PIM_UPSTREAM_JOINED,
-  PIM_UPSTREAM_PRUNE,
 };
 
 enum pim_reg_state {
