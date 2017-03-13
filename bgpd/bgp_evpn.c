@@ -1788,7 +1788,7 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
       return -1;
     }
 
-  pfx += ipaddr_len;
+  pfx += ipaddr_len / 8;
 
   /* Get the VNI (in MPLS label field). */
   /* Note: We ignore the second VNI, if any. */
