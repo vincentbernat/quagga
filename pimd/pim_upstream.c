@@ -188,6 +188,7 @@ pim_upstream_del(struct pim_upstream *up, const char *name)
   }
 
   join_timer_stop(up);
+  pim_jp_agg_upstream_verification (up, false);
   up->rpf.source_nexthop.interface = NULL;
 
   if (up->sg.src.s_addr != INADDR_ANY) {
@@ -298,6 +299,7 @@ static void join_timer_stop(struct pim_upstream *up)
     pim_jp_agg_remove_group (nbr->upstream_jp_agg, up);
 
   THREAD_OFF (up->t_join_timer);
+  pim_jp_agg_upstream_verification (up, false);
 }
 
 void
@@ -327,6 +329,7 @@ join_timer_start(struct pim_upstream *up)
                       on_join_timer,
                       up, qpim_t_periodic);
     }
+  pim_jp_agg_upstream_verification (up, true);
 }
 
 /*
