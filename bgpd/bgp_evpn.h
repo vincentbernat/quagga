@@ -93,6 +93,7 @@ struct irt_node
 
 #define RT_TYPE_IMPORT 1
 #define RT_TYPE_EXPORT 2
+#define RT_TYPE_BOTH   3
 
 static inline int
 is_vni_configured (struct bgpevpn *vpn)
