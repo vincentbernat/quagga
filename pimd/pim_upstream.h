@@ -62,8 +62,13 @@
 enum pim_upstream_state {
   PIM_UPSTREAM_NOTJOINED,
   PIM_UPSTREAM_JOINED,
-  PIM_UPSTREAM_JOIN_PENDING,
-  PIM_UPSTREAM_PRUNE,
+};
+
+enum pim_reg_state {
+  PIM_REG_NOINFO,
+  PIM_REG_JOIN,
+  PIM_REG_JOIN_PENDING,
+  PIM_REG_PRUNE,
 };
 
 enum pim_upstream_sptbit {
@@ -89,6 +94,7 @@ struct pim_upstream {
   struct list             *sources;
 
   enum pim_upstream_state  join_state;
+  enum pim_reg_state       reg_state;
   enum pim_upstream_sptbit sptbit;
 
   int                      ref_count;
@@ -124,10 +130,14 @@ struct hash *pim_upstream_hash;
 
 void pim_upstream_free(struct pim_upstream *up);
 struct pim_upstream *pim_upstream_find (struct prefix_sg *sg);
+struct pim_upstream *pim_upstream_find_or_add (struct prefix_sg *sg,
+                                               struct interface *ifp, int flags,
+                                               const char *name);
 struct pim_upstream *pim_upstream_add (struct prefix_sg *sg,
 				       struct interface *ifp, int flags,
 				       const char *name);
-void pim_upstream_del(struct pim_upstream *up, const char *name);
+void pim_upstream_ref (struct pim_upstream *up, int flags);
+struct pim_upstream *pim_upstream_del(struct pim_upstream *up, const char *name);
 
 int pim_upstream_evaluate_join_desired(struct pim_upstream *up);
 int pim_upstream_evaluate_join_desired_interface(struct pim_upstream *up,
@@ -141,7 +151,7 @@ void pim_upstream_join_suppress(struct pim_upstream *up,
 void pim_upstream_join_timer_decrease_to_t_override(const char *debug_label,
                                                     struct pim_upstream *up);
 
-void pim_upstream_join_timer_restart(struct pim_upstream *up);
+void pim_upstream_join_timer_restart(struct pim_upstream *up, struct pim_rpf *old);
 void pim_upstream_rpf_genid_changed(struct in_addr neigh_addr);
 void pim_upstream_rpf_interface_changed(struct pim_upstream *up,
 					struct interface *old_rpf_ifp);
@@ -164,6 +174,8 @@ void pim_upstream_send_join (struct pim_upstream *up);
 void pim_upstream_switch (struct pim_upstream *up, enum pim_upstream_state new_state);
 
 const char *pim_upstream_state2str (enum pim_upstream_state join_state);
+#define PIM_REG_STATE_STR_LEN 12
+const char *pim_reg_state2str (enum pim_reg_state state, char *state_str);
 
 int pim_upstream_inherited_olist_decide (struct pim_upstream *up);
 int pim_upstream_inherited_olist (struct pim_upstream *up);
@@ -174,4 +186,7 @@ void pim_upstream_msdp_reg_timer_start(struct pim_upstream *up);
 
 void pim_upstream_init (void);
 void pim_upstream_terminate (void);
+
+void join_timer_start (struct pim_upstream *up);
+int pim_upstream_compare (void *arg1, void *arg2);
 #endif /* PIM_UPSTREAM_H */

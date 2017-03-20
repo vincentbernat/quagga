@@ -27,7 +27,7 @@
 
 void pim_zebra_init(char *zebra_sock_path);
 
-void pim_scan_individual_oil (struct channel_oil *c_oil);
+void pim_scan_individual_oil (struct channel_oil *c_oil, int in_vif_index);
 void pim_scan_oil(void);
 
 void igmp_anysource_forward_start(struct igmp_group *group);

@@ -122,18 +122,19 @@ pim_register_stop_recv (uint8_t *buf, int buf_size)
     zlog_debug ("Received Register stop for %s",
 		upstream->sg_str);
 
-  switch (upstream->join_state)
+  switch (upstream->reg_state)
     {
-    case PIM_UPSTREAM_NOTJOINED:
-    case PIM_UPSTREAM_PRUNE:
+    case PIM_REG_NOINFO:
+    case PIM_REG_PRUNE:
       return 0;
       break;
-    case PIM_UPSTREAM_JOINED:
-      upstream->join_state = PIM_UPSTREAM_PRUNE;
+    case PIM_REG_JOIN:
+      upstream->reg_state = PIM_REG_PRUNE;
       pim_channel_del_oif (upstream->channel_oil, pim_regiface, PIM_OIF_FLAG_PROTO_PIM);
       pim_upstream_start_register_stop_timer (upstream, 0);
-    case PIM_UPSTREAM_JOIN_PENDING:
-      upstream->join_state = PIM_UPSTREAM_PRUNE;
+      break;
+    case PIM_REG_JOIN_PENDING:
+      upstream->reg_state = PIM_REG_PRUNE;
       pim_upstream_start_register_stop_timer (upstream, 0);
       return 0;
       break;
@@ -332,34 +333,16 @@ pim_register_recv (struct interface *ifp,
      */
     if (!upstream)
       {
-	upstream = pim_upstream_add (&sg, ifp,
-				     PIM_UPSTREAM_FLAG_MASK_SRC_STREAM,
-				     __PRETTY_FUNCTION__);
+        upstream = pim_upstream_add (&sg, ifp,
+                                     PIM_UPSTREAM_FLAG_MASK_SRC_STREAM,
+                                     __PRETTY_FUNCTION__);
         if (!upstream)
           {
             zlog_warn ("Failure to create upstream state");
             return 1;
           }
-        PIM_UPSTREAM_FLAG_SET_SRC_STREAM(upstream->flags);
 
         upstream->upstream_register = src_addr;
-	pim_rp_set_upstream_addr (&upstream->upstream_addr, sg.src, sg.grp);
-	if (pim_nexthop_lookup (&upstream->rpf.source_nexthop,
-			        upstream->upstream_addr, 1) != 0)
-          {
-            if (PIM_DEBUG_PIM_REG)
-              {
-                zlog_debug ("Received Register(%s), for which I have no path back", upstream->sg_str);
-              }
-            PIM_UPSTREAM_FLAG_UNSET_SRC_STREAM(upstream->flags);
-            pim_upstream_del (upstream, __PRETTY_FUNCTION__);
-            return 0;
-          }
-	upstream->sg.src = sg.src;
-	upstream->rpf.rpf_addr = upstream->rpf.source_nexthop.mrib_nexthop_addr;
-
-	upstream->join_state = PIM_UPSTREAM_PRUNE;
-
       }
 
     if ((upstream->sptbit == PIM_UPSTREAM_SPTBIT_TRUE) ||

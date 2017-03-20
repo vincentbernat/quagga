@@ -52,12 +52,14 @@
 #include "pim_br.h"
 #include "pim_register.h"
 #include "pim_msdp.h"
+#include "pim_jp_agg.h"
+#include "pim_nht.h"
 
 struct hash *pim_upstream_hash = NULL;
 struct list *pim_upstream_list = NULL;
 struct timer_wheel *pim_upstream_sg_wheel = NULL;
 
-static void join_timer_start(struct pim_upstream *up);
+static void join_timer_stop(struct pim_upstream *up);
 static void pim_upstream_update_assert_tracking_desired(struct pim_upstream *up);
 
 /*
@@ -142,6 +144,7 @@ pim_upstream_find_parent (struct pim_upstream *child)
 void pim_upstream_free(struct pim_upstream *up)
 {
   XFREE(MTYPE_PIM_UPSTREAM, up);
+  up = NULL;
 }
 
 static void upstream_channel_oil_detach(struct pim_upstream *up)
@@ -152,33 +155,38 @@ static void upstream_channel_oil_detach(struct pim_upstream *up)
   }
 }
 
-void
+struct pim_upstream *
 pim_upstream_del(struct pim_upstream *up, const char *name)
 {
   bool notify_msdp = false;
+  struct prefix nht_p;
 
   if (PIM_DEBUG_TRACE)
-    zlog_debug ("%s(%s): Delete %s ref count: %d",
-		__PRETTY_FUNCTION__, name, up->sg_str, up->ref_count);
+    zlog_debug ("%s(%s): Delete %s ref count: %d, flags: %d (Pre decrement)",
+		__PRETTY_FUNCTION__, name, up->sg_str, up->ref_count, up->flags);
 
   --up->ref_count;
 
   if (up->ref_count >= 1)
-    return;
+    return up;
 
-  THREAD_OFF(up->t_join_timer);
   THREAD_OFF(up->t_ka_timer);
   THREAD_OFF(up->t_rs_timer);
   THREAD_OFF(up->t_msdp_reg_timer);
 
   if (up->join_state == PIM_UPSTREAM_JOINED) {
-    pim_joinprune_send (&up->rpf, up, 0);
+    pim_jp_agg_single_upstream_send (&up->rpf, up, 0);
+
     if (up->sg.src.s_addr == INADDR_ANY) {
         /* if a (*, G) entry in the joined state is being deleted we
          * need to notify MSDP */
         notify_msdp = true;
     }
   }
+
+  join_timer_stop(up);
+  pim_jp_agg_upstream_verification (up, false);
+  up->rpf.source_nexthop.interface = NULL;
 
   if (up->sg.src.s_addr != INADDR_ANY) {
     wheel_remove_item (pim_upstream_sg_wheel, up);
@@ -206,10 +214,27 @@ pim_upstream_del(struct pim_upstream *up, const char *name)
   listnode_delete (pim_upstream_list, up);
   hash_release (pim_upstream_hash, up);
 
-  if (notify_msdp) {
-    pim_msdp_up_del(&up->sg);
-  }
-  pim_upstream_free(up);
+  if (notify_msdp)
+    {
+      pim_msdp_up_del (&up->sg);
+    }
+
+  /* Deregister addr with Zebra NHT */
+  nht_p.family = AF_INET;
+  nht_p.prefixlen = IPV4_MAX_BITLEN;
+  nht_p.u.prefix4 = up->upstream_addr;
+  if (PIM_DEBUG_TRACE)
+    {
+      char buf[PREFIX2STR_BUFFER];
+      prefix2str (&nht_p, buf, sizeof (buf));
+      zlog_debug ("%s: Deregister upstream %s upstream addr %s with NHT ",
+                __PRETTY_FUNCTION__, up->sg_str, buf);
+    }
+  pim_delete_tracked_nexthop (&nht_p, up, NULL);
+
+  pim_upstream_free (up);
+
+  return NULL;
 }
 
 void
@@ -230,7 +255,7 @@ pim_upstream_send_join (struct pim_upstream *up)
   }
 
   /* send Join(S,G) to the current upstream neighbor */
-  pim_joinprune_send(&up->rpf, up, 1 /* join */);
+  pim_jp_agg_single_upstream_send(&up->rpf, up, 1 /* join */);
 }
 
 static int on_join_timer(struct thread *t)
@@ -251,7 +276,8 @@ static int on_join_timer(struct thread *t)
    * Don't send the join if the outgoing interface is a loopback
    * But since this might change leave the join timer running
    */
-  if (!if_is_loopback (up->rpf.source_nexthop.interface))
+  if (up->rpf.source_nexthop.interface &&
+      !if_is_loopback (up->rpf.source_nexthop.interface))
     pim_upstream_send_join (up);
 
   join_timer_start(up);
@@ -259,24 +285,61 @@ static int on_join_timer(struct thread *t)
   return 0;
 }
 
-static void join_timer_start(struct pim_upstream *up)
+static void join_timer_stop(struct pim_upstream *up)
 {
-  if (PIM_DEBUG_PIM_EVENTS) {
-    zlog_debug("%s: starting %d sec timer for upstream (S,G)=%s",
-	       __PRETTY_FUNCTION__,
-	       qpim_t_periodic,
-	       up->sg_str);
-  }
+  struct pim_neighbor *nbr;
 
   THREAD_OFF (up->t_join_timer);
-  THREAD_TIMER_ON(master, up->t_join_timer,
-		  on_join_timer,
-		  up, qpim_t_periodic);
+
+  nbr = pim_neighbor_find (up->rpf.source_nexthop.interface,
+                           up->rpf.rpf_addr.u.prefix4);
+
+  if (nbr)
+    pim_jp_agg_remove_group (nbr->upstream_jp_agg, up);
+
+  pim_jp_agg_upstream_verification (up, false);
 }
 
-void pim_upstream_join_timer_restart(struct pim_upstream *up)
+void
+join_timer_start(struct pim_upstream *up)
 {
-  THREAD_OFF(up->t_join_timer);
+  struct pim_neighbor *nbr = NULL;
+
+  if (up->rpf.source_nexthop.interface)
+    {
+      nbr = pim_neighbor_find (up->rpf.source_nexthop.interface,
+                               up->rpf.rpf_addr.u.prefix4);
+
+      if (PIM_DEBUG_PIM_EVENTS) {
+        zlog_debug("%s: starting %d sec timer for upstream (S,G)=%s",
+                   __PRETTY_FUNCTION__,
+                   qpim_t_periodic,
+                   up->sg_str);
+      }
+    }
+
+  if (nbr)
+    pim_jp_agg_add_group (nbr->upstream_jp_agg, up, 1);
+  else
+    {
+      THREAD_OFF (up->t_join_timer);
+      THREAD_TIMER_ON(master, up->t_join_timer,
+                      on_join_timer,
+                      up, qpim_t_periodic);
+    }
+  pim_jp_agg_upstream_verification (up, true);
+}
+
+/*
+ * This is only called when we are switching the upstream
+ * J/P from one neighbor to another
+ *
+ * As such we need to remove from the old list and
+ * add to the new list.
+ */
+void pim_upstream_join_timer_restart(struct pim_upstream *up, struct pim_rpf *old)
+{
+  //THREAD_OFF(up->t_join_timer);
   join_timer_start(up);
 }
 
@@ -428,28 +491,9 @@ pim_upstream_switch(struct pim_upstream *up,
 	       pim_upstream_state2str (new_state));
   }
 
-  /*
-   * This code still needs work.
-   */
-  switch (up->join_state)
-    {
-    case PIM_UPSTREAM_PRUNE:
-      if (!PIM_UPSTREAM_FLAG_TEST_FHR(up->flags))
-        {
-          up->join_state       = new_state;
-          up->state_transition = pim_time_monotonic_sec ();
-        }
-      break;
-    case PIM_UPSTREAM_JOIN_PENDING:
-      break;
-    case PIM_UPSTREAM_NOTJOINED:
-    case PIM_UPSTREAM_JOINED:
-      up->join_state       = new_state;
-      if (old_state != new_state)
-        up->state_transition = pim_time_monotonic_sec();
-
-      break;
-    }
+  up->join_state = new_state;
+  if (old_state != new_state)
+    up->state_transition = pim_time_monotonic_sec();
 
   pim_upstream_update_assert_tracking_desired(up);
 
@@ -464,6 +508,7 @@ pim_upstream_switch(struct pim_upstream *up,
             PIM_UPSTREAM_FLAG_SET_FHR(up->flags);
             if (!old_fhr && PIM_UPSTREAM_FLAG_TEST_SRC_STREAM(up->flags))
               {
+                up->reg_state = PIM_REG_JOIN;
                 pim_upstream_keep_alive_timer_start (up, qpim_keep_alive_time);
 	        pim_channel_add_oif (up->channel_oil, pim_regiface, PIM_OIF_FLAG_PROTO_PIM);
               }
@@ -480,16 +525,17 @@ pim_upstream_switch(struct pim_upstream *up,
       }
   }
   else {
+
     forward_off(up);
     if (old_state == PIM_UPSTREAM_JOINED)
       pim_msdp_up_join_state_changed(up);
-    pim_joinprune_send(&up->rpf, up, 0 /* prune */);
-    if (up->t_join_timer)
-      THREAD_OFF(up->t_join_timer);
+
+    pim_jp_agg_single_upstream_send(&up->rpf, up, 0 /* prune */);
+    join_timer_stop(up);
   }
 }
 
-static int
+int
 pim_upstream_compare (void *arg1, void *arg2)
 {
   const struct pim_upstream *up1 = (const struct pim_upstream *)arg1;
@@ -520,11 +566,12 @@ pim_upstream_new (struct prefix_sg *sg,
   struct pim_upstream *up;
 
   up = XCALLOC(MTYPE_PIM_UPSTREAM, sizeof(*up));
-  if (!up) {
-    zlog_err("%s: PIM XCALLOC(%zu) failure",
+  if (!up)
+    {
+      zlog_err("%s: PIM XCALLOC(%zu) failure",
 	     __PRETTY_FUNCTION__, sizeof(*up));
-    return NULL;
-  }
+      return NULL;
+    }
   
   up->sg                          = *sg;
   pim_str_sg_set (sg, up->sg_str);
@@ -555,7 +602,8 @@ pim_upstream_new (struct prefix_sg *sg,
   up->t_ka_timer                 = NULL;
   up->t_rs_timer                 = NULL;
   up->t_msdp_reg_timer           = NULL;
-  up->join_state                 = 0;
+  up->join_state                 = PIM_UPSTREAM_NOTJOINED;
+  up->reg_state                  = PIM_REG_NOINFO;
   up->state_transition           = pim_time_monotonic_sec();
   up->channel_oil                = NULL;
   up->sptbit                     = PIM_UPSTREAM_SPTBIT_FALSE;
@@ -571,11 +619,18 @@ pim_upstream_new (struct prefix_sg *sg,
   if (up->sg.src.s_addr != INADDR_ANY)
     wheel_add_item (pim_upstream_sg_wheel, up);
 
-  rpf_result = pim_rpf_update(up, NULL);
+  rpf_result = pim_rpf_update(up, NULL, 1);
   if (rpf_result == PIM_RPF_FAILURE) {
+    struct prefix nht_p;
+
     if (PIM_DEBUG_TRACE)
       zlog_debug ("%s: Attempting to create upstream(%s), Unable to RPF for source", __PRETTY_FUNCTION__,
                   up->sg_str);
+
+    nht_p.family = AF_INET;
+    nht_p.prefixlen = IPV4_MAX_BITLEN;
+    nht_p.u.prefix4 = up->upstream_addr;
+    pim_delete_tracked_nexthop (&nht_p, up, NULL);
 
     if (up->parent)
       {
@@ -602,7 +657,11 @@ pim_upstream_new (struct prefix_sg *sg,
   listnode_add_sort(pim_upstream_list, up);
 
   if (PIM_DEBUG_TRACE)
-    zlog_debug ("%s: Created Upstream %s", __PRETTY_FUNCTION__, up->sg_str);
+    {
+      zlog_debug ("%s: Created Upstream %s upstream_addr %s",
+            __PRETTY_FUNCTION__, up->sg_str,
+            inet_ntoa (up->upstream_addr));
+    }
 
   return up;
 }
@@ -617,7 +676,31 @@ struct pim_upstream *pim_upstream_find(struct prefix_sg *sg)
   return up;
 }
 
-static void pim_upstream_ref(struct pim_upstream *up, int flags)
+struct pim_upstream *
+pim_upstream_find_or_add(struct prefix_sg *sg,
+                         struct interface *incoming,
+                         int flags, const char *name)
+{
+  struct pim_upstream *up;
+
+  up = pim_upstream_find(sg);
+
+  if (up)
+    {
+      if (!(up->flags & flags))
+        {
+          up->flags |= flags;
+          up->ref_count++;
+        }
+    }
+  else
+    up = pim_upstream_add (sg, incoming, flags, name);
+
+  return up;
+}
+
+void
+pim_upstream_ref(struct pim_upstream *up, int flags)
 {
   up->flags |= flags;
   ++up->ref_count;
@@ -662,11 +745,11 @@ pim_upstream_evaluate_join_desired_interface (struct pim_upstream *up,
 
   if (ch->upstream == up)
     {
-      if (!pim_macro_ch_lost_assert(ch) && pim_macro_chisin_joins_or_include(ch))
-	return 1;
-
       if (PIM_IF_FLAG_TEST_S_G_RPT(ch->flags))
 	return 0;
+
+      if (!pim_macro_ch_lost_assert(ch) && pim_macro_chisin_joins_or_include(ch))
+	return 1;
     }
 
   /*
@@ -911,8 +994,8 @@ static void pim_upstream_fhr_kat_expiry(struct pim_upstream *up)
   THREAD_OFF(up->t_rs_timer);
   /* remove regiface from the OIL if it is there*/
   pim_channel_del_oif (up->channel_oil, pim_regiface, PIM_OIF_FLAG_PROTO_PIM);
-  /* move to "not-joined" */
-  up->join_state = PIM_UPSTREAM_NOTJOINED;
+  /* clear the register state */
+  up->reg_state = PIM_REG_NOINFO;
   PIM_UPSTREAM_FLAG_UNSET_FHR(up->flags);
 }
 
@@ -926,9 +1009,9 @@ static void pim_upstream_fhr_kat_start(struct pim_upstream *up)
       zlog_debug ("kat started on %s; set fhr reg state to joined", up->sg_str);
 
     PIM_UPSTREAM_FLAG_SET_FHR(up->flags);
-    if (up->join_state == PIM_UPSTREAM_NOTJOINED) {
+    if (up->reg_state == PIM_REG_NOINFO) {
       pim_channel_add_oif (up->channel_oil, pim_regiface, PIM_OIF_FLAG_PROTO_PIM);
-      up->join_state = PIM_UPSTREAM_JOINED;
+      up->reg_state = PIM_REG_JOIN;
     }
   }
 }
@@ -1155,14 +1238,31 @@ pim_upstream_state2str (enum pim_upstream_state join_state)
     case PIM_UPSTREAM_JOINED:
       return "Joined";
       break;
-    case PIM_UPSTREAM_JOIN_PENDING:
-      return "JoinPending";
-      break;
-    case PIM_UPSTREAM_PRUNE:
-      return "Prune";
-      break;
     }
   return "Unknown";
+}
+
+const char *
+pim_reg_state2str (enum pim_reg_state reg_state, char *state_str)
+{
+  switch (reg_state)
+    {
+    case PIM_REG_NOINFO:
+      strcpy (state_str, "RegNoInfo");
+      break;
+    case PIM_REG_JOIN:
+      strcpy (state_str, "RegJoined");
+      break;
+    case PIM_REG_JOIN_PENDING:
+      strcpy (state_str, "RegJoinPend");
+      break;
+    case PIM_REG_PRUNE:
+      strcpy (state_str, "RegPrune");
+      break;
+    default:
+      strcpy (state_str, "RegUnknown");
+    }
+  return state_str;
 }
 
 static int
@@ -1178,20 +1278,21 @@ pim_upstream_register_stop_timer (struct thread *t)
 
   if (PIM_DEBUG_TRACE)
     {
+      char state_str[PIM_REG_STATE_STR_LEN];
       zlog_debug ("%s: (S,G)=%s upstream register stop timer %s",
 		  __PRETTY_FUNCTION__, up->sg_str,
-                  pim_upstream_state2str(up->join_state));
+                  pim_reg_state2str(up->reg_state, state_str));
     }
 
-  switch (up->join_state)
+  switch (up->reg_state)
     {
-    case PIM_UPSTREAM_JOIN_PENDING:
-      up->join_state = PIM_UPSTREAM_JOINED;
+    case PIM_REG_JOIN_PENDING:
+      up->reg_state = PIM_REG_JOIN;
       pim_channel_add_oif (up->channel_oil, pim_regiface, PIM_OIF_FLAG_PROTO_PIM);
       break;
-    case PIM_UPSTREAM_JOINED:
+    case PIM_REG_JOIN:
       break;
-    case PIM_UPSTREAM_PRUNE:
+    case PIM_REG_PRUNE:
       pim_ifp = up->rpf.source_nexthop.interface->info;
       if (!pim_ifp)
         {
@@ -1200,7 +1301,7 @@ pim_upstream_register_stop_timer (struct thread *t)
                        __PRETTY_FUNCTION__, up->rpf.source_nexthop.interface->name);
          return 0;
        }
-      up->join_state = PIM_UPSTREAM_JOIN_PENDING;
+      up->reg_state = PIM_REG_JOIN_PENDING;
       pim_upstream_start_register_stop_timer (up, 1);
 
       if (((up->channel_oil->cc.lastused/100) > PIM_KEEPALIVE_PERIOD) &&
@@ -1356,7 +1457,7 @@ pim_upstream_find_new_rpf (void)
 	  if (PIM_DEBUG_TRACE)
 	    zlog_debug ("Upstream %s without a path to send join, checking",
 			up->sg_str);
-	  pim_rpf_update (up, NULL);
+	  pim_rpf_update (up, NULL, 1);
 	}
     }
 }

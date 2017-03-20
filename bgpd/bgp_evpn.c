@@ -1728,13 +1728,14 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   u_char *tagpnt;
   int ret;
 
-  /* Type-2 route should be either 33, 37 or 49 bytes:
+  /* Type-2 route should be either 33, 37 or 49 bytes or an
+   * additional 3 bytes if there is a second label (VNI):
    * RD (8), ESI (10), Eth Tag (4), MAC Addr Len (1),
    * MAC Addr (6), IP len (1), IP (0, 4 or 16),
    * MPLS Lbl1 (3), MPLS Lbl2 (0 or 3)
-   * TODO: We currently expect only 1 label/tag.
    */
-  if (psize != 33 && psize != 37 && psize != 49)
+  if (psize != 33 && psize != 37 && psize != 49 &&
+      psize != 36 && psize != 40 && psize != 52)
     {
       zlog_err ("%u:%s - Rx EVPN Type-2 NLRI with invalid length %d",
                 peer->bgp->vrf_id, peer->host, psize);
@@ -1780,16 +1781,17 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
   ipaddr_len = *pfx++;
   if (ipaddr_len == 0)
     p.prefix.ipa_type = IP_ADDR_NONE;
-  else
+  else if (ipaddr_len != IPV4_MAX_BITLEN && ipaddr_len != IPV6_MAX_BITLEN)
     {
       zlog_err ("%u:%s - Rx EVPN Type-2 NLRI with unsupported IP address length %d",
                 peer->bgp->vrf_id, peer->host, ipaddr_len);
       return -1;
     }
 
-  pfx += ipaddr_len;
+  pfx += ipaddr_len / 8;
 
   /* Get the VNI (in MPLS label field). */
+  /* Note: We ignore the second VNI, if any. */
   tagpnt = pfx;
 
   /* Process the route. */

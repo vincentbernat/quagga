@@ -35,11 +35,12 @@
 #include "pim_zlookup.h"
 #include "pim_ifchannel.h"
 #include "pim_time.h"
+#include "pim_nht.h"
 
 static long long last_route_change_time = -1;
 long long nexthop_lookups_avoided = 0;
 
-static struct in_addr pim_rpf_find_rpf_addr(struct pim_upstream *up);
+static struct in_addr pim_rpf_find_rpf_addr (struct pim_upstream *up);
 
 void
 pim_rpf_set_refresh_time (void)
@@ -53,6 +54,7 @@ pim_rpf_set_refresh_time (void)
 int pim_nexthop_lookup(struct pim_nexthop *nexthop, struct in_addr addr, int neighbor_needed)
 {
   struct pim_zlookup_nexthop nexthop_tab[MULTIPATH_NUM];
+  struct pim_neighbor *nbr = NULL;
   int num_ifindex;
   struct interface *ifp;
   int first_ifindex;
@@ -135,8 +137,6 @@ int pim_nexthop_lookup(struct pim_nexthop *nexthop, struct in_addr addr, int nei
         }
       else if (neighbor_needed && !pim_if_connected_to_source (ifp, addr))
         {
-          struct pim_neighbor *nbr;
-
           nbr = pim_neighbor_find (ifp, nexthop_tab[i].nexthop_addr.u.prefix4);
           if (PIM_DEBUG_PIM_TRACE_DETAIL)
             zlog_debug ("ifp name: %s, pim nbr: %p", ifp->name, nbr);
@@ -170,6 +170,7 @@ int pim_nexthop_lookup(struct pim_nexthop *nexthop, struct in_addr addr, int nei
       nexthop->mrib_route_metric        = nexthop_tab[i].route_metric;
       nexthop->last_lookup              = addr;
       nexthop->last_lookup_time         = pim_time_monotonic_usec();
+      nexthop->nbr                      = nbr;
       return 0;
     }
   else
@@ -185,13 +186,30 @@ static int nexthop_mismatch(const struct pim_nexthop *nh1,
     (nh1->mrib_route_metric != nh2->mrib_route_metric);
 }
 
-enum pim_rpf_result pim_rpf_update(struct pim_upstream *up, struct pim_rpf *old)
+enum pim_rpf_result pim_rpf_update(struct pim_upstream *up, struct pim_rpf *old, uint8_t is_new)
 {
   struct pim_rpf     *rpf = &up->rpf;
   struct pim_rpf     saved;
+  struct prefix     nht_p;
 
   saved.source_nexthop = rpf->source_nexthop;
   saved.rpf_addr = rpf->rpf_addr;
+
+  if (is_new)
+    {
+      if (PIM_DEBUG_ZEBRA)
+        {
+          char source_str[INET_ADDRSTRLEN];
+          pim_inet4_dump("<source?>", up->upstream_addr, source_str, sizeof(source_str));
+          zlog_debug ("%s: NHT Register upstream %s addr %s with Zebra.",
+                __PRETTY_FUNCTION__, up->sg_str, source_str);
+        }
+      /* Register addr with Zebra NHT */
+      nht_p.family = AF_INET;
+      nht_p.prefixlen = IPV4_MAX_BITLEN;
+      nht_p.u.prefix4.s_addr = up->upstream_addr.s_addr;
+      pim_find_or_track_nexthop (&nht_p, up, NULL);
+    }
 
   if (pim_nexthop_lookup(&rpf->source_nexthop,
                          up->upstream_addr,
@@ -246,7 +264,9 @@ enum pim_rpf_result pim_rpf_update(struct pim_upstream *up, struct pim_rpf *old)
   }
 
   /* detect change in RPF'(S,G) */
-  if (saved.rpf_addr.u.prefix4.s_addr != rpf->rpf_addr.u.prefix4.s_addr) {
+  if (saved.rpf_addr.u.prefix4.s_addr != rpf->rpf_addr.u.prefix4.s_addr ||
+      saved.source_nexthop.interface != rpf->source_nexthop.interface)
+    {
 
     /* return old rpf to caller ? */
     if (old)
