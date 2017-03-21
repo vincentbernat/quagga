@@ -279,7 +279,11 @@ unmap_vni_from_rt (struct bgp *bgp, struct bgpevpn *vpn,
 
 /*
  * Create RT extended community automatically from passed information:
- * of the form AS:VNI
+ * of the form AS:VNI.
+ * NOTE: We use only the lower 16 bits of the AS. This is sufficient as
+ * the need is to get a RT value that will be unique across different
+ * VNIs but the same across routers (in the same AS) for a particular
+ * VNI.
  */
 static void
 form_auto_rt (struct bgp *bgp, struct bgpevpn *vpn,
@@ -288,11 +292,7 @@ form_auto_rt (struct bgp *bgp, struct bgpevpn *vpn,
   struct ecommunity_val eval;
   struct ecommunity *ecom;
 
-  if (bgp->as > BGP_AS_MAX)
-    encode_route_target_as4 (bgp->as, vpn->vni, &eval);
-  else
-    encode_route_target_as (bgp->as, vpn->vni, &eval);
-
+  encode_route_target_as ((bgp->as & 0xFFFF), vpn->vni, &eval);
   ecom = ecommunity_new ();
   ecommunity_add_val (ecom, &eval);
   *ecom_list = ecom;
