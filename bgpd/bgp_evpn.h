@@ -65,8 +65,8 @@ struct bgpevpn
   struct in_addr            originator_ip;
 
   /* Import and Export RTs. */
-  struct ecommunity         *import_rtl;
-  struct ecommunity         *export_rtl;
+  struct list               *import_rtl;
+  struct list               *export_rtl;
 
   /* Route table for EVPN routes for this VNI. */
   struct bgp_table          *route_table;
@@ -117,13 +117,6 @@ static inline int
 bgp_evpn_rd_matches_existing (struct bgpevpn *vpn, struct prefix_rd *prd)
 {
   return(memcmp (&vpn->prd.val, prd->val, ECOMMUNITY_SIZE) == 0);
-}
-
-static inline int
-bgp_evpn_rt_matches_existing (struct ecommunity *ecom,
-                              struct ecommunity *ecomadd)
-{
-  return (ecommunity_match (ecom, ecomadd));
 }
 
 static inline int
@@ -203,6 +196,7 @@ build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
   p->prefix.ip.v4_addr = originator_ip;
 }
 
+
 extern char *
 bgp_evpn_tag2str (u_char *tag, char *buf, int len);
 extern char *
@@ -273,13 +267,14 @@ bgp_evpn_configure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
                               struct ecommunity *ecomadd);
 extern void
 bgp_evpn_unconfigure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
-                                struct ecommunity *ecomadd);
+                                struct ecommunity *ecomdel);
 extern void
 bgp_evpn_configure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
                               struct ecommunity *ecomadd);
 extern void
 bgp_evpn_unconfigure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
-                                struct ecommunity *ecomadd);
+                                struct ecommunity *ecomdel);
+
 extern void
 bgp_evpn_configure_rd (struct bgp *bgp, struct bgpevpn *vpn,
                        struct prefix_rd *rd);
