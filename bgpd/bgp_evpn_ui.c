@@ -360,6 +360,7 @@ show_vni_entry (struct hash_backet *backet, struct vty *vty)
   struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
   char buf1[10];
   char buf2[INET6_ADDRSTRLEN];
+  char rt_buf[25];
   char *ecom_str;
   struct listnode *node, *nnode;
   struct ecommunity *ecom;
@@ -375,15 +376,29 @@ show_vni_entry (struct hash_backet *backet, struct vty *vty)
   for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
     {
       ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
-      vty_out (vty, " %-21s", ecom_str);
+
+      if (listcount(vpn->import_rtl) > 1)
+        sprintf (rt_buf, "%s, ...", ecom_str);
+      else
+        sprintf (rt_buf, ecom_str);
+      vty_out (vty, " %-25s", rt_buf);
+
       XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+      break;
     }
 
   for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
     {
       ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
-      vty_out (vty, " %-21s", ecom_str);
+
+      if (listcount(vpn->export_rtl) > 1)
+        sprintf (rt_buf, "%s, ...", ecom_str);
+      else
+        sprintf (rt_buf, ecom_str);
+      vty_out (vty, " %-25s", rt_buf);
+
       XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+      break;
     }
   vty_out (vty, "%s", VTY_NEWLINE);
 }
@@ -1102,7 +1117,7 @@ bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp)
   vty_out(vty, "Number of VNIs: %u%s",
           num_vnis, VTY_NEWLINE);
   vty_out(vty, "Flags: * - Kernel %s", VTY_NEWLINE);
-  vty_out(vty, "  %-10s %-15s %-21s %-21s %-21s%s",
+  vty_out(vty, "  %-10s %-15s %-21s %-25s %-25s%s",
           "VNI", "Orig IP", "RD", "Import RT", "Export RT", VTY_NEWLINE);
   hash_iterate (bgp->vnihash,
                 (void (*) (struct hash_backet *, void *))
