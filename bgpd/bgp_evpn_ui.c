@@ -410,10 +410,7 @@ bgp_evpn_rt_delete_auto (struct bgp *bgp, struct bgpevpn *vpn, struct list *rtl)
   struct ecommunity *ecom, *ecom_auto;
   struct ecommunity_val eval;
 
-  if (bgp->as > BGP_AS_MAX)
-    encode_route_target_as4 (bgp->as, vpn->vni, &eval);
-  else
-    encode_route_target_as (bgp->as, vpn->vni, &eval);
+  encode_route_target_as ((bgp->as & 0xFFFF), vpn->vni, &eval);
 
   ecom_auto = ecommunity_new ();
   ecommunity_add_val (ecom_auto, &eval);
@@ -531,7 +528,10 @@ bgp_evpn_unconfigure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
 
   /* Reset to auto RT - this also rebuilds the RT to VNI mapping */
   if (list_isempty(vpn->import_rtl))
-    bgp_evpn_derive_auto_rt_import (bgp, vpn);
+    {
+      UNSET_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD);
+      bgp_evpn_derive_auto_rt_import (bgp, vpn);
+    }
 
   /* Install routes that match new import RT */
   if (is_vni_live (vpn))
@@ -598,7 +598,10 @@ bgp_evpn_unconfigure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
     }
 
   if (list_isempty(vpn->export_rtl))
-    bgp_evpn_derive_auto_rt_export (bgp, vpn);
+    {
+      UNSET_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD);
+      bgp_evpn_derive_auto_rt_export (bgp, vpn);
+    }
 
   if (is_vni_live (vpn))
     bgp_evpn_handle_export_rt_change (bgp, vpn);
