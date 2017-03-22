@@ -47,11 +47,13 @@
 DEFINE_MTYPE_STATIC(ZEBRA, ZVNI,      "VNI hash");
 DEFINE_MTYPE_STATIC(ZEBRA, ZVNI_VTEP, "VNI remote VTEP");
 DEFINE_MTYPE_STATIC(ZEBRA, MAC,       "VNI MAC");
+DEFINE_MTYPE_STATIC(ZEBRA, NEIGH,     "VNI Neighbor");
 
 /* definitions */
 typedef struct zebra_vni_t_ zebra_vni_t;
 typedef struct zebra_vtep_t_ zebra_vtep_t;
 typedef struct zebra_mac_t_ zebra_mac_t;
+typedef struct zebra_neigh_t_ zebra_neigh_t;
 
 /*
  * VTEP info
@@ -90,8 +92,11 @@ struct zebra_vni_t_
   /* Local IP */
   struct in_addr local_vtep_ip;
 
-  /* List of local or remote MAC/IP */
+  /* List of local or remote MAC */
   struct hash *mac_table;
+
+  /* List of local or remote neighbors (MAC+IP) */
+  struct hash *neigh_table;
 };
 
 /*
@@ -149,6 +154,36 @@ struct mac_walk_ctx
 
   struct vty *vty;            /* Used by VTY handlers */
   u_int32_t  count;           /* Used by VTY handlers */
+};
+
+/*
+ * Neighbor hash table.
+ *
+ * This table contains the neighbors (IP to MAC bindings) pertaining to
+ * this VNI. This includes local neighbors learnt on the attached VLAN
+ * device that maps to this VNI as well as remote neighbors learnt and
+ * installed by BGP.
+ * Local neighbors will be known against the VLAN device (SVI); however,
+ * it is sufficient for zebra to maintain against the VNI. The correct
+ * VNI will be obtained as zebra maintains the mapping (of VLAN to VNI).
+ */
+struct zebra_neigh_t_
+{
+  /* IP address. */
+  struct ipaddr   ip;
+
+  /* MAC address. */
+  struct ethaddr  emac;
+
+  /* Underlying interface. */
+  ifindex_t ifindex;
+
+  u_int32_t       flags;
+#define ZEBRA_NEIGH_LOCAL   0x01
+#define ZEBRA_NEIGH_REMOTE  0x02
+
+  /* Remote VTEP IP - applicable only for remote neighbors. */
+  struct in_addr r_vtep_ip;
 };
 
 
