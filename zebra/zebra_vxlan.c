@@ -105,9 +105,6 @@ struct zebra_vni_t_
  * against the VNI i.e., it does not need to retain the local "port"
  * information. The correct VNI will be obtained as zebra maintains
  * the mapping (of VLAN to VNI).
- *
- * TODO: Currently only deals with MAC and needs to be extended for
- * MAC+IP.
  */
 struct zebra_mac_t_
 {
@@ -177,7 +174,7 @@ zvni_mac_del_all (struct zebra_vrf *zvrf, zebra_vni_t *zvni,
 static zebra_mac_t *
 zvni_mac_lookup (zebra_vni_t *zvni, struct ethaddr *macaddr);
 static int
-zvni_mac_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
+zvni_macip_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
                                struct ethaddr *macaddr, u_int16_t cmd);
 static int
 zvni_mac_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni,
@@ -424,8 +421,8 @@ zvni_mac_lookup (zebra_vni_t *zvni, struct ethaddr *mac)
 }
 
 static int
-zvni_mac_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
-                             struct ethaddr *macaddr, u_int16_t cmd)
+zvni_macip_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
+                               struct ethaddr *macaddr, u_int16_t cmd)
 {
   struct zserv *client;
   struct stream *s;
@@ -449,14 +446,14 @@ zvni_mac_send_msg_to_client (struct zebra_vrf *zvrf, vni_t vni,
 
   if (IS_ZEBRA_DEBUG_VXLAN)
     zlog_debug ("%u:Send %s MAC %s VNI %u to %s",
-                zvrf->vrf_id, (cmd == ZEBRA_MAC_ADD) ? "Add" : "Del",
+                zvrf->vrf_id, (cmd == ZEBRA_MACIP_ADD) ? "Add" : "Del",
                 mac2str (macaddr, buf, sizeof (buf)), vni,
                 zebra_route_string (client->proto));
 
-  if (cmd == ZEBRA_MAC_ADD)
-    client->macadd_cnt++;
+  if (cmd == ZEBRA_MACIP_ADD)
+    client->macipadd_cnt++;
   else
-    client->macdel_cnt++;
+    client->macipdel_cnt++;
 
   return zebra_server_send_message(client);
 }
@@ -468,7 +465,7 @@ static int
 zvni_mac_send_add_to_client (struct zebra_vrf *zvrf, vni_t vni,
                              struct ethaddr *macaddr)
 {
-  return zvni_mac_send_msg_to_client (zvrf, vni, macaddr, ZEBRA_MAC_ADD);
+  return zvni_macip_send_msg_to_client (zvrf, vni, macaddr, ZEBRA_MACIP_ADD);
 }
 
 /*
@@ -478,7 +475,7 @@ static int
 zvni_mac_send_del_to_client (struct zebra_vrf *zvrf, vni_t vni,
                              struct ethaddr *macaddr)
 {
-  return zvni_mac_send_msg_to_client (zvrf, vni, macaddr, ZEBRA_MAC_DEL);
+  return zvni_macip_send_msg_to_client (zvrf, vni, macaddr, ZEBRA_MACIP_DEL);
 }
 
 /*
@@ -2147,7 +2144,7 @@ zebra_vxlan_check_del_local_mac (struct interface *ifp,
  * Handle message from client to add a remote MAC/IP for a VNI.
  */
 int 
-zebra_vxlan_remote_mac_add (struct zserv *client, int sock,
+zebra_vxlan_remote_macip_add (struct zserv *client, int sock,
                               u_short length, struct zebra_vrf *zvrf)
 {
   struct stream *s;
@@ -2264,7 +2261,7 @@ zebra_vxlan_remote_mac_add (struct zserv *client, int sock,
 /*
  * Handle message from client to delete a remote MAC/IP for a VNI.
  */
-int zebra_vxlan_remote_mac_del (struct zserv *client, int sock,
+int zebra_vxlan_remote_macip_del (struct zserv *client, int sock,
                                   u_short length, struct zebra_vrf *zvrf)
 {
   struct stream *s;

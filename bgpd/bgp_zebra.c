@@ -2196,8 +2196,8 @@ bgp_zebra_process_local_vni (int command, struct zclient *zclient,
 }
 
 static int
-bgp_zebra_process_local_mac (int command, struct zclient *zclient,
-                             zebra_size_t length, vrf_id_t vrf_id)
+bgp_zebra_process_local_macip (int command, struct zclient *zclient,
+                               zebra_size_t length, vrf_id_t vrf_id)
 {
   struct stream *s;
   vni_t vni;
@@ -2213,14 +2213,14 @@ bgp_zebra_process_local_mac (int command, struct zclient *zclient,
     return 0;
 
   if (BGP_DEBUG (zebra, ZEBRA))
-    zlog_debug ("%u:Recv %s MAC %s VNI %u",
-                vrf_id, (command == ZEBRA_MAC_ADD) ? "Add" : "Del",
+    zlog_debug ("%u:Recv MACIP %s MAC %s VNI %u",
+                vrf_id, (command == ZEBRA_MACIP_ADD) ? "Add" : "Del",
                 mac2str (&mac, buf, sizeof (buf)), vni);
 
-  if (command == ZEBRA_MAC_ADD)
-    return bgp_evpn_local_mac_add (bgp, vni, &mac);
+  if (command == ZEBRA_MACIP_ADD)
+    return bgp_evpn_local_macip_add (bgp, vni, &mac);
   else
-    return bgp_evpn_local_mac_del (bgp, vni, &mac);
+    return bgp_evpn_local_macip_del (bgp, vni, &mac);
 }
 
 void
@@ -2250,8 +2250,8 @@ bgp_zebra_init (struct thread_master *master)
   zclient->import_check_update = bgp_read_import_check_update;
   zclient->local_vni_add = bgp_zebra_process_local_vni;
   zclient->local_vni_del = bgp_zebra_process_local_vni;
-  zclient->local_mac_add = bgp_zebra_process_local_mac;
-  zclient->local_mac_del = bgp_zebra_process_local_mac;
+  zclient->local_macip_add = bgp_zebra_process_local_macip;
+  zclient->local_macip_del = bgp_zebra_process_local_macip;
 
   bgp_nexthop_buf = stream_new(BGP_NEXTHOP_BUF_SIZE);
   bgp_ifindices_buf = stream_new(BGP_IFINDICES_BUF_SIZE);
