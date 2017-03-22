@@ -182,7 +182,7 @@ build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac)
   p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
   memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
-  p->prefix.ipa_type = IP_ADDR_NONE;
+  p->prefix.ip.ipa_type = IPADDR_NONE;
 }
 
 static inline void
@@ -192,8 +192,8 @@ build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
   p->family = AF_ETHERNET;
   p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
-  p->prefix.ipa_type = IP_ADDR_V4;
-  p->prefix.ip.v4_addr = originator_ip;
+  p->prefix.ip.ipa_type = IPADDR_V4;
+  p->prefix.ip.ip.v4_addr = originator_ip;
 }
 
 

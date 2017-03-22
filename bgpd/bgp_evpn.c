@@ -396,14 +396,14 @@ bgp_zebra_send_remote_vtep (struct bgp *bgp, struct bgpevpn *vpn,
       family = AF_INET;
       stream_putw(s, family);
       stream_putc(s, IPV4_MAX_BITLEN);
-      stream_put_in_addr(s, &p->prefix.ip.v4_addr);
+      stream_put_in_addr(s, &p->prefix.ip.ip.v4_addr);
     }
   else if (IS_EVPN_PREFIX_IPADDR_V6(p))
     {
       family = AF_INET6;
       stream_putw(s, AF_INET6);
       stream_putc(s, IPV6_MAX_BITLEN);
-      stream_put(s, &p->prefix.ip.v6_addr, IPV6_MAX_BYTELEN);
+      stream_put(s, &p->prefix.ip.ip.v6_addr, IPV6_MAX_BYTELEN);
     }
   else
     {
@@ -1784,15 +1784,16 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
 
   /* Get the IP. */
   ipaddr_len = *pfx++;
-  if (ipaddr_len == 0)
-    p.prefix.ipa_type = IP_ADDR_NONE;
-  else if (ipaddr_len != IPV4_MAX_BITLEN && ipaddr_len != IPV6_MAX_BITLEN)
+  if (ipaddr_len != 0 &&
+      ipaddr_len != IPV4_MAX_BITLEN &&
+      ipaddr_len != IPV6_MAX_BITLEN)
     {
       zlog_err ("%u:%s - Rx EVPN Type-2 NLRI with unsupported IP address length %d",
                 peer->bgp->vrf_id, peer->host, ipaddr_len);
       return -1;
     }
 
+  p.prefix.ip.ipa_type = IPADDR_NONE; /* Temporary - until MACIP support. */
   pfx += ipaddr_len / 8;
 
   /* Get the VNI (in MPLS label field). */
@@ -1851,8 +1852,8 @@ process_type3_route (struct peer *peer, afi_t afi, safi_t safi,
   ipaddr_len = *pfx++;
   if (ipaddr_len == IPV4_MAX_BITLEN)
     {
-      p.prefix.ipa_type = IP_ADDR_V4;
-      memcpy (&p.prefix.ip, pfx, IPV4_MAX_BYTELEN);
+      p.prefix.ip.ipa_type = IPADDR_V4;
+      memcpy (&p.prefix.ip.ip.addr, pfx, IPV4_MAX_BYTELEN);
     }
   else
     {
@@ -1903,7 +1904,7 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len)
       snprintf (buf, len, "[%d]:[0]:[%d]:[%s]",
                 p->prefix.route_type, IS_EVPN_PREFIX_IPADDR_V4(p) ? \
                 IPV4_MAX_BITLEN : IPV6_MAX_BITLEN,
-                inet_ntoa(p->prefix.ip.v4_addr));
+                inet_ntoa(p->prefix.ip.ip.v4_addr));
     }
   if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
     {
@@ -1921,7 +1922,7 @@ bgp_evpn_route2str (struct prefix_evpn *p, char *buf, int len)
                     p->prefix.route_type, 8*ETHER_ADDR_LEN,
                     mac2str (&p->prefix.mac, buf1, sizeof(buf1)),
                     family == AF_INET ? IPV4_MAX_BITLEN : IPV6_MAX_BITLEN,
-                    inet_ntop (family, &p->prefix.ip.addr,
+                    inet_ntop (family, &p->prefix.ip.ip.addr,
                                buf2, PREFIX2STR_BUFFER));
         }
     }
@@ -2149,7 +2150,7 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
         stream_putl (s, 0); /* Ethernet Tag ID */
         stream_putc (s, IPV4_MAX_BITLEN); /* IP address Length - bits */
         /* Originating Router's IP Addr */
-        stream_put_in_addr (s, &evp->prefix.ip.v4_addr);
+        stream_put_in_addr (s, &evp->prefix.ip.ip.v4_addr);
         break;
 
       case BGP_EVPN_MAC_IP_ROUTE:
