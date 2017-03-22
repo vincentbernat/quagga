@@ -279,23 +279,24 @@ unmap_vni_from_rt (struct bgp *bgp, struct bgpevpn *vpn,
 
 /*
  * Create RT extended community automatically from passed information:
- * of the form AS:VNI
+ * of the form AS:VNI.
+ * NOTE: We use only the lower 16 bits of the AS. This is sufficient as
+ * the need is to get a RT value that will be unique across different
+ * VNIs but the same across routers (in the same AS) for a particular
+ * VNI.
  */
 static void
 form_auto_rt (struct bgp *bgp, struct bgpevpn *vpn,
-                       struct ecommunity **ecom_list)
+              struct list *rtl)
 {
   struct ecommunity_val eval;
-  struct ecommunity *ecom;
+  struct ecommunity *ecomadd;
 
-  if (bgp->as > BGP_AS_MAX)
-    encode_route_target_as4 (bgp->as, vpn->vni, &eval);
-  else
-    encode_route_target_as (bgp->as, vpn->vni, &eval);
+  encode_route_target_as ((bgp->as & 0xFFFF), vpn->vni, &eval);
 
-  ecom = ecommunity_new ();
-  ecommunity_add_val (ecom, &eval);
-  *ecom_list = ecom;
+  ecomadd = ecommunity_new ();
+  ecommunity_add_val (ecomadd, &eval);
+  listnode_add_sort (rtl, ecomadd);
 }
 
 /*
@@ -429,23 +430,27 @@ static void
 build_evpn_route_extcomm (struct bgpevpn *vpn, struct attr *attr)
 {
   struct attr_extra *attre;
-  struct ecommunity ecom_tmp;
+  struct ecommunity ecom_encap;
   struct ecommunity_val eval;
   bgp_encap_types tnl_type;
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
 
   attre = bgp_attr_extra_get (attr);
+
+  /* Encap */
   tnl_type = BGP_ENCAP_TYPE_VXLAN;
-
-  /* Start with export RT */
-  attre->ecommunity = ecommunity_dup (vpn->export_rtl);
-
-  memset (&ecom_tmp, 0, sizeof (ecom_tmp));
+  memset (&ecom_encap, 0, sizeof (ecom_encap));
   encode_encap_extcomm (tnl_type, &eval);
-  ecom_tmp.size = 1;
-  ecom_tmp.val = (u_int8_t *)eval.val;
+  ecom_encap.size = 1;
+  ecom_encap.val = (u_int8_t *)eval.val;
 
   /* Add Encap */
-  attre->ecommunity = ecommunity_merge (attre->ecommunity, &ecom_tmp);
+  attre->ecommunity = ecommunity_dup (&ecom_encap);
+
+  /* Start with export RTs */
+  for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
+    attre->ecommunity = ecommunity_merge (attre->ecommunity, ecom);
 
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
 }
@@ -1932,17 +1937,17 @@ void
 bgp_evpn_map_vni_to_its_rts (struct bgp *bgp, struct bgpevpn *vpn)
 {
   int i;
-  struct ecommunity *ecom;
   struct ecommunity_val *eval;
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
 
-  ecom = vpn->import_rtl;
-  if (!ecom || !ecom->size)
-    return;
-
-  for (i = 0; i < ecom->size; i++)
+  for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
     {
-      eval = (struct ecommunity_val *) (ecom->val + (i * ECOMMUNITY_SIZE));
-      map_vni_to_rt (bgp, vpn, eval);
+      for (i = 0; i < ecom->size; i++)
+        {
+          eval = (struct ecommunity_val *) (ecom->val + (i * ECOMMUNITY_SIZE));
+          map_vni_to_rt (bgp, vpn, eval);
+        }
     }
 }
 
@@ -1954,29 +1959,29 @@ void
 bgp_evpn_unmap_vni_from_its_rts (struct bgp *bgp, struct bgpevpn *vpn)
 {
   int i;
-  struct ecommunity *ecom;
   struct ecommunity_val *eval;
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
 
-  ecom = vpn->import_rtl;
-  if (!ecom || !ecom->size)
-    return;
-
-  for (i = 0; i < ecom->size; i++)
+  for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
     {
-      struct irt_node *irt;
-      struct ecommunity_val eval_tmp;
+      for (i = 0; i < ecom->size; i++)
+        {
+          struct irt_node *irt;
+          struct ecommunity_val eval_tmp;
 
-      eval = (struct ecommunity_val *) (ecom->val + (i * ECOMMUNITY_SIZE));
-      /* If using "automatic" RT, we only care about the local-admin sub-field.
-       * This is to facilitate using VNI as the RT for EBGP peering too.
-       */
-      memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
-      if (!is_import_rt_configured (vpn))
-        mask_ecom_global_admin (&eval_tmp, eval);
+          eval = (struct ecommunity_val *) (ecom->val + (i * ECOMMUNITY_SIZE));
+          /* If using "automatic" RT, we only care about the local-admin sub-field.
+           * This is to facilitate using VNI as the RT for EBGP peering too.
+           */
+          memcpy (&eval_tmp, eval, ECOMMUNITY_SIZE);
+          if (!is_import_rt_configured (vpn))
+            mask_ecom_global_admin (&eval_tmp, eval);
 
-      irt = lookup_import_rt (bgp, &eval_tmp);
-      if (irt)
-        unmap_vni_from_rt (bgp, vpn, irt);
+          irt = lookup_import_rt (bgp, &eval_tmp);
+          if (irt)
+            unmap_vni_from_rt (bgp, vpn, irt);
+        }
     }
 }
 
@@ -1987,7 +1992,7 @@ bgp_evpn_unmap_vni_from_its_rts (struct bgp *bgp, struct bgpevpn *vpn)
 void
 bgp_evpn_derive_auto_rt_import (struct bgp *bgp, struct bgpevpn *vpn)
 {
-  form_auto_rt (bgp, vpn, &vpn->import_rtl);
+  form_auto_rt (bgp, vpn, vpn->import_rtl);
   UNSET_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD);
 
   /* Map RT to VNI */
@@ -2000,7 +2005,7 @@ bgp_evpn_derive_auto_rt_import (struct bgp *bgp, struct bgpevpn *vpn)
 void
 bgp_evpn_derive_auto_rt_export (struct bgp *bgp, struct bgpevpn *vpn)
 {
-  form_auto_rt (bgp, vpn, &vpn->export_rtl);
+  form_auto_rt (bgp, vpn, vpn->export_rtl);
   UNSET_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD);
 }
 
@@ -2035,6 +2040,31 @@ bgp_evpn_lookup_vni (struct bgp *bgp, vni_t vni)
   return vpn;
 }
 
+static int
+route_target_cmp (struct ecommunity *ecom1, struct ecommunity *ecom2)
+{
+  if (ecom1 && !ecom2)
+    return -1;
+
+  if (!ecom1 && ecom2)
+    return 1;
+
+  if (!ecom1 && !ecom2)
+    return 0;
+
+  if (ecom1->str && !ecom2->str)
+    return -1;
+
+  if (!ecom1->str && ecom2->str)
+    return 1;
+
+  if (!ecom1->str && !ecom2->str)
+    return 0;
+
+  return strcmp(ecom1->str, ecom2->str);
+}
+
+
 /*
  * Create a new vpn - invoked upon configuration or zebra notification.
  */
@@ -2053,6 +2083,13 @@ bgp_evpn_new (struct bgp *bgp, vni_t vni, struct in_addr originator_ip)
   /* Set values - RD and RT set to defaults. */
   vpn->vni = vni;
   vpn->originator_ip = originator_ip;
+
+  /* Initialize route-target import and export lists */
+  vpn->import_rtl = list_new ();
+  vpn->import_rtl->cmp = (int (*)(void *, void *)) route_target_cmp;
+  vpn->export_rtl = list_new ();
+  vpn->export_rtl->cmp = (int (*)(void *, void *)) route_target_cmp;
+
   derive_rd_rt_for_vni (bgp, vpn);
 
   /* Initialize EVPN route table. */
@@ -2079,8 +2116,10 @@ bgp_evpn_free (struct bgp *bgp, struct bgpevpn *vpn)
 {
   bgp_table_unlock (vpn->route_table);
   bgp_evpn_unmap_vni_from_its_rts (bgp, vpn);
-  ecommunity_free (&vpn->import_rtl);
-  ecommunity_free (&vpn->export_rtl);
+  list_delete (vpn->import_rtl);
+  list_delete (vpn->export_rtl);
+  vpn->import_rtl = NULL;
+  vpn->export_rtl = NULL;
   hash_release (bgp->vnihash, vpn);
   QOBJ_UNREG (vpn);
   XFREE(MTYPE_BGP_EVPN, vpn);

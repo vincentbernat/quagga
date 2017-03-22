@@ -6368,6 +6368,27 @@ DEFUN (no_bgp_evpn_vni_rd_without_val,
   return CMD_SUCCESS;
 }
 
+/*
+ * Loop over all extended-communities in the route-target list rtl and
+ * return 1 if we find ecomtarget
+ */
+static int
+bgp_evpn_rt_matches_existing (struct list *rtl,
+                              struct ecommunity *ecomtarget)
+{
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
+
+  for (ALL_LIST_ELEMENTS (rtl, node, nnode, ecom))
+    {
+      if (ecommunity_match (ecom, ecomtarget))
+        return 1;
+    }
+
+  return 0;
+}
+
+
 DEFUN (bgp_evpn_vni_rt,
        bgp_evpn_vni_rt_cmd,
        "route-target (both|import|export) .RT",
@@ -6413,6 +6434,7 @@ DEFUN (bgp_evpn_vni_rt,
     {
       str = argv_concat (argv, argc, 1);
       ecomadd = ecommunity_str2com (str, ECOMMUNITY_ROUTE_TARGET, 0);
+      ecommunity_str(ecomadd);
       XFREE (MTYPE_TMP, str);
       if (!ecomadd)
         {
@@ -6430,6 +6452,7 @@ DEFUN (bgp_evpn_vni_rt,
     {
       str = argv_concat (argv, argc, 1);
       ecomadd = ecommunity_str2com (str, ECOMMUNITY_ROUTE_TARGET, 0);
+      ecommunity_str(ecomadd);
       XFREE (MTYPE_TMP, str);
       if (!ecomadd)
         {
@@ -6515,6 +6538,7 @@ DEFUN (no_bgp_evpn_vni_rt,
 
   str = argv_concat (argv, argc, 1);
   ecomdel = ecommunity_str2com (str, ECOMMUNITY_ROUTE_TARGET, 0);
+  ecommunity_str(ecomdel);
   XFREE (MTYPE_TMP, str);
   if (!ecomdel)
     {

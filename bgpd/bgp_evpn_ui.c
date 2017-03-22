@@ -78,6 +78,8 @@ write_vni_config (struct vty *vty, struct bgpevpn *vpn, int *write)
   afi_t afi = AFI_L2VPN;
   safi_t safi = SAFI_EVPN;
   char *ecom_str;
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
 
   if (is_vni_configured (vpn))
     {
@@ -87,19 +89,25 @@ write_vni_config (struct vty *vty, struct bgpevpn *vpn, int *write)
           vty_out (vty, "   rd %s%s",
                         prefix_rd2str (&vpn->prd, buf1, RD_ADDRSTRLEN),
                         VTY_NEWLINE);
+
       if (is_import_rt_configured (vpn))
         {
-          ecom_str = ecommunity_ecom2str (vpn->import_rtl,
-                                          ECOMMUNITY_FORMAT_ROUTE_MAP);
-          vty_out (vty, "   route-target import %s%s", ecom_str, VTY_NEWLINE);
-          XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+          for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
+            {
+              ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
+              vty_out (vty, "   route-target import %s%s", ecom_str, VTY_NEWLINE);
+              XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+            }
         }
+
       if (is_export_rt_configured (vpn))
         {
-          ecom_str = ecommunity_ecom2str (vpn->export_rtl,
-                                          ECOMMUNITY_FORMAT_ROUTE_MAP);
-          vty_out (vty, "   route-target export %s%s", ecom_str, VTY_NEWLINE);
-          XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+          for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
+            {
+              ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
+              vty_out (vty, "   route-target export %s%s", ecom_str, VTY_NEWLINE);
+              XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+            }
         }
 
       vty_out (vty, "  exit-vni%s", VTY_NEWLINE);
@@ -254,6 +262,8 @@ display_vni (struct vty *vty, struct bgpevpn *vpn)
 {
   char buf1[INET6_ADDRSTRLEN];
   char *ecom_str;
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
 
   vty_out (vty, "VNI: %d", vpn->vni);
   if (is_vni_live (vpn))
@@ -267,16 +277,20 @@ display_vni (struct vty *vty, struct bgpevpn *vpn)
            inet_ntoa(vpn->originator_ip), VTY_NEWLINE);
 
   vty_out (vty, "  Import Route Target:%s", VTY_NEWLINE);
-  ecom_str = ecommunity_ecom2str (vpn->import_rtl,
-                                  ECOMMUNITY_FORMAT_ROUTE_MAP);
-  vty_out (vty, "    %s%s", ecom_str, VTY_NEWLINE);
-  XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+  for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
+    {
+      ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
+      vty_out (vty, "    %s%s", ecom_str, VTY_NEWLINE);
+      XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+    }
 
   vty_out (vty, "  Export Route Target:%s", VTY_NEWLINE);
-  ecom_str = ecommunity_ecom2str (vpn->export_rtl,
-                                  ECOMMUNITY_FORMAT_ROUTE_MAP);
-  vty_out (vty, "    %s%s", ecom_str, VTY_NEWLINE);
-  XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+  for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
+    {
+      ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
+      vty_out (vty, "    %s%s", ecom_str, VTY_NEWLINE);
+      XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+    }
 }
 
 static void
@@ -346,7 +360,10 @@ show_vni_entry (struct hash_backet *backet, struct vty *vty)
   struct bgpevpn *vpn = (struct bgpevpn *) backet->data;
   char buf1[10];
   char buf2[INET6_ADDRSTRLEN];
+  char rt_buf[25];
   char *ecom_str;
+  struct listnode *node, *nnode;
+  struct ecommunity *ecom;
 
   buf1[0] = '\0';
   if (is_vni_live (vpn))
@@ -355,27 +372,84 @@ show_vni_entry (struct hash_backet *backet, struct vty *vty)
   vty_out(vty, "%-1s %-10u %-15s %-21s",
           buf1, vpn->vni, inet_ntoa(vpn->originator_ip),
           prefix_rd2str (&vpn->prd, buf2, RD_ADDRSTRLEN));
-  ecom_str = ecommunity_ecom2str (vpn->import_rtl,
-                                  ECOMMUNITY_FORMAT_ROUTE_MAP);
-  vty_out (vty, " %-21s", ecom_str);
-  XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
-  ecom_str = ecommunity_ecom2str (vpn->export_rtl,
-                                  ECOMMUNITY_FORMAT_ROUTE_MAP);
-  vty_out (vty, " %-21s", ecom_str);
-  XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+
+  for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
+    {
+      ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
+
+      if (listcount(vpn->import_rtl) > 1)
+        sprintf (rt_buf, "%s, ...", ecom_str);
+      else
+        sprintf (rt_buf, "%s", ecom_str);
+      vty_out (vty, " %-25s", rt_buf);
+
+      XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+      break;
+    }
+
+  for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
+    {
+      ecom_str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_ROUTE_MAP);
+
+      if (listcount(vpn->export_rtl) > 1)
+        sprintf (rt_buf, "%s, ...", ecom_str);
+      else
+        sprintf (rt_buf, "%s", ecom_str);
+      vty_out (vty, " %-25s", rt_buf);
+
+      XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
+      break;
+    }
   vty_out (vty, "%s", VTY_NEWLINE);
 }
 
+static void
+bgp_evpn_rt_delete_auto (struct bgp *bgp, struct bgpevpn *vpn, struct list *rtl)
+{
+  struct listnode *node, *nnode, *node_to_del;
+  struct ecommunity *ecom, *ecom_auto;
+  struct ecommunity_val eval;
+
+  encode_route_target_as ((bgp->as & 0xFFFF), vpn->vni, &eval);
+
+  ecom_auto = ecommunity_new ();
+  ecommunity_add_val (ecom_auto, &eval);
+  node_to_del = NULL;
+
+  for (ALL_LIST_ELEMENTS (rtl, node, nnode, ecom))
+    {
+      if (ecommunity_match (ecom, ecom_auto))
+        {
+          ecommunity_free (&ecom);
+          node_to_del = node;
+        }
+    }
+
+  if (node_to_del)
+    list_delete_node(rtl, node_to_del);
+
+  ecommunity_free(&ecom_auto);
+}
+
+static void
+bgp_evpn_import_rt_delete_auto (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  bgp_evpn_rt_delete_auto (bgp, vpn, vpn->import_rtl);
+}
+
+static void
+bgp_evpn_export_rt_delete_auto (struct bgp *bgp, struct bgpevpn *vpn)
+{
+  bgp_evpn_rt_delete_auto (bgp, vpn, vpn->export_rtl);
+}
 
 /*
  * Public functions.
  */
 
-
 /*
  * Configure the Import RTs for a VNI (vty handler). Caller expected to
- * check that this is a change. Note that import RTs are implemented as
- * a "replace" (similar to other configuration).
+ * check that this is a change.
  */
 void
 bgp_evpn_configure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
@@ -390,10 +464,13 @@ bgp_evpn_configure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
 
   /* Cleanup the RT to VNI mapping and get rid of existing import RT. */
   bgp_evpn_unmap_vni_from_its_rts (bgp, vpn);
-  ecommunity_free (&vpn->import_rtl);
 
-  /* Set to new value and rebuild the RT to VNI mapping */
-  vpn->import_rtl = ecomadd;
+  /* If the auto route-target is in use we must remove it */
+  bgp_evpn_import_rt_delete_auto(bgp, vpn);
+
+  /* Add new RT and rebuild the RT to VNI mapping */
+  listnode_add_sort (vpn->import_rtl, ecomadd);
+
   SET_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD);
   bgp_evpn_map_vni_to_its_rts (bgp, vpn);
 
@@ -407,8 +484,11 @@ bgp_evpn_configure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
  */
 void
 bgp_evpn_unconfigure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
-                                struct ecommunity *ecomadd)
+                                struct ecommunity *ecomdel)
 {
+  struct listnode *node, *nnode, *node_to_del;
+  struct ecommunity *ecom;
+
   /* Along the lines of "configure" except we have to reset to the
    * automatic value.
    */
@@ -417,10 +497,41 @@ bgp_evpn_unconfigure_import_rt (struct bgp *bgp, struct bgpevpn *vpn,
 
   /* Cleanup the RT to VNI mapping and get rid of existing import RT. */
   bgp_evpn_unmap_vni_from_its_rts (bgp, vpn);
-  ecommunity_free (&vpn->import_rtl);
+
+  /* Delete all import RTs */
+  if (ecomdel == NULL)
+    {
+      for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
+        ecommunity_free (&ecom);
+
+      list_delete_all_node(vpn->import_rtl);
+    }
+
+  /* Delete a specific import RT */
+  else
+    {
+      node_to_del = NULL;
+
+      for (ALL_LIST_ELEMENTS (vpn->import_rtl, node, nnode, ecom))
+        {
+          if (ecommunity_match (ecom, ecomdel))
+            {
+              ecommunity_free (&ecom);
+              node_to_del = node;
+              break;
+            }
+        }
+
+      if (node_to_del)
+        list_delete_node(vpn->import_rtl, node_to_del);
+    }
 
   /* Reset to auto RT - this also rebuilds the RT to VNI mapping */
-  bgp_evpn_derive_auto_rt_import (bgp, vpn);
+  if (list_isempty(vpn->import_rtl))
+    {
+      UNSET_FLAG (vpn->flags, VNI_FLAG_IMPRT_CFGD);
+      bgp_evpn_derive_auto_rt_import (bgp, vpn);
+    }
 
   /* Install routes that match new import RT */
   if (is_vni_live (vpn))
@@ -437,10 +548,12 @@ void
 bgp_evpn_configure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
                               struct ecommunity *ecomadd)
 {
-  /* Replace existing with new config and process all routes. */
-  ecommunity_free (&vpn->export_rtl);
-  vpn->export_rtl = ecomadd;
+  /* If the auto route-target is in use we must remove it */
+  bgp_evpn_export_rt_delete_auto (bgp, vpn);
+
+  listnode_add_sort (vpn->export_rtl, ecomadd);
   SET_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD);
+
   if (is_vni_live (vpn))
     bgp_evpn_handle_export_rt_change (bgp, vpn);
 }
@@ -450,11 +563,46 @@ bgp_evpn_configure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
  */
 void
 bgp_evpn_unconfigure_export_rt (struct bgp *bgp, struct bgpevpn *vpn,
-                                struct ecommunity *ecomadd)
+                                struct ecommunity *ecomdel)
 {
-  /* Reset to default and process all routes. */
-  ecommunity_free (&vpn->export_rtl);
-  bgp_evpn_derive_auto_rt_export (bgp, vpn);
+  struct listnode *node, *nnode, *node_to_del;
+  struct ecommunity *ecom;
+
+  /* Delete all export RTs */
+  if (ecomdel == NULL)
+    {
+      /* Reset to default and process all routes. */
+      for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
+        ecommunity_free (&ecom);
+
+      list_delete_all_node(vpn->export_rtl);
+    }
+
+  /* Delete a specific export RT */
+  else
+    {
+      node_to_del = NULL;
+
+      for (ALL_LIST_ELEMENTS (vpn->export_rtl, node, nnode, ecom))
+        {
+          if (ecommunity_match (ecom, ecomdel))
+            {
+              ecommunity_free (&ecom);
+              node_to_del = node;
+              break;
+            }
+        }
+
+      if (node_to_del)
+        list_delete_node(vpn->export_rtl, node_to_del);
+    }
+
+  if (list_isempty(vpn->export_rtl))
+    {
+      UNSET_FLAG (vpn->flags, VNI_FLAG_EXPRT_CFGD);
+      bgp_evpn_derive_auto_rt_export (bgp, vpn);
+    }
+
   if (is_vni_live (vpn))
     bgp_evpn_handle_export_rt_change (bgp, vpn);
 }
@@ -972,7 +1120,7 @@ bgp_evpn_show_all_vnis (struct vty *vty, struct bgp *bgp)
   vty_out(vty, "Number of VNIs: %u%s",
           num_vnis, VTY_NEWLINE);
   vty_out(vty, "Flags: * - Kernel %s", VTY_NEWLINE);
-  vty_out(vty, "  %-10s %-15s %-21s %-21s %-21s%s",
+  vty_out(vty, "  %-10s %-15s %-21s %-25s %-25s%s",
           "VNI", "Orig IP", "RD", "Import RT", "Export RT", VTY_NEWLINE);
   hash_iterate (bgp->vnihash,
                 (void (*) (struct hash_backet *, void *))
