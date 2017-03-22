@@ -1706,6 +1706,29 @@ zebra_vxlan_if_update (struct zebra_vrf *zvrf, struct interface *ifp,
 }
 
 /*
+ * Helper function to determine maximum width of neighbor IP address for
+ * display - just because we're dealing with IPv6 addresses that can
+ * widely vary.
+ */
+static void
+zvni_find_neigh_addr_width (struct hash_backet *backet, void *ctxt)
+{
+  zebra_neigh_t *n;
+  char buf[INET6_ADDRSTRLEN];
+  struct neigh_walk_ctx *wctx = ctxt;
+  int width;
+
+  n = (zebra_neigh_t *) backet->data;
+  if (!n)
+    return;
+
+  ipaddr2str (&n->ip, buf, sizeof(buf)),
+  width = strlen (buf);
+  if (width > wctx->addr_width)
+    wctx->addr_width = width;
+}
+
+/*
  * Decrement neighbor refcount of MAC; uninstall and free it if
  * appropriate.
  */
@@ -1723,6 +1746,116 @@ zvni_deref_ip2mac (zebra_vni_t *zvni, zebra_mac_t *mac, int uninstall)
     zvni_mac_uninstall (zvni, mac);
 
   zvni_mac_del (zvni, mac);
+}
+
+/*
+ * Print a specific neighbor entry.
+ */
+static void
+zvni_print_neigh (zebra_neigh_t *n, void *ctxt)
+{
+  struct vty *vty;
+  char buf1[MACADDR_STRLEN];
+  char buf2[INET6_ADDRSTRLEN];
+
+  ipaddr2str (&n->ip, buf2, sizeof(buf2)),
+  vty = (struct vty *) ctxt;
+  vty_out(vty, "Neighbor: %s%s",
+          ipaddr2str (&n->ip, buf2, sizeof(buf2)), VTY_NEWLINE);
+  vty_out(vty, " MAC: %s", mac2str (&n->emac, buf1, sizeof (buf1)));
+  if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE))
+    vty_out(vty, " Remote VTEP: %s", inet_ntoa (n->r_vtep_ip));
+  vty_out(vty, "%s", VTY_NEWLINE);
+}
+
+/*
+ * Print neighbor hash entry - called for display of all neighbors.
+ */
+static void
+zvni_print_neigh_hash (struct hash_backet *backet, void *ctxt)
+{
+  struct vty *vty;
+  zebra_neigh_t *n;
+  char buf1[MACADDR_STRLEN];
+  char buf2[INET6_ADDRSTRLEN];
+  struct neigh_walk_ctx *wctx = ctxt;
+
+  vty = wctx->vty;
+  n = (zebra_neigh_t *) backet->data;
+  if (!n)
+    return;
+
+  mac2str (&n->emac, buf1, sizeof (buf1));
+  ipaddr2str (&n->ip, buf2, sizeof(buf2));
+  if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL) &&
+      !(wctx->flags & SHOW_REMOTE_NEIGH_FROM_VTEP))
+    {
+      vty_out(vty, "%*s %-6s %-17s %s",
+              -wctx->addr_width, buf2, "local", buf1, VTY_NEWLINE);
+      wctx->count++;
+    }
+  else
+    {
+      if (wctx->flags & SHOW_REMOTE_NEIGH_FROM_VTEP)
+        {
+          if (IPV4_ADDR_SAME(&n->r_vtep_ip, &wctx->r_vtep_ip))
+            {
+              if (wctx->count == 0)
+                vty_out(vty, "%*s %-6s %-17s %-21s%s",
+                        -wctx->addr_width, "Neighbor", "Type", "MAC",
+                        "Remote VTEP", VTY_NEWLINE);
+              vty_out(vty, "%*s %-6s %-17s %-21s%s",
+                      -wctx->addr_width, buf2, "remote", buf1,
+                      inet_ntoa (n->r_vtep_ip), VTY_NEWLINE);
+              wctx->count++;
+            }
+        }
+      else
+        {
+          vty_out(vty, "%*s %-6s %-17s %-21s%s",
+                  -wctx->addr_width, buf2, "remote", buf1,
+                  inet_ntoa (n->r_vtep_ip), VTY_NEWLINE);
+          wctx->count++;
+        }
+    }
+}
+
+/*
+ * Print neighbors for all VNI.
+ */
+static void
+zvni_print_neigh_hash_all_vni (struct hash_backet *backet, void *ctxt)
+{
+  struct vty *vty;
+  zebra_vni_t *zvni;
+  u_int32_t num_neigh;
+  struct neigh_walk_ctx wctx;
+
+  vty = (struct vty *) ctxt;
+  zvni = (zebra_vni_t *) backet->data;
+  if (!zvni)
+    return;
+
+  num_neigh = hashcount(zvni->neigh_table);
+  vty_out(vty, "%sVNI %u #Neighbors (IPv4 and IPv6, local and remote) %u%s%s",
+          VTY_NEWLINE, zvni->vni, num_neigh, VTY_NEWLINE, VTY_NEWLINE);
+  if (!num_neigh)
+    return;
+
+  /* Since we have IPv6 addresses to deal with which can vary widely in
+   * size, we try to be a bit more elegant in display by first computing
+   * the maximum width.
+   */
+  memset (&wctx, 0, sizeof (struct neigh_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.vty = vty;
+  wctx.addr_width = 15;
+  hash_iterate(zvni->neigh_table, zvni_find_neigh_addr_width, &wctx);
+
+  vty_out(vty, "%*s %-6s %-17s %-21s%s",
+          -wctx.addr_width, "Neighbor", "Type", "MAC",
+          "Remote VTEP", VTY_NEWLINE);
+  hash_iterate(zvni->neigh_table, zvni_print_neigh_hash, &wctx);
 }
 
 /*
@@ -3161,6 +3294,120 @@ zebra_vxlan_local_neigh_del (struct interface *ifp,
   zvni_neigh_del (zvni, n);
 
   return 0;
+}
+
+/*
+ * Display Neighbors for a VNI (VTY command handler).
+ */
+void
+zebra_vxlan_print_neigh_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
+{
+  zebra_vni_t *zvni;
+  u_int32_t num_neigh;
+  struct neigh_walk_ctx wctx;
+
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      vty_out (vty, "%% VNI %u does not exist%s", vni, VTY_NEWLINE);
+      return;
+    }
+  num_neigh = hashcount(zvni->neigh_table);
+  if (!num_neigh)
+    return;
+
+  /* Since we have IPv6 addresses to deal with which can vary widely in
+   * size, we try to be a bit more elegant in display by first computing
+   * the maximum width.
+   */
+  memset (&wctx, 0, sizeof (struct neigh_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.vty = vty;
+  wctx.addr_width = 15;
+  hash_iterate(zvni->neigh_table, zvni_find_neigh_addr_width, &wctx);
+
+  vty_out(vty, "Number of Neighbors (local and remote) known for this VNI: %u%s",
+          num_neigh, VTY_NEWLINE);
+  vty_out(vty, "%*s %-6s %-17s %-21s%s",
+          -wctx.addr_width, "Neighbor", "Type", "MAC",
+          "Remote VTEP", VTY_NEWLINE);
+
+  hash_iterate(zvni->neigh_table, zvni_print_neigh_hash, &wctx);
+}
+
+/*
+ * Display neighbors across all VNIs (VTY command handler).
+ */
+void
+zebra_vxlan_print_neigh_all_vni (struct vty *vty, struct zebra_vrf *zvrf)
+{
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  hash_iterate(zvrf->vni_table, zvni_print_neigh_hash_all_vni, vty);
+}
+
+/*
+ * Display specific neighbor for a VNI, if present (VTY command handler).
+ */
+void
+zebra_vxlan_print_specific_neigh_vni (struct vty *vty, struct zebra_vrf *zvrf,
+                                      vni_t vni, struct ipaddr *ip)
+{
+  zebra_vni_t *zvni;
+  zebra_neigh_t *n;
+
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      vty_out (vty, "%% VNI %u does not exist%s", vni, VTY_NEWLINE);
+      return;
+    }
+  n = zvni_neigh_lookup (zvni, ip);
+  if (!n)
+    {
+      vty_out (vty, "%% Requested neighbor does not exist in VNI %u%s",
+               vni, VTY_NEWLINE);
+      return;
+    }
+
+  zvni_print_neigh (n, vty);
+}
+
+/*
+ * Display neighbors for a VNI from specific VTEP (VTY command handler).
+ * By definition, these are remote neighbors.
+ */
+void
+zebra_vxlan_print_neigh_vni_vtep (struct vty *vty, struct zebra_vrf *zvrf,
+                                  vni_t vni, struct in_addr vtep_ip)
+{
+  zebra_vni_t *zvni;
+  u_int32_t num_neigh;
+  struct neigh_walk_ctx wctx;
+
+  if (!EVPN_ENABLED(zvrf))
+    return;
+  zvni = zvni_lookup (zvrf, vni);
+  if (!zvni)
+    {
+      vty_out (vty, "%% VNI %u does not exist%s", vni, VTY_NEWLINE);
+      return;
+    }
+  num_neigh = hashcount(zvni->neigh_table);
+  if (!num_neigh)
+    return;
+
+  memset (&wctx, 0, sizeof (struct neigh_walk_ctx));
+  wctx.zvni = zvni;
+  wctx.vty = vty;
+  wctx.flags = SHOW_REMOTE_NEIGH_FROM_VTEP;
+  wctx.r_vtep_ip = vtep_ip;
+
+  hash_iterate(zvni->neigh_table, zvni_print_neigh_hash, &wctx);
 }
 
 /*

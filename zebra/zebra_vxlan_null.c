@@ -139,6 +139,28 @@ zebra_vxlan_print_macs_vni_vtep (struct vty *vty, struct zebra_vrf *zvrf,
 }
 
 void
+zebra_vxlan_print_neigh_vni (struct vty *vty, struct zebra_vrf *zvrf,
+                             vni_t vni)
+{
+}
+
+void
+zebra_vxlan_print_neigh_all_vni (struct vty *vty, struct zebra_vrf *zvrf)
+{
+}
+
+void
+zebra_vxlan_print_specific_neigh_vni (struct vty *vty, struct zebra_vrf *zvrf,
+                                      vni_t vni, struct ipaddr *ip)
+{
+}
+
+void zebra_vxlan_print_neigh_vni_vtep (struct vty *vty, struct zebra_vrf *zvrf,
+                                       vni_t vni, struct in_addr vtep_ip)
+{
+}
+
+void
 zebra_vxlan_print_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
 }
