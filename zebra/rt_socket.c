@@ -425,3 +425,12 @@ kernel_mac_update (struct interface *ifp, struct ethaddr *mac,
   /* TODO */
   return 0;
 }
+
+void
+neigh_read (struct zebra_ns *zns)
+{
+}
+
+void neigh_read_for_vlan (struct zebra_ns *zns, struct interface *vlan_if)
+{
+}

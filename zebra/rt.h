@@ -40,6 +40,10 @@ extern int kernel_add_mac (struct interface *ifp, vlanid_t vid,
 extern int kernel_del_mac (struct interface *ifp, vlanid_t vid,
                            struct ethaddr *mac, struct in_addr vtep_ip);
 
+extern int kernel_add_neigh (struct interface *ifp, struct ipaddr *ip,
+                             struct ethaddr *mac);
+extern int kernel_del_neigh (struct interface *ifp, struct ipaddr *ip);
+
 extern int kernel_add_lsp (zebra_lsp_t *);
 extern int kernel_upd_lsp (zebra_lsp_t *);
 extern int kernel_del_lsp (zebra_lsp_t *);

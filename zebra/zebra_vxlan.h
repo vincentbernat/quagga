@@ -62,6 +62,16 @@ extern int zebra_vxlan_check_del_local_mac (struct interface *ifp,
                                             struct ethaddr *mac, vlanid_t vid);
 extern int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
                                       u_short length, struct zebra_vrf *zvrf);
+extern int
+zebra_vxlan_local_neigh_add_update (struct interface *ifp,
+                                    struct interface *link_if,
+                                    struct ipaddr *ip,
+                                    struct ethaddr *macaddr,
+                                    u_int16_t neigh_state);
+extern int
+zebra_vxlan_local_neigh_del (struct interface *ifp,
+                             struct interface *link_if,
+                             struct ipaddr *ip);
 extern void zebra_vxlan_print_macs_vni (struct vty *vty, struct zebra_vrf *zvrf,
                                         vni_t vni);
 extern void zebra_vxlan_print_macs_all_vni (struct vty *vty,

@@ -49,6 +49,9 @@ extern int netlink_neigh_change (struct sockaddr_nl *snl, struct nlmsghdr *h,
 extern int netlink_macfdb_read (struct zebra_ns *zns);
 extern int netlink_macfdb_read_for_bridge (struct zebra_ns *zns,
                               struct interface *ifp, struct interface *br_if);
+extern int netlink_neigh_read (struct zebra_ns *zns);
+extern int netlink_neigh_read_for_vlan (struct zebra_ns *zns,
+                                        struct interface *vlan_if);
 
 extern int netlink_vxlan_flood_list_update (struct interface *ifp,
                                             struct prefix *vtep, int cmd);

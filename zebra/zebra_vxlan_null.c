@@ -99,6 +99,24 @@ int zebra_vxlan_advertise_all_vni (struct zserv *client, int sock,
   return 0;
 }
 
+int
+zebra_vxlan_local_neigh_add_update (struct interface *ifp,
+                                    struct interface *link_if,
+                                    struct ipaddr *ip,
+                                    struct ethaddr *macaddr,
+                                    u_int16_t neigh_state)
+{
+  return 0;
+}
+
+int
+zebra_vxlan_local_neigh_del (struct interface *ifp,
+                             struct interface *link_if,
+                             struct ipaddr *ip)
+{
+  return 0;
+}
+
 void
 zebra_vxlan_print_macs_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
 {
