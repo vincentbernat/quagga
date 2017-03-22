@@ -325,16 +325,19 @@ free_vni_entry (struct hash_backet *backet, struct bgp *bgp)
 }
 
 /*
- * Add (update) or delete MAC from zebra.
+ * Add (update) or delete MACIP from zebra.
  */
 static int
-bgp_zebra_send_remote_mac (struct bgp *bgp, struct bgpevpn *vpn,
-                           struct prefix_evpn *p, struct in_addr remote_vtep_ip,
-                           int add)
+bgp_zebra_send_remote_macip (struct bgp *bgp, struct bgpevpn *vpn,
+                             struct prefix_evpn *p,
+                             struct in_addr remote_vtep_ip,
+                             int add)
 {
   struct stream *s;
+  int ipa_len;
   char buf1[MACADDR_STRLEN];
-  char buf2[PREFIX2STR_BUFFER];
+  char buf2[INET6_ADDRSTRLEN];
+  char buf3[INET6_ADDRSTRLEN];
 
   /* Check socket. */
   if (!zclient || zclient->sock < 0)
@@ -351,15 +354,25 @@ bgp_zebra_send_remote_mac (struct bgp *bgp, struct bgpevpn *vpn,
                          bgp->vrf_id);
   stream_putl(s, vpn->vni);
   stream_put (s, &p->prefix.mac.octet, ETHER_ADDR_LEN); /* Mac Addr */
-  stream_putl(s, 0); /* IP address length. */
+  /* IP address length and IP address, if any. */
+  if (IS_EVPN_PREFIX_IPADDR_NONE(p))
+    stream_putl(s, 0);
+  else
+    {
+      ipa_len = IS_EVPN_PREFIX_IPADDR_V4(p) ?
+                IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN;
+      stream_putl(s, ipa_len);
+      stream_put (s, &p->prefix.ip.ip.addr, ipa_len);
+    }
   stream_put_in_addr(s, &remote_vtep_ip);
 
   stream_putw_at (s, 0, stream_get_endp (s));
 
   if (bgp_debug_zebra (NULL))
-    zlog_debug("Tx %s MAC, VNI %u MAC %s remote VTEP %s",
+    zlog_debug("Tx %s MACIP, VNI %u MAC %s IP %s remote VTEP %s",
                add ? "ADD" : "DEL", vpn->vni,
                mac2str (&p->prefix.mac, buf1, sizeof(buf1)),
+               ipaddr2str (&p->prefix.ip, buf3, sizeof(buf3)),
                inet_ntop(AF_INET, &remote_vtep_ip, buf2, sizeof(buf2)));
 
   return zclient_send_message(zclient);
@@ -485,7 +498,7 @@ evpn_zebra_install (struct bgp *bgp, struct bgpevpn *vpn,
   int ret;
 
   if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
-    ret = bgp_zebra_send_remote_mac (bgp, vpn, p, remote_vtep_ip, 1);
+    ret = bgp_zebra_send_remote_macip (bgp, vpn, p, remote_vtep_ip, 1);
   else
     ret = bgp_zebra_send_remote_vtep (bgp, vpn, p, 1);
 
@@ -500,7 +513,7 @@ evpn_zebra_uninstall (struct bgp *bgp, struct bgpevpn *vpn,
   int ret;
 
   if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
-    ret = bgp_zebra_send_remote_mac (bgp, vpn, p, remote_vtep_ip, 0);
+    ret = bgp_zebra_send_remote_macip (bgp, vpn, p, remote_vtep_ip, 0);
   else
     ret = bgp_zebra_send_remote_vtep (bgp, vpn, p, 0);
 
@@ -1793,8 +1806,14 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
       return -1;
     }
 
-  p.prefix.ip.ipa_type = IPADDR_NONE; /* Temporary - until MACIP support. */
-  pfx += ipaddr_len / 8;
+  if (ipaddr_len)
+    {
+      ipaddr_len /= 8; /* Convert to bytes. */
+      p.prefix.ip.ipa_type = (ipaddr_len == IPV4_MAX_BYTELEN) ? 
+                             IPADDR_V4 : IPADDR_V6;
+      memcpy (&p.prefix.ip.ip.addr, pfx, ipaddr_len);
+    }
+  pfx += ipaddr_len;
 
   /* Get the VNI (in MPLS label field). */
   /* Note: We ignore the second VNI, if any. */
@@ -2135,6 +2154,7 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
                         int addpath_encode, u_int32_t addpath_tx_id)
 {
   struct prefix_evpn *evp = (struct prefix_evpn *)p;
+  int ipa_len = 0;
 
   if (addpath_encode)
     stream_putl (s, addpath_tx_id);
@@ -2154,13 +2174,19 @@ bgp_evpn_encode_prefix (struct stream *s, struct prefix *p,
         break;
 
       case BGP_EVPN_MAC_IP_ROUTE:
-        stream_putc (s, 33); // TODO: length - assume no IP, 1 VNI
+        if (IS_EVPN_PREFIX_IPADDR_V4(evp))
+          ipa_len = IPV4_MAX_BYTELEN;
+        else if (IS_EVPN_PREFIX_IPADDR_V6(evp))
+          ipa_len = IPV6_MAX_BYTELEN;
+        stream_putc (s, 33 + ipa_len); // 1 VNI
         stream_put (s, prd->val, 8); /* RD */
         stream_put (s, 0, 10); /* ESI */
         stream_putl (s, 0); /* Ethernet Tag ID */
         stream_putc (s, 8*ETHER_ADDR_LEN); /* Mac Addr Len - bits */
         stream_put (s, evp->prefix.mac.octet, 6); /* Mac Addr */
-        stream_putc (s, 0); /* IP address Length */
+        stream_putc (s, 8*ipa_len); /* IP address Length */
+        if (ipa_len)
+          stream_put (s, &evp->prefix.ip.ip.addr, ipa_len); /* IP */
         stream_put (s, tag, 3); /* VNI is contained in 'tag' */
         break;
 
@@ -2369,7 +2395,7 @@ bgp_evpn_handle_export_rt_change (struct bgp *bgp, struct bgpevpn *vpn)
  */
 int
 bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac)
+                          struct ethaddr *mac, struct ipaddr *ip)
 {
   struct bgpevpn *vpn;
   struct prefix_evpn p;
@@ -2397,13 +2423,15 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
     }
 
   /* Create EVPN type-2 route and schedule for processing. */
-  build_evpn_type2_prefix (&p, mac);
+  build_evpn_type2_prefix (&p, mac, ip);
   if (update_evpn_route (bgp, vpn, &p))
     {
       char buf[MACADDR_STRLEN];
+      char buf2[INET6_ADDRSTRLEN];
 
-      zlog_err ("%u:Failed to create Type-2 route, VNI %u MAC %s",
-                bgp->vrf_id, vpn->vni, mac2str (mac, buf, sizeof (buf)));
+      zlog_err ("%u:Failed to create Type-2 route, VNI %u MAC %s IP %s",
+                bgp->vrf_id, vpn->vni, mac2str (mac, buf, sizeof (buf)),
+                ipaddr2str (ip, buf2, sizeof(buf2)));
       return -1;
     }
 
@@ -2415,7 +2443,7 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
  */
 int
 bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac)
+                          struct ethaddr *mac, struct ipaddr *ip)
 {
   struct bgpevpn *vpn;
   struct prefix_evpn p;
@@ -2443,7 +2471,7 @@ bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
     }
 
   /* Remove EVPN type-2 route and schedule for processing. */
-  build_evpn_type2_prefix (&p, mac);
+  build_evpn_type2_prefix (&p, mac, ip);
   delete_evpn_route (bgp, vpn, &p);
 
   return 0;

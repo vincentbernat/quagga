@@ -6978,7 +6978,7 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
 {
   char buf[INET6_ADDRSTRLEN];
   char buf1[BUFSIZ];
-  char buf2[EVPN_ROUTE_LEN];
+  char buf2[EVPN_ROUTE_STRLEN];
   struct attr *attr;
   int sockunion_vty_out (struct vty *, union sockunion *);
 #ifdef HAVE_CLOCK_MONOTONIC
@@ -8093,6 +8093,7 @@ route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
   struct listnode *node, *nnode;
   char buf1[INET6_ADDRSTRLEN];
   char buf2[INET6_ADDRSTRLEN];
+  char buf3[EVPN_ROUTE_STRLEN];
   int count = 0;
   int best = 0;
   int suppress = 0;
@@ -8116,7 +8117,7 @@ route_vty_out_detail_header (struct vty *vty, struct bgp *bgp,
                  prd ? prefix_rd2str (prd, buf1, RD_ADDRSTRLEN) : "",
                  prd ? ":" : "",
                  bgp_evpn_route2str ((struct prefix_evpn *)p,
-                                     buf2, sizeof (buf2)),
+                                     buf3, sizeof (buf3)),
                  VTY_NEWLINE);
       else
         vty_out (vty, "BGP routing table entry for %s%s%s/%d%s",
