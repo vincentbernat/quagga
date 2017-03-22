@@ -380,7 +380,7 @@ show_vni_entry (struct hash_backet *backet, struct vty *vty)
       if (listcount(vpn->import_rtl) > 1)
         sprintf (rt_buf, "%s, ...", ecom_str);
       else
-        sprintf (rt_buf, ecom_str);
+        sprintf (rt_buf, "%s", ecom_str);
       vty_out (vty, " %-25s", rt_buf);
 
       XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
@@ -394,7 +394,7 @@ show_vni_entry (struct hash_backet *backet, struct vty *vty)
       if (listcount(vpn->export_rtl) > 1)
         sprintf (rt_buf, "%s, ...", ecom_str);
       else
-        sprintf (rt_buf, ecom_str);
+        sprintf (rt_buf, "%s", ecom_str);
       vty_out (vty, " %-25s", rt_buf);
 
       XFREE (MTYPE_ECOMMUNITY_STR, ecom_str);
