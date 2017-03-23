@@ -1806,8 +1806,6 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
       return -1;
     }
 
-  p.prefix.ip.ipa_type = IPADDR_NONE;
-  pfx += ipaddr_len / 8;
   if (ipaddr_len)
     {
       ipaddr_len /= 8; /* Convert to bytes. */
@@ -1815,6 +1813,7 @@ process_type2_route (struct peer *peer, afi_t afi, safi_t safi,
                              IPADDR_V4 : IPADDR_V6;
       memcpy (&p.prefix.ip.ip.addr, pfx, ipaddr_len);
     }
+  pfx += ipaddr_len;
 
   /* Get the VNI (in MPLS label field). */
   /* Note: We ignore the second VNI, if any. */
