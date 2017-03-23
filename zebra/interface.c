@@ -881,6 +881,16 @@ if_refresh (struct interface *ifp)
   if_get_flags (ifp);
 }
 
+void
+zebra_if_update_link (struct interface *ifp, ifindex_t link_ifindex)
+{
+  struct zebra_if *zif;
+
+  zif = (struct zebra_if *)ifp->info;
+  zif->link_ifindex = link_ifindex;
+  zif->link = if_lookup_by_index_per_ns (zebra_ns_lookup (NS_DEFAULT),
+                                         link_ifindex);
+}
 
 /* Output prefix string to vty. */
 static int
@@ -1175,6 +1185,10 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
         vty_out(vty, "  Master (bridge) ifindex %u ifp %p%s",
                 br_slave->bridge_ifindex, br_slave->br_if, VTY_NEWLINE);
     }
+
+  if (zebra_if->link_ifindex != IFINDEX_INTERNAL)
+    vty_out(vty, "  Link ifindex %u ifp %p%s",
+            zebra_if->link_ifindex, zebra_if->link, VTY_NEWLINE);
 
   if (HAS_LINK_PARAMS(ifp))
     {

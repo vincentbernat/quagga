@@ -264,6 +264,10 @@ struct zebra_if
 
   /* Additional fields for L2 interfaces. Depends on zif_type */
   void *l2if;
+
+  /* Link fields. */
+  ifindex_t link_ifindex;
+  struct interface *link;
 };
 
 static inline void
@@ -313,6 +317,7 @@ extern int if_subnet_add (struct interface *, struct connected *);
 extern int if_subnet_delete (struct interface *, struct connected *);
 extern int ipv6_address_configured (struct interface *ifp);
 extern void if_handle_vrf_change (struct interface *ifp, vrf_id_t vrf_id);
+extern void zebra_if_update_link (struct interface *ifp, ifindex_t link_ifindex);
 
 extern void vrf_add_update (struct vrf *vrfp);
 

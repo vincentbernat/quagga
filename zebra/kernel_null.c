@@ -73,8 +73,24 @@ kernel_del_mac (struct interface *ifp, vlanid_t vid,
 void kernel_init (struct zebra_ns *zns) { return; }
 void kernel_terminate (struct zebra_ns *zns) { return; }
 void route_read (struct zebra_ns *zns) { return; }
-void neigh_read (struct zebra_ns *zns) { return; }
-void neigh_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
-                            struct interface *br_if)
+void macfdb_read (struct zebra_ns *zns) { return; }
+void macfdb_read_for_bridge (struct zebra_ns *zns, struct interface *ifp,
+                             struct interface *br_if)
 {
+}
+void neigh_read (struct zebra_ns *zns) { return; }
+void neigh_read_for_vlan (struct zebra_ns *zns, struct interface *vlan_if)
+{
+}
+
+int
+kernel_add_neigh (struct interface *ifp, struct ipaddr *ip,
+                  struct ethaddr *mac)
+{
+  return 0;
+}
+
+int kernel_del_neigh (struct interface *ifp, struct ipaddr *ip)
+{
+  return 0;
 }

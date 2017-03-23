@@ -5956,6 +5956,93 @@ DEFUN (show_evpn_mac_vni_vtep,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_evpn_neigh_vni,
+       show_evpn_neigh_vni_cmd,
+       "show evpn arp-cache vni " CMD_VNI_RANGE,
+       SHOW_STR
+       "EVPN\n"
+       "ARP and ND cache\n"
+       "VxLAN Network Identifier\n"
+       "VNI number\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_neigh_vni(vty, zvrf, vni);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_neigh_vni_all,
+       show_evpn_neigh_vni_all_cmd,
+       "show evpn arp-cache vni all",
+       SHOW_STR
+       "EVPN\n"
+       "ARP and ND cache\n"
+       "VxLAN Network Identifier\n"
+       "All VNIs\n")
+{
+  struct zebra_vrf *zvrf;
+
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_neigh_all_vni(vty, zvrf);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_neigh_vni_neigh,
+       show_evpn_neigh_vni_neigh_cmd,
+       "show evpn arp-cache vni " CMD_VNI_RANGE " ip WORD",
+       SHOW_STR
+       "EVPN\n"
+       "ARP and ND cache\n"
+       "VxLAN Network Identifier\n"
+       "VNI number\n"
+       "Neighbor\n"
+       "Neighbor address (IPv4 or IPv6 address)\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+  struct ipaddr ip;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (str2ipaddr (argv[1], &ip) != 0)
+    {
+      vty_out (vty, "%% Malformed Neighbor address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_specific_neigh_vni(vty, zvrf, vni, &ip);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_evpn_neigh_vni_vtep,
+       show_evpn_neigh_vni_vtep_cmd,
+       "show evpn arp-cache vni " CMD_VNI_RANGE " vtep A.B.C.D",
+       SHOW_STR
+       "EVPN\n"
+       "ARP and ND cache\n"
+       "VxLAN Network Identifier\n"
+       "VNI number\n"
+       "Remote VTEP\n"
+       "Remote VTEP IP address\n")
+{
+  struct zebra_vrf *zvrf;
+  vni_t vni;
+  struct in_addr vtep_ip;
+
+  VTY_GET_INTEGER_RANGE ("VNI", vni, argv[0], 1, VNI_MAX);
+  if (!inet_aton (argv[1], &vtep_ip))
+    {
+      vty_out (vty, "%% Malformed VTEP IP address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  zvrf = vrf_info_lookup(VRF_DEFAULT);
+  zebra_vxlan_print_neigh_vni_vtep(vty, zvrf, vni, vtep_ip);
+  return CMD_SUCCESS;
+}
+
 /* Static ip route configuration write function. */
 static int
 zebra_ip_config (struct vty *vty)
@@ -6413,4 +6500,8 @@ zebra_vty_init (void)
   install_element (VIEW_NODE, &show_evpn_mac_vni_all_cmd);
   install_element (VIEW_NODE, &show_evpn_mac_vni_mac_cmd);
   install_element (VIEW_NODE, &show_evpn_mac_vni_vtep_cmd);
+  install_element (VIEW_NODE, &show_evpn_neigh_vni_cmd);
+  install_element (VIEW_NODE, &show_evpn_neigh_vni_all_cmd);
+  install_element (VIEW_NODE, &show_evpn_neigh_vni_neigh_cmd);
+  install_element (VIEW_NODE, &show_evpn_neigh_vni_vtep_cmd);
 }

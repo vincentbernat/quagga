@@ -33,6 +33,7 @@
 # endif
 #endif
 #include "sockunion.h"
+#include "ipaddr.h"
 #include "vxlan.h"
 
 #ifndef ETHER_ADDR_LEN
@@ -56,35 +57,17 @@ struct ethaddr {
     u_char octet[ETHER_ADDR_LEN];
 } __packed;
 
-enum evpn_ipaddr_type_t
-{
-  IP_ADDR_NONE,
-  IP_ADDR_V4,
-  IP_ADDR_V6
-};
-
 /* EVPN address (RFC 7432) */
 struct evpn_addr
 {
   u_char route_type;
-  enum evpn_ipaddr_type_t ipa_type;
   struct ethaddr mac;
-  union
-  {
-    u_char addr;
-    struct in_addr v4_addr;
-    struct in6_addr v6_addr;
-  } ip;
+  struct ipaddr ip;
 };
 
-#define IS_EVPN_PREFIX_IPADDR_NONE(evp) \
-        ((evp)->prefix.ipa_type == IP_ADDR_NONE)
-
-#define IS_EVPN_PREFIX_IPADDR_V4(evp) \
-        ((evp)->prefix.ipa_type == IP_ADDR_V4)
-
-#define IS_EVPN_PREFIX_IPADDR_V6(evp) \
-        ((evp)->prefix.ipa_type == IP_ADDR_V6)
+#define IS_EVPN_PREFIX_IPADDR_NONE(evp)  IS_IPADDR_NONE(&(evp)->prefix.ip)
+#define IS_EVPN_PREFIX_IPADDR_V4(evp)    IS_IPADDR_V4(&(evp)->prefix.ip)
+#define IS_EVPN_PREFIX_IPADDR_V6(evp)    IS_IPADDR_V6(&(evp)->prefix.ip)
 
 /* EVPN prefix structure. */
 struct prefix_evpn

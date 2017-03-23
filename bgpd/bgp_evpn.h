@@ -31,8 +31,8 @@
 #include "bgpd/bgp_ecommunity.h"
 
 /* EVPN prefix lengths. */
-#define EVPN_TYPE_2_ROUTE_PREFIXLEN      192
-#define EVPN_TYPE_3_ROUTE_PREFIXLEN      192
+#define EVPN_TYPE_2_ROUTE_PREFIXLEN      224
+#define EVPN_TYPE_3_ROUTE_PREFIXLEN      224
 
 /* EVPN route types. */
 typedef enum
@@ -89,7 +89,7 @@ struct irt_node
   struct list *vnis;
 };
 
-#define EVPN_ROUTE_LEN 50
+#define EVPN_ROUTE_STRLEN 200 /* Must be >> MAC + IPv6 strings. */
 
 #define RT_TYPE_IMPORT 1
 #define RT_TYPE_EXPORT 2
@@ -175,14 +175,17 @@ encode_mac_mobility_extcomm (int static_mac, u_int32_t seq,
 }
 
 static inline void
-build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac)
+build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac,
+                         struct ipaddr *ip)
 {
   memset (p, 0, sizeof (struct prefix_evpn));
   p->family = AF_ETHERNET;
   p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
   memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
-  p->prefix.ipa_type = IP_ADDR_NONE;
+  p->prefix.ip.ipa_type = IPADDR_NONE;
+  if (ip)
+    memcpy(&p->prefix.ip, ip, sizeof (*ip));
 }
 
 static inline void
@@ -192,8 +195,8 @@ build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
   p->family = AF_ETHERNET;
   p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
-  p->prefix.ipa_type = IP_ADDR_V4;
-  p->prefix.ip.v4_addr = originator_ip;
+  p->prefix.ip.ipa_type = IPADDR_V4;
+  p->prefix.ip.ip.v4_addr = originator_ip;
 }
 
 
@@ -244,10 +247,10 @@ extern int
 bgp_evpn_handle_export_rt_change (struct bgp *bgp, struct bgpevpn *vpn);
 extern int
 bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac);
+                          struct ethaddr *mac, struct ipaddr *ip);
 extern int
 bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
-                          struct ethaddr *mac);
+                          struct ethaddr *mac, struct ipaddr *ip);
 extern int
 bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip);
 extern int

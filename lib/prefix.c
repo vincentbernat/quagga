@@ -919,7 +919,7 @@ prefix2str (union prefixconstptr pu, char *str, int size)
                      AF_INET : AF_INET6;
             snprintf (str, size, "[%d]:[%s]/%d",
                       p->u.prefix_evpn.route_type,
-                      inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                      inet_ntop (family, &p->u.prefix_evpn.ip.ip.addr,
                                  buf, PREFIX2STR_BUFFER),
                       p->prefixlen);
           }
@@ -937,7 +937,7 @@ prefix2str (union prefixconstptr pu, char *str, int size)
                 snprintf (str, size, "[%d]:[%s]:[%s]/%d",
                           p->u.prefix_evpn.route_type,
                           mac2str (&p->u.prefix_evpn.mac, buf2, sizeof (buf2)),
-                          inet_ntop (family, &p->u.prefix_evpn.ip.addr,
+                          inet_ntop (family, &p->u.prefix_evpn.ip.ip.addr,
                                      buf, PREFIX2STR_BUFFER),
                           p->prefixlen);
               }
