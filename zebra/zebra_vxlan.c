@@ -1760,7 +1760,7 @@ zvni_print_neigh (zebra_neigh_t *n, void *ctxt)
 
   ipaddr2str (&n->ip, buf2, sizeof(buf2)),
   vty = (struct vty *) ctxt;
-  vty_out(vty, "Neighbor: %s%s",
+  vty_out(vty, "IP: %s%s",
           ipaddr2str (&n->ip, buf2, sizeof(buf2)), VTY_NEWLINE);
   vty_out(vty, " MAC: %s", mac2str (&n->emac, buf1, sizeof (buf1)));
   if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE))
@@ -1837,7 +1837,7 @@ zvni_print_neigh_hash_all_vni (struct hash_backet *backet, void *ctxt)
     return;
 
   num_neigh = hashcount(zvni->neigh_table);
-  vty_out(vty, "%sVNI %u #Neighbors (IPv4 and IPv6, local and remote) %u%s%s",
+  vty_out(vty, "%sVNI %u #ARP (IPv4 and IPv6, local and remote) %u%s%s",
           VTY_NEWLINE, zvni->vni, num_neigh, VTY_NEWLINE, VTY_NEWLINE);
   if (!num_neigh)
     return;
@@ -1853,7 +1853,7 @@ zvni_print_neigh_hash_all_vni (struct hash_backet *backet, void *ctxt)
   hash_iterate(zvni->neigh_table, zvni_find_neigh_addr_width, &wctx);
 
   vty_out(vty, "%*s %-6s %-17s %-21s%s",
-          -wctx.addr_width, "Neighbor", "Type", "MAC",
+          -wctx.addr_width, "IP", "Type", "MAC",
           "Remote VTEP", VTY_NEWLINE);
   hash_iterate(zvni->neigh_table, zvni_print_neigh_hash, &wctx);
 }
@@ -1890,7 +1890,7 @@ zvni_print_mac (zebra_mac_t *mac, void *ctxt)
       vty_out(vty, " Remote VTEP: %s",
               inet_ntoa (mac->fwd_info.r_vtep_ip));
     }
-  vty_out(vty, " Neigh ref: %u", mac->neigh_refcnt);
+  vty_out(vty, " ARP ref: %u", mac->neigh_refcnt);
   vty_out(vty, "%s", VTY_NEWLINE);
 }
 
@@ -2036,7 +2036,7 @@ zvni_print (zebra_vni_t *zvni, void *ctxt)
   vty_out(vty, " Number of MACs (local and remote) known for this VNI: %u%s",
           num_macs, VTY_NEWLINE);
   num_neigh = hashcount(zvni->neigh_table);
-  vty_out(vty, " Number of Neighbors (IPv4 and IPv6, local and remote) "
+  vty_out(vty, " Number of ARPs (IPv4 and IPv6, local and remote) "
           "known for this VNI: %u%s", num_neigh, VTY_NEWLINE);
 }
 
@@ -3328,10 +3328,10 @@ zebra_vxlan_print_neigh_vni (struct vty *vty, struct zebra_vrf *zvrf, vni_t vni)
   wctx.addr_width = 15;
   hash_iterate(zvni->neigh_table, zvni_find_neigh_addr_width, &wctx);
 
-  vty_out(vty, "Number of Neighbors (local and remote) known for this VNI: %u%s",
+  vty_out(vty, "Number of ARPs (local and remote) known for this VNI: %u%s",
           num_neigh, VTY_NEWLINE);
   vty_out(vty, "%*s %-6s %-17s %-21s%s",
-          -wctx.addr_width, "Neighbor", "Type", "MAC",
+          -wctx.addr_width, "IP", "Type", "MAC",
           "Remote VTEP", VTY_NEWLINE);
 
   hash_iterate(zvni->neigh_table, zvni_print_neigh_hash, &wctx);
@@ -3551,7 +3551,7 @@ zebra_vxlan_print_vnis (struct vty *vty, struct zebra_vrf *zvrf)
     return;
   vty_out(vty, "Number of VNIs: %u%s", num_vnis, VTY_NEWLINE);
   vty_out(vty, "%-10s %-21s %-15s %-8s %-8s %-15s%s",
-          "VNI", "VxLAN IF", "VTEP IP", "# MACs", "# Neigh",
+          "VNI", "VxLAN IF", "VTEP IP", "# MACs", "# ARPs",
           "Remote VTEPs", VTY_NEWLINE);
   hash_iterate(zvrf->vni_table, zvni_print_hash, vty);
 }
