@@ -2340,7 +2340,8 @@ int zebra_vxlan_update_access_vlan (struct interface *ifp,
   struct zebra_l2if_vxlan *zl2if;
   zebra_vni_t *zvni;
   vni_t vni;
-  struct mac_walk_ctx wctx;
+  struct mac_walk_ctx m_wctx;
+  struct neigh_walk_ctx n_wctx;
   struct interface *vlan_if;
 
   zif = ifp->info;
@@ -2399,14 +2400,14 @@ int zebra_vxlan_update_access_vlan (struct interface *ifp,
     neigh_read_for_vlan (zvrf->zns, vlan_if);
 
   /* Reinstall any remote MACs for this VNI - with new VLAN info. */
-  memset (&wctx, 0, sizeof (struct mac_walk_ctx));
-  wctx.zvni = zvni;
-  hash_iterate(zvni->mac_table, zvni_install_mac_hash, &wctx);
+  memset (&m_wctx, 0, sizeof (struct mac_walk_ctx));
+  m_wctx.zvni = zvni;
+  hash_iterate(zvni->mac_table, zvni_install_mac_hash, &m_wctx);
 
   /* Reinstall any remote neighbors for this VNI - with new VLAN info. */
-  memset (&wctx, 0, sizeof (struct neigh_walk_ctx));
-  wctx.zvni = zvni;
-  hash_iterate(zvni->neigh_table, zvni_install_neigh_hash, &wctx);
+  memset (&n_wctx, 0, sizeof (struct neigh_walk_ctx));
+  n_wctx.zvni = zvni;
+  hash_iterate(zvni->neigh_table, zvni_install_neigh_hash, &n_wctx);
 
   return 0;
 }
