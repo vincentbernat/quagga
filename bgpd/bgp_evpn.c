@@ -292,7 +292,7 @@ form_auto_rt (struct bgp *bgp, struct bgpevpn *vpn,
   struct ecommunity_val eval;
   struct ecommunity *ecomadd;
 
-  encode_route_target_as ((bgp->as & 0xFFFF), vpn->vni, &eval);
+  encode_route_target_as ((bgp->as & 0xFFFF), vpn->vni | 0x10000000, &eval);
 
   ecomadd = ecommunity_new ();
   ecommunity_add_val (ecomadd, &eval);
