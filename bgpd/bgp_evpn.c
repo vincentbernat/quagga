@@ -782,6 +782,9 @@ update_evpn_route (struct bgp *bgp, struct bgpevpn *vpn,
   /* Build path-attribute for this route. */
   bgp_attr_default_set (&attr, BGP_ORIGIN_IGP);
   attr.nexthop = vpn->originator_ip;
+  if (p->prefix.route_type == BGP_EVPN_IMET_ROUTE)
+	  attr.flag |= ATTR_FLAG_BIT(BGP_ATTR_PMSI_TUNNEL);
+  vni2tag(vpn->vni, (uint8_t*)&attr.label);
 
   /* Set up RT and ENCAP extended community. */
   build_evpn_route_extcomm (vpn, &attr);

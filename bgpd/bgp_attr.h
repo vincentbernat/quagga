@@ -21,6 +21,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _QUAGGA_BGP_ATTR_H
 #define _QUAGGA_BGP_ATTR_H
 
+#include "mpls.h"
+
 /* Simple bit mapping. */
 #define BITMAP_NBBY 8
 
@@ -161,6 +163,8 @@ struct attr
   /* has the route-map changed any attribute?
      Used on the peer outbound side. */
   u_int32_t rmap_change_flags;
+
+  mpls_label_t label;
 };
 
 /* rmap_change_flags definition */
