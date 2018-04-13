@@ -63,6 +63,7 @@ struct evpn_addr
   u_char route_type;
   struct ethaddr mac;
   struct ipaddr ip;
+  uint32_t eth_tag;
 };
 
 #define IS_EVPN_PREFIX_IPADDR_NONE(evp)  IS_IPADDR_NONE(&(evp)->prefix.ip)
