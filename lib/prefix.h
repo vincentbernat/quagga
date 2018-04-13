@@ -60,8 +60,10 @@ struct ethaddr {
 /* EVPN address (RFC 7432) */
 struct evpn_addr
 {
-  u_char route_type;
+  uint8_t route_type;
+  uint8_t ip_prefix_length;
   struct ethaddr mac;
+  uint32_t eth_tag;
   struct ipaddr ip;
 };
 

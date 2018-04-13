@@ -250,7 +250,7 @@ bgp_evpn_show_route_header (struct vty *vty, struct bgp *bgp)
            "* valid, > best, i - internal%s", VTY_NEWLINE);
   vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s",
            VTY_NEWLINE);
-  vty_out (vty, "EVPN type-2 prefix: [2]:[ESI]:[EthTag]:[MAClen]:[MAC]%s",
+  vty_out (vty, "EVPN type-2 prefix: [2]:[EthTag]:[MAClen]:[MAC]%s",
            VTY_NEWLINE);
   vty_out (vty, "EVPN type-3 prefix: [3]:[EthTag]:[IPlen]:[OrigIP]%s%s",
            VTY_NEWLINE, VTY_NEWLINE);
@@ -976,7 +976,7 @@ bgp_evpn_show_route_rd (struct vty *vty, struct bgp *bgp,
           /* RD header and legend - once overall. */
           if (rd_header)
             {
-              vty_out (vty, "EVPN type-2 prefix: [2]:[ESI]:[EthTag]:[MAClen]:"
+              vty_out (vty, "EVPN type-2 prefix: [2]:[EthTag]:[MAClen]:"
                        "[MAC]%s", VTY_NEWLINE);
               vty_out (vty, "EVPN type-3 prefix: [3]:[EthTag]:[IPlen]:"
                        "[OrigIP]%s%s", VTY_NEWLINE, VTY_NEWLINE);
