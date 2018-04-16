@@ -176,12 +176,13 @@ encode_mac_mobility_extcomm (int static_mac, u_int32_t seq,
 
 static inline void
 build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac,
-                         struct ipaddr *ip)
+                         struct ipaddr *ip, uint32_t eth_tag)
 {
   memset (p, 0, sizeof (struct prefix_evpn));
   p->family = AF_ETHERNET;
   p->prefixlen = EVPN_TYPE_2_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
+  p->prefix.eth_tag = eth_tag;
   memcpy(&p->prefix.mac.octet, mac->octet, ETHER_ADDR_LEN);
   p->prefix.ip.ipa_type = IPADDR_NONE;
   if (ip)
@@ -189,12 +190,14 @@ build_evpn_type2_prefix (struct prefix_evpn *p, struct ethaddr *mac,
 }
 
 static inline void
-build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip)
+build_evpn_type3_prefix (struct prefix_evpn *p, struct in_addr originator_ip,
+                         uint32_t eth_tag)
 {
   memset (p, 0, sizeof (struct prefix_evpn));
   p->family = AF_ETHERNET;
   p->prefixlen = EVPN_TYPE_3_ROUTE_PREFIXLEN;
   p->prefix.route_type = BGP_EVPN_IMET_ROUTE;
+  p->prefix.eth_tag = eth_tag;
   p->prefix.ip.ipa_type = IPADDR_V4;
   p->prefix.ip.ip.v4_addr = originator_ip;
 }

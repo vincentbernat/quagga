@@ -1095,7 +1095,7 @@ update_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
   /* Update and advertise the type-3 route (only one) followed by the
    * locally learnt type-2 routes (MACIP) - for this VNI.
    */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  build_evpn_type3_prefix (&p, vpn->originator_ip, vpn->vni);
   ret = update_evpn_route (bgp, vpn, &p);
   if (ret)
     return ret;
@@ -1122,7 +1122,7 @@ delete_routes_for_vni (struct bgp *bgp, struct bgpevpn *vpn)
   if (ret)
     return ret;
 
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  build_evpn_type3_prefix (&p, vpn->originator_ip, vpn->vni);
   ret = delete_evpn_route (bgp, vpn, &p);
   if (ret)
     return ret;
@@ -1150,7 +1150,7 @@ update_advertise_vni_routes (struct bgp *bgp, struct bgpevpn *vpn)
    * attributes to create and advertise the type-3 route for this VNI
    * in the global table.
    */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  build_evpn_type3_prefix (&p, vpn->originator_ip, vpn->vni);
   rn = bgp_node_lookup (vpn->route_table, (struct prefix *)&p);
   if (!rn) /* unexpected */
     return 0;
@@ -1231,7 +1231,7 @@ delete_withdraw_vni_routes (struct bgp *bgp, struct bgpevpn *vpn)
     return ret;
 
   /* Remove type-3 route for this VNI from global table. */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  build_evpn_type3_prefix (&p, vpn->originator_ip, vpn->vni);
   global_rn = bgp_afi_node_lookup (bgp->rib[afi][safi], afi, safi,
                                    (struct prefix *)&p, &vpn->prd);
   if (global_rn)
@@ -1335,7 +1335,7 @@ handle_tunnel_ip_change (struct bgp *bgp, struct bgpevpn *vpn,
   /* Need to withdraw type-3 route as the originator IP is part
    * of the key.
    */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  build_evpn_type3_prefix (&p, vpn->originator_ip, vpn->vni);
   delete_evpn_route (bgp, vpn, &p);
 
   /* Update the tunnel IP and re-advertise all routes for this VNI. */
@@ -2438,7 +2438,7 @@ bgp_evpn_local_macip_add (struct bgp *bgp, vni_t vni,
     }
 
   /* Create EVPN type-2 route and schedule for processing. */
-  build_evpn_type2_prefix (&p, mac, ip);
+  build_evpn_type2_prefix (&p, mac, ip, vpn->vni);
   if (update_evpn_route (bgp, vpn, &p))
     {
       char buf[MACADDR_STRLEN];
@@ -2486,7 +2486,7 @@ bgp_evpn_local_macip_del (struct bgp *bgp, vni_t vni,
     }
 
   /* Remove EVPN type-2 route and schedule for processing. */
-  build_evpn_type2_prefix (&p, mac, ip);
+  build_evpn_type2_prefix (&p, mac, ip, vpn->vni);
   delete_evpn_route (bgp, vpn, &p);
 
   return 0;
@@ -2544,7 +2544,7 @@ bgp_evpn_local_vni_add (struct bgp *bgp, vni_t vni, struct in_addr originator_ip
   SET_FLAG (vpn->flags, VNI_FLAG_LIVE);
 
   /* Create EVPN type-3 route and schedule for processing. */
-  build_evpn_type3_prefix (&p, vpn->originator_ip);
+  build_evpn_type3_prefix (&p, vpn->originator_ip, vpn->vni);
   if (update_evpn_route (bgp, vpn, &p))
     {
       zlog_err ("%u: Type3 route creation failure for VNI %u",

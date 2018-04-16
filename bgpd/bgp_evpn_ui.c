@@ -798,7 +798,7 @@ bgp_evpn_show_route_vni_multicast (struct vty *vty, struct bgp *bgp,
     }
 
   /* See if route exists. */
-  build_evpn_type3_prefix (&p, orig_ip);
+  build_evpn_type3_prefix (&p, orig_ip, vni);
   rn = bgp_node_lookup (vpn->route_table, (struct prefix *)&p);
   if (!rn || !rn->info)
     {
@@ -848,7 +848,7 @@ bgp_evpn_show_route_vni_mac (struct vty *vty, struct bgp *bgp,
     }
 
   /* See if route exists. */
-  build_evpn_type2_prefix (&p, mac, NULL);
+  build_evpn_type2_prefix (&p, mac, NULL, vni);
   rn = bgp_node_lookup (vpn->route_table, (struct prefix *)&p);
   if (!rn || !rn->info)
     {
@@ -911,7 +911,7 @@ bgp_evpn_show_route_rd_mac (struct vty *vty, struct bgp *bgp,
   safi = SAFI_EVPN;
 
   /* See if route exists. */
-  build_evpn_type2_prefix (&p, mac, NULL);
+  build_evpn_type2_prefix (&p, mac, NULL, 0);
   rn = bgp_afi_node_lookup (bgp->rib[afi][safi], afi, safi,
                             (struct prefix *)&p, prd);
   if (!rn || !rn->info)
